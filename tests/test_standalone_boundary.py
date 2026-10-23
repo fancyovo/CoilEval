@@ -13,7 +13,7 @@ def test_package_has_no_training_imports():
     package = SOURCE / "coil_eval"
     files = list(package.rglob("*.py"))
     assert files, "The standalone coil_eval package is missing"
-    forbidden = {"torch", "flow_matching", "local_surface_evaluator"}
+    forbidden = {"flow_matching", "local_surface_evaluator", "gpu_backend"}
     violations = []
     for path in files:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -25,7 +25,7 @@ def test_package_has_no_training_imports():
             else:
                 continue
             for name in names:
-                if name.split(".", 1)[0] in forbidden:
+                if name.split(".", 1)[0] in forbidden or name.startswith('full_chain_'):
                     violations.append(f"{path.name}:{node.lineno}: {name}")
     assert violations == []
 

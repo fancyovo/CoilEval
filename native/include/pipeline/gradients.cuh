@@ -15,6 +15,7 @@ struct FixedFrontG2Cache {
     DeviceBuffer<float> B;
     DeviceBuffer<float> grad_B;
     AlphaFitNative alpha;
+    std::vector<float> reverse_flux_coefficients;
     std::array<double, 9> qs_sums{};
     double G = 0.0;
     void* field = nullptr;

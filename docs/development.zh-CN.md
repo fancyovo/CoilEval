@@ -23,3 +23,5 @@ python -m build
 采用新增配置项和方法保持兼容；更新 CHANGELOG 和中英文文档。
 版本标签为 `v` 加包版本号，预发布版本使用 `0.3.0a1` 等 Python 版本形式。
 旧标签保留用于复现安装。
+
+可选包 `src/coil_eval/_autograd` 按磁场、追踪、前端拟合和下游指标划分算子，`native/src/autograd` 提供 CUDA 核。`src/coil_eval/torch.py` 提供公开 Tensor API。安装 `.[test,torch]` 可运行数学算子测试。

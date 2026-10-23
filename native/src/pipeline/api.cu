@@ -1,3 +1,4 @@
+#include "pipeline/reverse_capture.cuh"
 // C ABI for configuration, formal/local evaluation, and center capture.
 #include "pipeline/types.cuh"
 #include "pipeline/session_state.cuh"
@@ -418,6 +419,7 @@ int sgpu_score_coils_capture_psi_center(
         return 1;
     }
     *psi_coefficient_count = 0;
+    if (g_reverse_capture_flags) g_reverse_snapshot.clear();
     g_captured_iota_profile.clear();
     g_alpha_warm_preconditioner = AlphaWarmPreconditionerCache{};
     sgpu_clear_psi_warm_preconditioner();
@@ -481,6 +483,11 @@ int sgpu_score_coils_capture_psi_center(
     for (float coefficient : g_captured_iota_profile) g_boundary_iota += coefficient;
     std::copy(cache.psi.coeffs.begin(), cache.psi.coeffs.end(), psi_coefficients);
     *psi_coefficient_count = static_cast<int>(cache.psi.coeffs.size());
+    if (g_reverse_capture_flags && !capture_reverse_snapshot(cache, nfp, *config, *result)) {
+        if (cache.field) sgpu_destroy_field(cache.field);
+        g_reverse_snapshot.clear();
+        return 1;
+    }
     if (cache.field) sgpu_destroy_field(cache.field);
     sgpu_internal_set_error("");
     return 0;

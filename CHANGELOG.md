@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0a1
+
+- Added optional PyTorch metrics, local reverse gradients and independent-geometry batch evaluation. Physical parameters and custom tensor objectives use a separate additive API.
+
 ## 0.2.0
 
 - Added explicit Stokes boundary flux for fast local evaluations. Area quadrature remains the default.

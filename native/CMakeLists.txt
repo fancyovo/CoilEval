@@ -10,6 +10,7 @@ set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 add_library(coil_eval_native SHARED
+    src/field/preconditioner_export.cpp
     src/field/state.cpp
     src/field/segments.cu
     src/field/vector_potential.cu
@@ -37,6 +38,7 @@ add_library(coil_eval_native SHARED
     src/pipeline/local_batch.cu
     src/pipeline/target_volume.cu
     src/pipeline/session_state.cu
+    src/pipeline/reverse_capture.cu
     src/pipeline/api.cu
     src/pipeline/legacy_abi.cu
 )
@@ -71,3 +73,11 @@ set_target_properties(coil_eval_native PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
+
+add_library(coil_eval_autograd SHARED
+    src/autograd/field.cu
+    src/autograd/trace.cu
+    src/autograd/batch_field.cu
+)
+target_link_libraries(coil_eval_autograd PRIVATE CUDA::cudart)
+target_link_options(coil_eval_autograd PRIVATE -static-libstdc++ -static-libgcc)

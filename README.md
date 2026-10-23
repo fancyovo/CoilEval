@@ -47,6 +47,8 @@ python examples/custom_loss.py --library build/native/libcoil_eval_native.so
 ## Documentation
 
 - [API and parameter conventions](docs/api.md)
+- [PyTorch gradients and batches](docs/torch.md)
+- [Version selection](docs/versions.md)
 - [Examples](examples/README.md)
 - [Development and source layout](docs/development.md)
 - [Release history](CHANGELOG.md)

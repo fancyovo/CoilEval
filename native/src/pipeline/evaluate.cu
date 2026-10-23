@@ -1,5 +1,6 @@
 // Formal center downstream pipeline: flux, volume points, alpha/iota, and QS.
 #include "pipeline/types.cuh"
+#include "pipeline/reverse_capture.cuh"
 #include "pipeline/session_state.cuh"
 #include "pipeline/alpha.cuh"
 #include "pipeline/axis.cuh"
@@ -301,6 +302,7 @@ bool run_downstream_gpu(
     result.status = SGPU_SCORE_OK;
     result.stage_completed = SCORE_STAGE_QS;
     if (g_active_g2_cache) {
+        if (g_reverse_capture_flags) g_active_g2_cache->reverse_flux_coefficients = flux.coefficients;
         g_active_g2_cache->points = std::move(points);
         g_active_g2_cache->B = std::move(d_B);
         g_active_g2_cache->grad_B = std::move(d_grad_B);

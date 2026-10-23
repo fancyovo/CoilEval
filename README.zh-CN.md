@@ -44,6 +44,8 @@ python examples/custom_loss.py --library build/native/libcoil_eval_native.so
 ## 文档
 
 - [API 与参数约定](docs/api.zh-CN.md)
+- [PyTorch 梯度和批量求值](docs/torch.zh-CN.md)
+- [版本选择](docs/versions.zh-CN.md)
 - [示例](examples/README.zh-CN.md)
 - [开发与源码结构](docs/development.zh-CN.md)
 - [版本记录](docs/changelog.zh-CN.md)

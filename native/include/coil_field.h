@@ -883,6 +883,8 @@ int sgpu_trace_axis_samples(
 
 const char* sgpu_last_error();
 
+int sgpu_copy_psi_warm_preconditioner(double* upper, double* scales, int count);
+
 }
 
 
