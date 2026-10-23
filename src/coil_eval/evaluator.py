@@ -109,7 +109,7 @@ class Evaluator:
             except (KeyError, TypeError, ValueError) as exc:
                 status = "invalid_metrics"
                 d["metric_error"] = str(exc)
-        d.update({"trace_periods": 1, "full_physical_evaluation": "not_run",
+        d.update({"configuration": self.config.to_dict(), "trace_periods": 1, "full_physical_evaluation": "not_run",
                   "geometry_model": "formal" if mode == "independent" else "center_linearized"})
         if metrics is not None:
             d["quality_threshold_pass"] = metrics.relative_normal_drift_p95 <= 0.01

@@ -79,3 +79,7 @@ An unusable center or endpoint raises `InvalidEvaluationError`, with available
 results in `.results`. Expired or cross-session centers raise `CenterContextError`.
 Native failures raise `EvaluationError`. Check perturbation scales for your
 geometry when interpreting finite-difference gradients.
+
+## Fast mode
+
+Since 0.1.0, set `EvaluationConfig(..., fast=True)` to use 240 axis integration steps and 100 surface trace steps. The default `fast=False` retains the original settings. Results include the selected configuration in `diagnostics["configuration"]`.

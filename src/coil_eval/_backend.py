@@ -178,7 +178,7 @@ class NativeBackend:
             refined_axis = batch.refine_axis_hint(
                 np.full(query_count, axis[0], dtype=np.float64),
                 np.full(query_count, axis[1], dtype=np.float64),
-                trace_steps=960,
+                trace_steps=240 if config.fast else 960,
                 newton_iterations=6,
                 finite_difference_step=2.0e-4,
                 maximum_newton_step=0.25,
@@ -191,7 +191,7 @@ class NativeBackend:
             batch_axis = batch.trace_axis_samples(
                 refined_axis["R"],
                 refined_axis["Z"],
-                integration_steps=960,
+                integration_steps=240 if config.fast else 960,
                 sample_count=240,
             )
             timings["axis_samples"] = perf_counter() - started

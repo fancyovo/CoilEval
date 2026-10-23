@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0
+
+- Added opt-in fast integration settings and serialized result configuration.
+
 ## 0.0.0
 
 - Coil and metric records with explicit physical units.

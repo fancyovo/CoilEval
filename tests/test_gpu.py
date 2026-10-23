@@ -8,12 +8,13 @@ from coil_eval import CoilSet, EvaluationConfig, Evaluator, quality_penalty
 LIBRARY = os.environ.get('COIL_EVAL_TEST_LIBRARY')
 pytestmark = [pytest.mark.gpu, pytest.mark.skipif(not LIBRARY, reason='set COIL_EVAL_TEST_LIBRARY')]
 
+@pytest.mark.parametrize('fast', [False, True])
 @pytest.mark.parametrize('volume,current_factor', [(0.05, 1.), (0.04, 1.), (0.05, 1.1)])
-def test_value_and_full_gradient(volume, current_factor):
+def test_value_and_full_gradient(volume, current_factor, fast):
     coils = CoilSet.read_json(Path(__file__).parents[1]/'examples/coils.json')
     coils = CoilSet(coils.coeffs_x, coils.coeffs_y, coils.coeffs_z,
                     coils.currents_a*current_factor, coils.nfp)
-    cfg = EvaluationConfig(target_volume=volume)
+    cfg = EvaluationConfig(target_volume=volume, fast=fast)
     scales = np.r_[np.ones(3*coils.coeffs_x.size), np.full(coils.n_base_coils, 100000.)]
     def loss(m):
         return np.log(m.qs_volume+1e-8)+quality_penalty(m.relative_normal_drift_p95)

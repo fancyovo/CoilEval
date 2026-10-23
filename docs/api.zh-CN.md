@@ -61,3 +61,7 @@ psi_iterations=4, alpha_iterations=4, segments_per_coil=256)` 是只读配置。
 中心或端点不可用时抛出 `InvalidEvaluationError`，其 `.results` 保存可用的诊断结果；
 失效或跨会话中心抛出 `CenterContextError`；原生调用失败抛出 `EvaluationError`。
 解释差分梯度时应检查扰动尺度与线圈几何的匹配程度。
+
+## Fast 模式
+
+从 0.1.0 起，`EvaluationConfig(..., fast=True)` 使用 240 步磁轴积分和 100 步磁面追踪。默认 `fast=False` 保留原设置。结果的 `diagnostics["configuration"]` 保存所选配置。

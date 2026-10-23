@@ -12,8 +12,11 @@ class EvaluationConfig:
     psi_iterations: int = 4
     alpha_iterations: int = 4
     segments_per_coil: int = 256
+    fast: bool = False
 
     def __post_init__(self):
+        if not isinstance(self.fast, bool):
+            raise TypeError("fast must be a boolean")
         for name in ("target_volume", "psi_a", "h"):
             value = float(getattr(self, name))
             if not math.isfinite(value) or value <= 0:
@@ -32,12 +35,13 @@ class EvaluationConfig:
 
     def native_options(self) -> dict:
         return {
+            **({"axis_trace_steps": 240, "axis_sample_count": 240} if self.fast else {}),
             "segments_per_coil": self.segments_per_coil,
             "iota_degree": 3,
             "surface_selection_mode": 1,
             "surface_confidence_periods": 1,
             "surface_theta_count": 128,
-            "surface_trace_steps": 400,
+            "surface_trace_steps": 100 if self.fast else 400,
             "surface_flux_bisection_iters": 6,
             "target_volume": self.target_volume,
             "psi_a": self.psi_a,
