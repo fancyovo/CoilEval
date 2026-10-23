@@ -15,5 +15,9 @@ Read README.md, docs/api.md and CHANGELOG.md before changing public behavior.
   Test independent batches as well as neighborhoods when either is affected.
 - Run pytest, source-layout checks and distribution builds before tagging.
   Changes to native code also require a CUDA build and GPU regression.
+- Binary wheels target CUDA 12.8 and Linux x86-64 with glibc 2.28+. Keep
+  runtime dependencies, architecture targets and installation docs aligned.
+  Test installed wheels with nvcc absent from PATH and automatic library loading.
+  Preserve explicit native-library paths and immutable earlier release tags.
 - Follow ascending release versions. Maintain CHANGELOG.md and immutable tags.
   Publishing requires the repository owner's approval.

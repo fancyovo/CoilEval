@@ -52,7 +52,7 @@ class TensorEvaluation:
 class TensorEvaluator:
     """Single or independent-batch local response, with optional PyTorch autograd."""
 
-    def __init__(self, library, field_library=None, *, config: EvaluationConfig,
+    def __init__(self, library=None, field_library=None, *, config: EvaluationConfig,
                  device_id=0, field_dtype=torch.float32):
         self._validate_config(config)
         if field_dtype not in (torch.float32, torch.float64):
@@ -60,8 +60,10 @@ class TensorEvaluator:
         self.config = config
         self.device = torch.device('cuda', int(device_id))
         self.dtype = field_dtype
+        from ._native_loader import resolve_library
+        library = resolve_library(library)
         self.library_path = str(library)
-        field_library = field_library or Path(library).with_name('libcoil_eval_autograd.so')
+        field_library = field_library or library.with_name('libcoil_eval_autograd.so')
         self.field_library = NativeFieldLibrary(field_library)
         self._thread = threading.get_ident()
         self._closed = False

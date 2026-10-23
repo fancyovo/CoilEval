@@ -2,14 +2,12 @@
 
 [English](torch.md)
 
-从 **0.3.0a1** 开始提供。安装可选依赖并构建两个原生库：
+从 **0.3.0a1** 开始提供。先安装[预编译包](installation.zh-CN.md)，再安装可选的 PyTorch 依赖：
 
 ```sh
-python -m pip install '.[torch]'
-cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=120
-cmake --build build/native --parallel
-python examples/autograd.py --library build/native/libcoil_eval_native.so
-python examples/autograd.py --library build/native/libcoil_eval_native.so --batch
+python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python examples/autograd.py
+python examples/autograd.py --batch
 ```
 
 ## 输入与配置
@@ -24,8 +22,9 @@ psi 使用 float64，磁场默认使用 float32。
 
 ## 求值
 
-`TensorEvaluator(library, field_library=None, config=..., device_id=0,
-field_dtype=torch.float32)` 是上下文管理器。默认从评估库的同目录加载 `libcoil_eval_autograd.so`。
+`TensorEvaluator(library=None, field_library=None, config=..., device_id=0,
+field_dtype=torch.float32)` 是上下文管理器。默认使用随包提供的后端；显式指定 `library`
+时使用自定义后端，并默认从同目录加载 `libcoil_eval_autograd.so`。
 `field_dtype` 也可设为 `torch.float64`。
 
 | 方法 | 输入 | 指标形状 |
@@ -49,7 +48,7 @@ from coil_eval.torch import TensorEvaluator, pack_coils
 
 x = pack_coils(CoilSet.read_json('examples/coils.json'))
 config = EvaluationConfig(target_volume=0.05, fast=True, flux_method='stokes')
-with TensorEvaluator('build/native/libcoil_eval_native.so', config=config) as ev:
+with TensorEvaluator(config=config) as ev:
     result = ev.evaluate(x)
     loss = torch.log(result.metrics.qs_volume + 1e-8)
     gradient, = torch.autograd.grad(loss, result.parameters)

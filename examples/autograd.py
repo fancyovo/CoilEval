@@ -7,7 +7,7 @@ from coil_eval.torch import TensorEvaluator, pack_coils
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--library',required=True)
+    parser.add_argument('--library',help='Optional path to a custom native backend')
     parser.add_argument('--batch',action='store_true')
     args=parser.parse_args()
     coils=CoilSet.read_json(Path(__file__).with_name('coils.json'))

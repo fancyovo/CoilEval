@@ -23,8 +23,10 @@ psi_iterations=4, alpha_iterations=4, segments_per_coil=256)` is immutable.
 
 ## Evaluator
 
-Create `Evaluator(library, config=config, device_id=0)` in the thread that will
-use it. The context manager releases its native resources.
+Create `Evaluator(config=config, device_id=0)` in the thread that will
+use it. The context manager releases its native resources. Since 0.3.0a2,
+the binary wheel supplies the default backend. An explicit `library` positional
+or keyword argument selects a separately built native library.
 
 | Method | Result |
 | --- | --- |

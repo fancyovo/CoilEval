@@ -1,23 +1,36 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.11,<1"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "coil-eval"
-version = "0.3.0a1"
+version = "0.3.0a2"
 description = "GPU evaluation of stellarator coils and local gradients"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
-dependencies = ["numpy>=1.24"]
+dependencies = [
+    "numpy>=1.24",
+    "nvidia-cuda-runtime-cu12>=12.8.57,<12.9; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "nvidia-cublas-cu12>=12.8.3.14,<12.9; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "nvidia-cusolver-cu12>=11.7.2.55,<11.7.4; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "nvidia-cusparse-cu12>=12.5.7.53,<12.6; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "nvidia-nvjitlink-cu12>=12.8.61,<12.9; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 classifiers = ["Programming Language :: Python :: 3", "Topic :: Scientific/Engineering :: Physics"]
 
 [project.optional-dependencies]
 torch = ["torch>=2.5"]
 test = ["pytest>=7", "build", "wheel"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.scikit-build]
+minimum-version = "0.11"
+build-dir = "build/{wheel_tag}"
+cmake.source-dir = "native"
+wheel.packages = ["src/coil_eval"]
+wheel.py-api = "py3"
+sdist.include = ["native/**", "src/**", "docs/**", "examples/**", "tests/**", "tools/**", "AGENTS.md", "LICENSE", "README*.md", "CHANGELOG.md"]
+sdist.exclude = ["build/**", "dist/**", ".cache/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

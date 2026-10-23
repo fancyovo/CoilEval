@@ -1,6 +1,22 @@
 cmake_minimum_required(VERSION 3.22)
-project(coil_eval_native LANGUAGES CXX CUDA)
+if(SKBUILD AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES "80-real;86-real;89-real;90-real;100-real;120")
+endif()
+project(coil_eval_native LANGUAGES CXX)
+include(CheckLanguage)
+check_language(CUDA)
+if(NOT CMAKE_CUDA_COMPILER)
+    message(FATAL_ERROR
+        "CUDA compiler nvcc was not found. Install a CoilEval binary wheel for compiler-free use. "
+        "To build from source, install CUDA Toolkit and set CUDACXX to its nvcc executable.")
+endif()
+enable_language(CUDA)
 find_package(CUDAToolkit REQUIRED)
+if(SKBUILD AND (CUDAToolkit_VERSION VERSION_LESS "12.8" OR
+               NOT CUDAToolkit_VERSION VERSION_LESS "12.9"))
+    message(FATAL_ERROR "The CUDA 12 wheel requires CUDA Toolkit 12.8. Use a standalone CMake build for another toolkit.")
+endif()
+set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
 
 option(SGPU_ENABLE_NVTX "Enable profiling-only NVTX ranges" OFF)
 option(COIL_EVAL_ENABLE_TORSION "Build the optional torsion geometry extension" ON)
@@ -81,3 +97,18 @@ add_library(coil_eval_autograd SHARED
 )
 target_link_libraries(coil_eval_autograd PRIVATE CUDA::cudart)
 target_link_options(coil_eval_autograd PRIVATE -static-libstdc++ -static-libgcc)
+
+if(SKBUILD)
+    # Paths are relative to site-packages/coil_eval/_native. NVIDIA wheels
+    # provide the runtime libraries, independently of a system CUDA toolkit.
+    set(runtime_rpath "$ORIGIN")
+    foreach(component cuda_runtime cublas cusolver cusparse nvjitlink)
+        list(APPEND runtime_rpath "$ORIGIN/../../nvidia/${component}/lib")
+    endforeach()
+    set_target_properties(coil_eval_native coil_eval_autograd PROPERTIES
+        INSTALL_RPATH "${runtime_rpath}"
+        INSTALL_REMOVE_ENVIRONMENT_RPATH TRUE
+        INSTALL_RPATH_USE_LINK_PATH FALSE)
+    install(TARGETS coil_eval_native coil_eval_autograd
+        LIBRARY DESTINATION coil_eval/_native)
+endif()

@@ -16,7 +16,8 @@ psi_iterations=4, alpha_iterations=4, segments_per_coil=256)` 是只读配置。
 
 ## 求值接口
 
-使用 `Evaluator(library, config=config, device_id=0)` 创建会话，使用上下文管理器释放资源。
+使用 `Evaluator(config=config, device_id=0)` 创建会话，使用上下文管理器释放资源。
+从 0.3.0a2 起，默认加载安装包内的后端。位置参数或关键字参数 `library` 可指定独立构建的原生库。
 
 | 方法 | 返回内容 |
 | --- | --- |

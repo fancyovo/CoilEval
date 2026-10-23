@@ -1,6 +1,0 @@
-include LICENSE README.md README.zh-CN.md CHANGELOG.md AGENTS.md
-recursive-include native *.cu *.cpp *.h *.cuh *.md CMakeLists.txt
-recursive-include docs *.md
-recursive-include examples *.py *.json
-recursive-include tests *.py
-recursive-include tools *.py

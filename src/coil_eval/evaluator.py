@@ -69,8 +69,8 @@ class Evaluator:
         self._closed = False
         if backend is None:
             from ._backend import NativeBackend
-            if library is None:
-                raise ValueError("pass the path to libcoil_eval_native.so built from code/native")
+            from ._native_loader import resolve_library
+            library = resolve_library(library)
             backend = NativeBackend(library, device_id=self.device_id)
         self._backend = backend
 

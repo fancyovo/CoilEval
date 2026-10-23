@@ -2,14 +2,13 @@
 
 [简体中文](torch.zh-CN.md)
 
-Available in **0.3.0a1**. Install the optional dependency and build both native libraries:
+Available since **0.3.0a1**. Install the [binary wheel](installation.md), then
+install the optional PyTorch dependency:
 
 ```sh
-python -m pip install '.[torch]'
-cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=120
-cmake --build build/native --parallel
-python examples/autograd.py --library build/native/libcoil_eval_native.so
-python examples/autograd.py --library build/native/libcoil_eval_native.so --batch
+python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python examples/autograd.py
+python examples/autograd.py --batch
 ```
 
 ## Input and configuration
@@ -27,9 +26,10 @@ The psi calculation uses float64; field calculations use float32 by default.
 
 ## Evaluator
 
-`TensorEvaluator(library, field_library=None, config=..., device_id=0,
-field_dtype=torch.float32)` is a context manager. By default the companion
-`libcoil_eval_autograd.so` is loaded from the scoring library's directory.
+`TensorEvaluator(library=None, field_library=None, config=..., device_id=0,
+field_dtype=torch.float32)` is a context manager. The default uses the packaged
+backend. An explicit `library` selects a custom backend; its companion
+`libcoil_eval_autograd.so` is loaded from the same directory by default.
 `field_dtype` also accepts `torch.float64`.
 
 | Method | Input | Metric shape |
@@ -56,7 +56,7 @@ from coil_eval.torch import TensorEvaluator, pack_coils
 
 x = pack_coils(CoilSet.read_json('examples/coils.json'))
 config = EvaluationConfig(target_volume=0.05, fast=True, flux_method='stokes')
-with TensorEvaluator('build/native/libcoil_eval_native.so', config=config) as ev:
+with TensorEvaluator(config=config) as ev:
     result = ev.evaluate(x)
     loss = torch.log(result.metrics.qs_volume + 1e-8)
     gradient, = torch.autograd.grad(loss, result.parameters)

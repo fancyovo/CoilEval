@@ -7,17 +7,16 @@ CoilEval 使用 NVIDIA GPU 评估仿星器线圈。输入 Fourier 系数、电�
 
 ## 安装
 
-需要 Python 3.10+、NumPy 1.24+。GPU 后端在 Linux 上使用 CUDA、CMake 3.22+ 和 C++17 编译器构建；
-cuBLAS 与 cuSOLVER 由 CUDA 提供。
+使用 Python 3.10+ 安装 Linux x86-64 安装包：
 
 ```sh
-python -m pip install .
-cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=120
-cmake --build build/native --parallel
+python -m pip install ./coil_eval-0.3.0a2-py3-none-manylinux_2_28_x86_64.whl
 ```
 
-按 GPU 型号选择 CUDA architecture；`120` 对应 RTX 5090。Python wheel 提供 Python 接口，
-原生库从源码仓库或源码发行包构建，并将其路径传给 `Evaluator`。
+安装包包含 GPU 后端，pip 会安装 NumPy 和 CUDA 12.8 运行库。
+需要 glibc 2.28+ 的 Linux，以及支持 CUDA 12.8 和所用显卡的 NVIDIA 驱动；
+570.169 驱动满足 RTX 5090 的这一要求。
+支持的 GPU 架构、PyTorch 配置和源码构建方式见[安装与兼容性](docs/installation.zh-CN.md)。
 
 ## 快速开始
 
@@ -26,7 +25,7 @@ from coil_eval import CoilSet, EvaluationConfig, Evaluator
 
 coils = CoilSet.read_json("examples/coils.json")
 config = EvaluationConfig(target_volume=0.05, psi_a=0.15, helicity=(1, 4))
-with Evaluator("build/native/libcoil_eval_native.so", config=config) as evaluator:
+with Evaluator(config=config) as evaluator:
     result = evaluator.evaluate(coils)
     if result.valid:
         print(result.metrics.qs_volume, result.metrics.iota_boundary)
@@ -37,12 +36,13 @@ with Evaluator("build/native/libcoil_eval_native.so", config=config) as evaluato
 完整命令示例：
 
 ```sh
-python examples/evaluate.py --library build/native/libcoil_eval_native.so
-python examples/custom_loss.py --library build/native/libcoil_eval_native.so
+python examples/evaluate.py
+python examples/custom_loss.py
 ```
 
 ## 文档
 
+- [安装与 GPU 兼容性](docs/installation.zh-CN.md)
 - [API 与参数约定](docs/api.zh-CN.md)
 - [PyTorch 梯度和批量求值](docs/torch.zh-CN.md)
 - [版本选择](docs/versions.zh-CN.md)

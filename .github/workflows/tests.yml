@@ -11,10 +11,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e '.[test]'
+      - run: python -m pip install numpy pytest build scikit-build-core
+      - run: python -m pip install -e . --no-deps --config-settings=wheel.cmake=false
       - run: python -m pytest -q
       - run: python tools/check_layout.py
-      - run: python -m build
+      - run: python -m build --sdist
   torch-operators:
     runs-on: ubuntu-latest
     steps:
@@ -23,5 +24,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[test]'
+      - run: python -m pip install numpy pytest scikit-build-core
+      - run: python -m pip install -e . --no-deps --config-settings=wheel.cmake=false
       - run: python -m pytest -q

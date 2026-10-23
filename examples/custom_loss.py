@@ -6,7 +6,7 @@ from coil_eval import CoilSet, EvaluationConfig, Evaluator, quality_penalty
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--library', required=True)
+    parser.add_argument('--library', help='Optional path to a custom native backend')
     args = parser.parse_args()
     coils = CoilSet.read_json(Path(__file__).with_name('coils.json'))
     scales = np.r_[np.ones(3*coils.coeffs_x.size), np.full(coils.n_base_coils, 100000.)]

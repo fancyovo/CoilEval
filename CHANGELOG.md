@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0a2
+
+- Added Linux x86-64 CUDA 12.8 binary wheels with multiple GPU architectures.
+- Evaluators automatically load the packaged native backend and runtime dependencies.
+- Source builds use CMake through the Python build backend; explicit library paths remain supported.
+- Updated installation guides and examples for compiler-free wheel installation.
+
 ## 0.3.0a1
 
 - Added optional PyTorch metrics, local reverse gradients and independent-geometry batch evaluation. Physical parameters and custom tensor objectives use a separate additive API.
