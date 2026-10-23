@@ -5,6 +5,7 @@
 #include "pipeline/alpha.cuh"
 #include "pipeline/common.cuh"
 #include "pipeline/flux.cuh"
+#include "pipeline/stokes.cuh"
 #include "pipeline/local_batch.cuh"
 #include "pipeline/local_kernels.cuh"
 #include "pipeline/policy.cuh"
@@ -267,8 +268,9 @@ bool score_local_batch_impl(
     const int flux_levels = config.flux_level_count;
     const int flux_theta = config.flux_theta_count;
     const int flux_radial = config.flux_radial_quadrature;
+    const bool stokes_flux = g_stokes_flux && config.target_volume > 0;
     const int flux_rays = flux_phi * flux_theta;
-    const int flux_points_per_query = flux_phi * flux_levels * flux_theta * flux_radial;
+    const int flux_points_per_query = flux_phi * flux_levels * flux_theta * (stokes_flux ? 1 : flux_radial);
     std::vector<float> levels(static_cast<size_t>(query_count)*flux_levels);
     for(int query=0;query<query_count;++query) for (int index = 0; index < flux_levels; ++index) {
         const double fraction = static_cast<double>(index + 1) / flux_levels;
@@ -343,6 +345,50 @@ bool score_local_batch_impl(
                 results[query].target_volume_dVds=derivatives[query];
             }
         }
+        if (stokes_flux) {
+            DeviceBuffer<float> d_tangent(d_xyz.size());
+            DeviceBuffer<unsigned int> d_stokes_invalid(query_count);
+            if (!d_tangent.data() || !d_stokes_invalid.data() || cudaMemset(
+                    d_stokes_invalid.data(), 0, query_count * sizeof(unsigned int)) != cudaSuccess) {
+                sgpu_internal_set_error("Stokes guard allocation failed");
+                return false;
+            }
+            local_batch_stokes_points_kernel<<<
+                static_cast<unsigned int>((point_total + threads - 1) / threads), threads
+            >>>(d_radii.data(), query_count, flux_phi, flux_levels, flux_theta, nfp,
+                d_axis_R.data(), d_axis_Z.data(), d_axis_R_phi.data(), d_axis_Z_phi.data(),
+                axis_count, d_psi_coefficients.data(), d_psi_a.data(), d_psi_b.data(),
+                d_psi_m.data(), d_psi_kind.data(), psi_coefficient_count,
+                config.psi_poly_degree, config.psi_m_tor, static_cast<float>(config.psi_a),
+                d_xyz.data(), d_tangent.data(), d_stokes_invalid.data());
+            std::vector<unsigned int> stokes_invalid(query_count);
+            if (cudaGetLastError() != cudaSuccess || cudaMemcpy(stokes_invalid.data(),
+                    d_stokes_invalid.data(), query_count * sizeof(unsigned int),
+                    cudaMemcpyDeviceToHost) != cudaSuccess) {
+                sgpu_internal_set_error("Stokes boundary guard failed");
+                return false;
+            }
+            for (int query = 0; query < query_count; ++query) {
+                if (stokes_invalid[query]) {
+                    char error[160];
+                    std::snprintf(error, sizeof(error),
+                        "Stokes boundary invalid at query %d (flags=%u); gradient unavailable",
+                        query, stokes_invalid[query]);
+                    sgpu_internal_set_error(error);
+                    return false;
+                }
+            }
+            if (cudaGetLastError() != cudaSuccess ||
+                sgpu_internal_batch_eval_A_f32_device(
+                    batch_field, d_xyz.data(), d_B.data(), flux_points_per_query)) {
+                sgpu_internal_set_error("Stokes potential evaluation failed");
+                return false;
+            }
+            local_batch_stokes_reduce_kernel<<<
+                query_count * flux_phi * flux_levels, threads, threads * sizeof(double)
+            >>>(d_B.data(), d_tangent.data(), flux_theta, d_sections.data());
+            if (!synchronize_stage("Stokes flux")) return false;
+        } else {
         local_batch_generate_flux_points_kernel<<<
             static_cast<unsigned int>((point_total + threads - 1) / threads), threads
         >>>(
@@ -364,6 +410,7 @@ bool score_local_batch_impl(
             d_sections.data()
         );
         if (!synchronize_stage("local batch flux reduction")) return false;
+        }
 
         std::vector<float> radii(d_radii.size()), residuals(d_residuals.size());
         std::vector<double> sections(d_sections.size());
@@ -375,6 +422,11 @@ bool score_local_batch_impl(
                        cudaMemcpyDeviceToHost) != cudaSuccess) {
             sgpu_internal_set_error("local batch flux result copy failed");
             return false;
+        }
+        if (stokes_flux) {
+            for (double value : sections) if (!std::isfinite(value)) {
+                sgpu_internal_set_error("nonfinite Stokes section"); return false;
+            }
         }
         const int polynomial_degree = config.flux_polynomial_degree;
         for (int query = 0; query < query_count; ++query) {

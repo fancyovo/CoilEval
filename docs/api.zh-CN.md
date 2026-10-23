@@ -65,3 +65,7 @@ psi_iterations=4, alpha_iterations=4, segments_per_coil=256)` 是只读配置。
 ## Fast 模式
 
 从 0.1.0 起，`EvaluationConfig(..., fast=True)` 使用 240 步磁轴积分和 100 步磁面追踪。默认 `fast=False` 保留原设置。结果的 `diagnostics["configuration"]` 保存所选配置。
+
+## 磁通积分
+
+从 0.2.0 起，`EvaluationConfig(..., fast=True, flux_method="stokes")` 为近邻和差分端点选择 Stokes 边界积分。`flux_method="area"` 保留面积求积。独立中心求值沿用原积分方法。

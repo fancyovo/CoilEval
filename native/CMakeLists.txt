@@ -12,6 +12,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_library(coil_eval_native SHARED
     src/field/state.cpp
     src/field/segments.cu
+    src/field/vector_potential.cu
     src/field/biot_savart.cu
     src/field/tracing.cu
     src/field/field_adjoint.cu
@@ -25,6 +26,7 @@ add_library(coil_eval_native SHARED
     src/pipeline/psi.cu
     src/pipeline/surface.cu
     src/pipeline/policy.cu
+    src/pipeline/stokes.cu
     src/pipeline/flux.cu
     src/pipeline/volume.cu
     src/pipeline/alpha.cu

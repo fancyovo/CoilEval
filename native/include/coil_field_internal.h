@@ -55,4 +55,10 @@ int sgpu_internal_B_grad_point_vjp_f32_device(
 
 void sgpu_internal_set_error(const char* message);
 
+int sgpu_internal_batch_eval_A_f32_device(
+    void* handle,
+    const float* xyz_device,
+    float* A_device,
+    int points_per_query
+);
 }

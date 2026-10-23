@@ -14,6 +14,7 @@ from time import perf_counter
 from typing import Any, Sequence
 
 import numpy as np
+import ctypes
 
 from ._basis import native_mode_arrays
 from ._binding import (
@@ -224,6 +225,13 @@ class NativeBackend:
             timings["coil_linear"] = perf_counter() - started
 
             started = perf_counter()
+            set_flux = getattr(batch.lib, "sgpu_set_flux_method", None)
+            if set_flux is None and config.flux_method != "area":
+                raise RuntimeError("this native library does not support Stokes flux")
+            if set_flux is not None:
+                set_flux.argtypes = [ctypes.c_int]
+                set_flux.restype = ctypes.c_int
+                batch._check(set_flux(int(config.flux_method == "stokes")))
             local_results, local_stats = batch.score_local_batch(
                 currents,
                 *batch_axis,
@@ -243,6 +251,9 @@ class NativeBackend:
             self._add_geometry(local_results, center_arrays, (x, y, z, currents), int(coils.nfp))
             timings["geometry_metrics"] = perf_counter() - started
         finally:
+            set_flux = getattr(getattr(batch, "lib", None), "sgpu_set_flux_method", None)
+            if set_flux is not None:
+                set_flux(0)
             started = perf_counter()
             self.close()
             timings["cleanup"] = perf_counter() - started

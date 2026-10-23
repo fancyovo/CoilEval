@@ -33,3 +33,18 @@ def test_value_and_full_gradient(volume, current_factor, fast):
             previous = ev.loss_and_grad(coils, loss, scales=scales)
         np.testing.assert_allclose(result.value, previous.value, rtol=1e-10, atol=1e-12)
         np.testing.assert_allclose(result.gradient, previous.gradient, rtol=1e-7, atol=1e-8)
+
+def test_stokes_gradient_and_session_reset():
+    coils = CoilSet.read_json(Path(__file__).parents[1]/'examples/coils.json')
+    scales = np.r_[np.ones(3*coils.coeffs_x.size), np.full(coils.n_base_coils, 100000.)]
+    def loss(m):
+        return np.log(m.qs_volume+1e-8)+quality_penalty(m.relative_normal_drift_p95)
+    results = []
+    for method in ('area', 'stokes', 'area'):
+        with Evaluator(LIBRARY, config=EvaluationConfig(target_volume=0.05, fast=True, flux_method=method)) as ev:
+            results.append(ev.loss_and_grad(coils, loss, scales=scales))
+    a, b, c = [r.gradient*scales for r in results]
+    assert np.dot(a,b)/(np.linalg.norm(a)*np.linalg.norm(b)) > 0.9
+    assert 0.8 < np.linalg.norm(b)/np.linalg.norm(a) < 1.25
+    np.testing.assert_allclose(a,c,rtol=1e-7,atol=1e-8)
+    assert results[1].center.diagnostics['configuration']['flux_method'] == 'stokes'

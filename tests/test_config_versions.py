@@ -13,3 +13,11 @@ def test_fast_is_explicit_and_standard_is_unchanged():
     assert fast.to_dict()['fast'] is True
     with pytest.raises(TypeError):
         EvaluationConfig(target_volume=0.05, fast='yes')
+
+def test_flux_selection_is_explicit():
+    assert EvaluationConfig(target_volume=0.05).flux_method == 'area'
+    assert EvaluationConfig(target_volume=0.05, fast=True, flux_method='stokes').flux_method == 'stokes'
+    with pytest.raises(ValueError):
+        EvaluationConfig(target_volume=0.05, flux_method='stokes')
+    with pytest.raises(ValueError):
+        EvaluationConfig(target_volume=0.05, flux_method='auto')

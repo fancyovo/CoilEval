@@ -13,8 +13,13 @@ class EvaluationConfig:
     alpha_iterations: int = 4
     segments_per_coil: int = 256
     fast: bool = False
+    flux_method: str = "area"
 
     def __post_init__(self):
+        if self.flux_method not in {"area", "stokes"}:
+            raise ValueError("flux_method must be area or stokes")
+        if self.flux_method == "stokes" and not self.fast:
+            raise ValueError("stokes requires fast=True")
         if not isinstance(self.fast, bool):
             raise TypeError("fast must be a boolean")
         for name in ("target_volume", "psi_a", "h"):

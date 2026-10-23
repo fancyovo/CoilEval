@@ -83,3 +83,7 @@ geometry when interpreting finite-difference gradients.
 ## Fast mode
 
 Since 0.1.0, set `EvaluationConfig(..., fast=True)` to use 240 axis integration steps and 100 surface trace steps. The default `fast=False` retains the original settings. Results include the selected configuration in `diagnostics["configuration"]`.
+
+## Flux integration
+
+Since 0.2.0, `EvaluationConfig(..., fast=True, flux_method="stokes")` selects Stokes boundary integration for local neighborhoods and finite-difference endpoints. `flux_method="area"` retains area quadrature. Independent center evaluations use their original integration method.
