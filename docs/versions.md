@@ -9,6 +9,7 @@
 | 0.2.0 | Stokes boundary flux in local evaluations | `flux_method='stokes'` with fast mode |
 | 0.3.0a1 | PyTorch reverse gradients and independent-geometry batches | `coil_eval.torch.TensorEvaluator` |
 | 0.3.0a2 | Linux CUDA 12.8 binary wheel and automatic backend loading | Install a wheel; omit `library` |
+| 0.3.0a3 | Validated CUDA runtime dependency set | Install the updated wheel |
 
 The default NumPy behavior stays compatible across these versions. New numerical
 paths are selected explicitly. Use an exact version and save the configuration

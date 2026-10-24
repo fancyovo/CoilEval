@@ -7,10 +7,11 @@
 Create or activate a Python 3.10+ environment, then install the release wheel:
 
 ```sh
-python -m pip install ./coil_eval-0.3.0a2-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.3.0a3-py3-none-manylinux_2_28_x86_64.whl
 ```
 
-Pip installs the CUDA runtime libraries as dependencies. The wheel contains
+Pip installs a matched, version-pinned CUDA 12.8 runtime set as dependencies.
+The wheel contains
 both CoilEval native libraries and loads them automatically. The host provides
 an NVIDIA driver and access to a supported GPU. CMake and nvcc are needed only
 when building CoilEval from source.

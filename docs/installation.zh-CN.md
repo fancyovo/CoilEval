@@ -7,10 +7,11 @@
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install ./coil_eval-0.3.0a2-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.3.0a3-py3-none-manylinux_2_28_x86_64.whl
 ```
 
-pip 会安装 CUDA 运行库依赖。安装包内含两个 CoilEval 原生库，接口会自动加载。
+pip 会安装固定版本、配套验证过的 CUDA 12.8 运行库依赖。
+安装包内含两个 CoilEval 原生库，接口会自动加载。
 宿主机需要 NVIDIA 驱动，并能访问支持的 GPU。只有从源码构建时才需要 CMake 和 nvcc。
 
 | 组件 | 安装包要求 |

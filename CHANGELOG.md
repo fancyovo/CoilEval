@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0a3
+
+- Pinned CUDA runtime dependencies to a validated CUDA 12.8 set, fixing cuSPARSE and nvJitLink symbol mismatches during installation from package indexes.
+
 ## 0.3.0a2
 
 - Added Linux x86-64 CUDA 12.8 binary wheels with multiple GPU architectures.

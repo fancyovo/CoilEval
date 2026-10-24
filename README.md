@@ -12,7 +12,7 @@ metrics into a scalar objective and compute its local parameter gradient.
 Install the Linux x86-64 wheel with Python 3.10+:
 
 ```sh
-python -m pip install ./coil_eval-0.3.0a2-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.3.0a3-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 The wheel includes the GPU backend. Pip installs NumPy and the CUDA 12.8 runtime

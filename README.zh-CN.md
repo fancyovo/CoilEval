@@ -10,7 +10,7 @@ CoilEval 使用 NVIDIA GPU 评估仿星器线圈。输入 Fourier 系数、电�
 使用 Python 3.10+ 安装 Linux x86-64 安装包：
 
 ```sh
-python -m pip install ./coil_eval-0.3.0a2-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.3.0a3-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 安装包包含 GPU 后端，pip 会安装 NumPy 和 CUDA 12.8 运行库。

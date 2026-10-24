@@ -19,5 +19,8 @@ Read README.md, docs/api.md and CHANGELOG.md before changing public behavior.
   runtime dependencies, architecture targets and installation docs aligned.
   Test installed wheels with nvcc absent from PATH and automatic library loading.
   Preserve explicit native-library paths and immutable earlier release tags.
+- Pin NVIDIA runtime distributions as a validated set. Individual component
+  version numbers do not identify the CUDA Toolkit release; validate dependency
+  resolution against the package index as well as the offline build wheelhouse.
 - Follow ascending release versions. Maintain CHANGELOG.md and immutable tags.
   Publishing requires the repository owner's approval.
