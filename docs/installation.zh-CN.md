@@ -7,7 +7,7 @@
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install ./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 pip 会安装固定版本、配套验证过的 CUDA 12.8 运行库依赖。
@@ -45,7 +45,7 @@ python examples/autograd.py --batch
 磁面工作流可通过安装包的 `simsopt` 可选依赖组安装：
 
 ```sh
-python -m pip install "./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 该依赖组安装 Simsopt 与 SciPy。

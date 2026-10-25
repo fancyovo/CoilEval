@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import math
 import torch
 
+from .triangular import independent_triangular_solve
+
 from .front import (PsiGeometry,monomials,periodic_hermite,_trig,
                                _coefficient_matrix,predict_target_level,_tensor_product_column_norms,_frozen_fit_tensor)
 
@@ -124,7 +126,7 @@ def batch_four_step_pcgls(operator,coefficients,scales,uppers,*,ridge=1e-6,itera
     operator.column_scales=live_scale.detach()
     operator.column_scale_ratio=ratio.detach()
     def triangular(v,transpose=False):
-        return torch.linalg.solve_triangular(upper.transpose(-1,-2) if transpose else upper,
+        return independent_triangular_solve(upper.transpose(-1,-2) if transpose else upper,
                                              v[...,None],upper=not transpose)[...,0]
     z=c0*scale
     residual=operator.rhs-operator.apply(z/scale)

@@ -1,8 +1,9 @@
 """PyTorch evaluation of coil metrics and local reverse gradients."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import threading
 import time
+import json
 import numpy as np
 import torch
 
@@ -19,6 +20,8 @@ from ._autograd.batch_front import build_batch_front
 from ._autograd.two_stage_front import build_two_stage_front,build_batch_two_stage_front
 from ._autograd.batch_downstream import batch_downstream
 from ._autograd.engineering import _EngineeringMetrics, split_tokens
+from ._tensor_config import validate_tensor_config, validate_tensor_batch_configs
+from ._autograd.axis_batch import prepare_axis_batch
 
 
 def pack_coils(coils: CoilSet, *, device='cuda:0', dtype=torch.float64):
@@ -57,13 +60,15 @@ class TensorEvaluator:
     """Single or independent-batch local response, with optional PyTorch autograd."""
 
     def __init__(self, library=None, field_library=None, *, config: EvaluationConfig,
-                 device_id=0, field_dtype=torch.float32):
+                 device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True):
         self._validate_config(config)
         if field_dtype not in (torch.float32, torch.float64):
             raise ValueError('field_dtype must be torch.float32 or torch.float64')
         self.config = config
         self.device = torch.device('cuda', int(device_id))
         self.dtype = field_dtype
+        self.batch_axis = bool(batch_axis)
+        self.share_geometry = bool(share_geometry)
         from ._native_loader import resolve_library
         library = resolve_library(library)
         self.library_path = str(library)
@@ -74,13 +79,7 @@ class TensorEvaluator:
 
     @staticmethod
     def _validate_config(config):
-        if not isinstance(config, EvaluationConfig):
-            raise TypeError('config must be an EvaluationConfig')
-        if not config.fast or config.flux_method != 'stokes':
-            raise ValueError('tensor evaluation requires fast=True and flux_method="stokes"')
-        if (config.segments_per_coil, config.psi_iterations, config.alpha_iterations,
-                config.helicity) != (256, 4, 4, (1, 4)):
-            raise ValueError('tensor evaluation requires 256 segments, four fit iterations and helicity (1,4)')
+        validate_tensor_config(config)
 
     def _check(self):
         if self._closed or threading.get_ident() != self._thread:
@@ -91,7 +90,8 @@ class TensorEvaluator:
         if config.psi_fit == 'two_stage':
             from ._two_stage.native import TwoStageNative
             coils=CoilSet(*arrays,nfp=4)
-            result,snapshot=TwoStageNative(self.library_path,self.device.index).evaluate(coils,config,capture=True)
+            result,snapshot=TwoStageNative(self.library_path,self.device.index).evaluate(
+                coils,config,capture=True,include_torsion=False)
             if snapshot is None:
                 raise native.GpuError(f'two-stage center is not valid: {result["status"]}')
             return snapshot
@@ -99,7 +99,7 @@ class TensorEvaluator:
                                          nfp=4, device_id=self.device.index)
         try:
             return capture_center(batch, *arrays, target_helicity=config.helicity,
-                                  config_overrides=config.native_options())
+                                  config_overrides=config.native_options(),include_torsion=False)
         finally:
             batch.close()
 
@@ -115,16 +115,36 @@ class TensorEvaluator:
         return center
 
     def evaluate(self, parameters):
-        """Evaluate physical parameters of shape (4,28); metrics are scalars."""
+        """Evaluate physical parameters (4, 3*ncoeff+1); metrics are scalars."""
         return self._evaluate(parameters, batch=False)
 
     def evaluate_batch(self, parameters, *, configs=None):
-        """Evaluate independent physical parameters (B,4,28); metrics have shape (B,)."""
+        """Evaluate physical parameters (B,4,3*ncoeff+1); metrics have shape (B,)."""
         return self._evaluate(parameters, batch=True, configs=configs)
 
+    def _choose_local_flux(self, parameters, snapshot):
+        """Choose one center quadrature before evaluating finite perturbations.
+
+        The center runs through its ordinary front response and flux check.
+        Alpha/QS, surface quality and geometry metrics are not needed here.
+        """
+        if self.config.stokes_validation_rtol is None:
+            return dict(method='stokes', validation='disabled', fallback=False,
+                tolerance=None, edge_relative_error=None, derivative_relative_error=None), {}
+        with torch.no_grad():
+            return self._evaluate(parameters, batch=False, _snapshots=[snapshot],
+                                  _parameter_grad=False, _engineering=False,
+                                  _flux_choice_only=True)
+
     def _evaluate(self, parameters, *, batch, configs=None, _snapshots=None,
-                  _local_value=False, _parameter_grad=True, _engineering=True):
+                  _local_value=False, _parameter_grad=True, _engineering=True,
+                  _flux_choice_only=False, _flux_choice=None):
         self._check()
+        if _flux_choice_only and (batch or _snapshots is None or _flux_choice is not None):
+            raise ValueError('center flux selection requires one captured scalar center')
+        if _flux_choice is not None:
+            if _snapshots is None or not _local_value or _flux_choice.get('method') not in {'stokes','area'}:
+                raise ValueError('a frozen flux choice requires captured local endpoints and an integration method')
         x = parameters if isinstance(parameters, torch.Tensor) else torch.as_tensor(
             parameters, device=self.device, dtype=torch.float64)
         wanted_ndim = 3 if batch else 2
@@ -139,11 +159,8 @@ class TensorEvaluator:
         elif not x.requires_grad:
             x = x.detach().requires_grad_(True)
         xs = x if batch else x[None]
-        configs = list(configs) if configs is not None else [self.config]*len(xs)
-        if len(configs) != len(xs):
-            raise ValueError('provide one configuration per geometry')
-        for c in configs:
-            self._validate_config(c)
+        configs = validate_tensor_batch_configs(
+            configs if configs is not None else [self.config]*len(xs),count=len(xs))
         timings = {}
         def stage(name, fn):
             torch.cuda.synchronize(self.device)
@@ -151,17 +168,55 @@ class TensorEvaluator:
             timings[name]=time.perf_counter()-start
             return result
         def capture_all():
+            from ._autograd.cuda_memory import prepare_native_memory
+            capture_metadata['allocator_handoff']=prepare_native_memory(self.device)
             host = xs.detach().double().cpu().numpy()
-            captures = []
-            for i, (value, cfg) in enumerate(zip(host, configs)):
+            # Only exact physical duplicates and configurations differing solely
+            # in target volume share S1/domain/S2 work. Graph parameters remain
+            # independent per query; sharing applies to constant host captures.
+            groups = []
+            keys = {}
+            for i, (value,cfg) in enumerate(zip(host,configs)):
+                options=cfg.to_dict();options.pop('target_volume')
+                key=(value.tobytes(),json.dumps(options,sort_keys=True))
+                if self.share_geometry and cfg.psi_fit=='two_stage' and key in keys:
+                    groups[keys[key]].append(i)
+                else:
+                    keys[key]=len(groups);groups.append([i])
+            representatives=[g[0] for g in groups]
+            prepared=(prepare_axis_batch(host[representatives],[configs[i] for i in representatives],
+                self.library_path,device=self.device.index,nfp=4) if self.batch_axis else None)
+            captures = [None]*len(host)
+            from contextlib import nullcontext
+            for j,group in enumerate(groups):
+                i=group[0]
                 try:
-                    snapshot = self._capture(value, cfg)
+                    with prepared.capture(j) if prepared is not None else nullcontext():
+                        if len(group)>1:
+                            from ._two_stage.native import TwoStageNative
+                            coils=CoilSet(*split_tokens(host[i]),nfp=4)
+                            results=TwoStageNative(self.library_path,self.device.index).evaluate_many(
+                                coils,[configs[k] for k in group],capture=True,include_torsion=False)
+                            if len(results)!=len(group):
+                                raise InvalidEvaluationError('two-stage capture returned an incomplete query group')
+                            for k,(raw,snapshot) in zip(group,results):
+                                if snapshot is None or raw['status']!='ok':
+                                    raise InvalidEvaluationError(f'geometry {k}: {raw["status"]}')
+                                captures[k]=snapshot
+                        else:
+                            captures[i]=self._capture(host[i],configs[i])
                 except native.GpuError as exc:
                     raise InvalidEvaluationError(f'geometry {i}: {exc}') from exc
-                if snapshot['score_result']['status'] != 'ok':
-                    raise InvalidEvaluationError(f'geometry {i}: {snapshot["score_result"]["status"]}')
-                captures.append(snapshot)
+                for k in group:
+                    if captures[k]['score_result']['status'] != 'ok':
+                        raise InvalidEvaluationError(f'geometry {k}: {captures[k]["score_result"]["status"]}')
+            capture_metadata.update(query_count=len(host),unique_preparations=len(groups),
+                shared_geometry=self.share_geometry,groups=groups,
+                axis_batch=prepared.metadata if prepared is not None else {'enabled':False,'reason':'disabled_by_caller'},
+                axis_consumption=prepared.observations() if prepared is not None else [],
+                native_query_timings=[s['score_result'].get('timing',{}) for s in captures])
             return captures
+        capture_metadata={}
         snapshots=stage('center_capture',capture_all) if _snapshots is None else list(_snapshots)
         if len(snapshots)!=len(xs):
             raise ValueError('provide one owned snapshot per query')
@@ -186,13 +241,40 @@ class TensorEvaluator:
             return build_batch_two_stage_front(field,centers,dtype=torch.float64,
                 local_value=_local_value,value_only=not _parameter_grad,nfp=4)
         front=stage('axis_psi_surface',make_front)
-        downstream_configs=[DownstreamConfig.from_mapping({**s['config'],'nfp':4}) for s in snapshots]
+        downstream_configs=[DownstreamConfig.from_mapping({**s['config'],'nfp':4,
+            'stokes_validation_rtol':cfg.stokes_validation_rtol})
+            for s,cfg in zip(snapshots,configs)]
         caches=[{name:torch.as_tensor(s[key],device=self.device,dtype=self.dtype).detach()
                  for name,key in (('upper','alpha_upper'),('scale','alpha_scale'),
                                   ('scaled_solution','alpha_center_scaled_solution'))} for s in snapshots]
+        for cache,snapshot,cfg in zip(caches,snapshots,configs):
+            if 'flux_coefficients' in snapshot and 'target_level' in snapshot:
+                cache['reference_flux_coefficients']=torch.tensor(
+                    snapshot['flux_coefficients'],device=self.device,dtype=torch.float64)
+                cache['reference_flux_level']=torch.tensor(
+                    snapshot['target_level'],device=self.device,dtype=torch.float64).reshape(())
+            elif cfg.stokes_validation_rtol is not None:
+                raise InvalidEvaluationError('formal center lacks the flux reference required for Stokes validation')
+            for name in ('volume_source_indices','volume_sampling_shape'):
+                if name in snapshot:
+                    cache[name]=torch.tensor(snapshot[name],device=self.device,dtype=torch.int64)
+        if _flux_choice_only:
+            from ._autograd.downstream import flux_calibration
+            from ._autograd.flux_validation import stokes_check
+            flux=stage('flux_choice',lambda:flux_calibration(front.geometry,front.level,
+                field,field.potential,downstream_configs[0]))
+            _,choice=stokes_check(flux,front.level,caches[0],configs[0].stokes_validation_rtol)
+            return choice,timings
+        if _flux_choice is not None:
+            downstream_configs=[replace(c,stokes_flux=_flux_choice['method']=='stokes',
+                                        stokes_validation_rtol=None) for c in downstream_configs]
         physics=stage('surface_metrics',lambda: batch_downstream(front,caches,field,downstream_configs)
                       if batch else downstream(front.geometry,front.level,caches[0],field,
                                                field.trace,field.potential,downstream_configs[0]))
+        if _flux_choice is not None:
+            selected={**_flux_choice,'validation':'center_selected',
+                      'center_validation':_flux_choice['validation']}
+            physics['flux_validation']=([dict(selected) for _ in configs] if batch else selected)
         engineering=(stage('coil_metrics',lambda: torch.stack([
             _EngineeringMetrics.apply(v,self.library_path,4) for v in xs.unbind()]))
             if _engineering else xs.new_zeros((len(xs),3)))
@@ -204,11 +286,18 @@ class TensorEvaluator:
         diagnostics={'configuration':[c.to_dict() for c in configs] if batch else configs[0].to_dict(),
                      'field_dtype':str(self.dtype),'psi_dtype':'torch.float64',
                      'gradient_method':'local_reverse', 'native_centers':[
-                         s['score_result']['status'] for s in snapshots]}
+                         s['score_result']['status'] for s in snapshots],
+                     'volume_sampling_source':[
+                         'formal_capture' if 'volume_source_indices' in s else 'legacy_local'
+                         for s in snapshots],
+                     'flux_integration':physics['flux_validation'],
+                     'capture':capture_metadata}
         return TensorEvaluation(x,metrics,diagnostics,timings)
 
     def close(self):
-        self._check();self._closed=True
+        if threading.get_ident()!=self._thread:
+            raise CenterContextError('close the evaluator on its creating thread')
+        self._closed=True
 
     def __enter__(self):
         self._check();return self

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0a1
+
+- Accelerated coil geometry metrics while retaining them in complete value-and-gradient evaluation.
+- Kept GPU triangular solves independent per query and bounded temporary memory for larger batches.
+- Preserved formal volume-point selection in the local gradient and documented its discrete sampling boundaries.
+- Validated tensor Stokes flux against the formal center and added differentiable area integration for queries exceeding the configured tolerance.
+- Added optional `flux_legendre` alpha fitting for two-stage evaluations and matching source initialization.
+- Shared magnetic-axis preparation across independent tensor batches and repeated two-stage fits across volumes of the same geometry.
+- Reduced source-capture work and made torsion diagnostics optional during source preparation.
+- Preserved the source magnetic axis in saved initializers and standard surfaces, and added angular-covering acceptance checks.
+- Aligned native extraction and tensor devices in alpha+nu initialization.
+- Resolved ambiguous radial derivative roots during two-stage boundary construction.
+- Clarified metric averaging regions, batch configuration requirements and forward-versus-gradient timing.
+
 ## 0.4.0a1
 
 - Added opt-in two-stage psi fitting with Cartesian domain sampling and experimental weighted polar quadrature.

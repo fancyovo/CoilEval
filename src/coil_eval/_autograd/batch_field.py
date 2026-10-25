@@ -175,6 +175,25 @@ class BatchSegmentField:
         validate_batch_geometry(self.positions,self.elements,points)
         return _BatchField.apply(self.positions,self.elements,points.to(self.positions.dtype),self.library,False,True)
 
+    def select_queries(self,query_indices):
+        """Select independent rows while preserving segment and point VJPs.
+
+        The discrete query list is fixed for this local graph. No geometry is
+        copied to the host and the native library owner is shared. Reordered
+        unique rows are supported; untouched rows receive zero cotangents.
+        """
+        raw=torch.as_tensor(query_indices,device=self.positions.device).detach()
+        if raw.ndim!=1 or raw.numel()==0 or raw.dtype==torch.bool:
+            raise ValueError('query indices must be a nonempty one-dimensional integer list')
+        indices=raw.to(torch.int64)
+        if not bool(torch.all(raw==indices) & torch.all(indices>=0)
+                    & torch.all(indices<self.positions.shape[0])):
+            raise ValueError('query index is not an integer in the field batch')
+        if torch.unique(indices).numel()!=indices.numel():
+            raise ValueError('query indices must be unique')
+        return type(self)(self.positions.index_select(0,indices),
+                          self.elements.index_select(0,indices),self.library)
+
     def trace(self,starts,phi0,phi1,steps,return_samples=False):
         if not isinstance(steps,int) or steps<=0:
             raise ValueError('positive integer RK4 steps required')

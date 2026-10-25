@@ -36,8 +36,9 @@ def driver(monkeypatch):
             self.closed = 0
             self.calls = []
             self.instances.append(self)
-        def evaluate_many(self, coils, configs, capture):
+        def evaluate_many(self, coils, configs, capture, include_torsion=True):
             self.calls.append((coils, configs, capture))
+            self.include_torsion = include_torsion
             if self.error:
                 raise self.error
             return self.rows
@@ -60,7 +61,7 @@ def test_single_config_returns_owned_sources_and_closes(driver, coils):
     assert len(records) == 1 and records[0].valid
     assert records[0].result.diagnostics["configuration"]["psi_fit"] == "two_stage"
     assert driver.instances[0].closed == 1
-    assert driver.instances[0].calls[0][1:] == ([config], True)
+    assert driver.instances[0].calls[0][1:] == ([config], "sources")
     driver.rows[0][1]["psi_coefficients"][:] = 99.
     driver.rows[0][1]["alpha_coefficients"][:] = 88.
     assert records[0].source.coefficients[0] == .2
@@ -91,11 +92,26 @@ def test_source_conversion_failure_is_recorded(driver, coils):
     assert driver.instances[0].closed == 1
 
 
+def test_missing_owned_snapshot_has_an_explicit_failure_status(driver, coils):
+    driver.rows = [(_raw(), None)]
+    record, = capture_sources(coils, EvaluationConfig(.05, psi_fit="two_stage"), library="chosen-library")
+    assert not record.valid and not record.result.valid
+    assert record.result.status == "invalid_source_capture"
+    assert "no owned source snapshot" in record.result.diagnostics["source_capture_error"]
+    assert driver.instances[0].closed == 1
+
+
 def test_native_failure_releases_driver(driver, coils):
     driver.error = GpuError("synthetic native failure")
     with pytest.raises(EvaluationError, match="native source capture failed"):
         capture_sources(coils, EvaluationConfig(.05, psi_fit="two_stage"), library="chosen-library")
     assert driver.instances[0].closed == 1
+
+
+def test_source_capture_can_skip_optional_torsion_without_changing_records(driver, coils):
+    record, = capture_sources(coils, EvaluationConfig(.05, psi_fit="two_stage"),
+                             library="chosen-library", include_torsion=False)
+    assert record.valid and driver.instances[0].include_torsion is False
 
 
 def test_validation_precedes_native_construction(driver, coils):

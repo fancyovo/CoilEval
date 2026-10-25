@@ -11,10 +11,20 @@ Use `--help` for options.
 [two_stage.py](two_stage.py) selects the optional two-stage psi fit. Set
 `--coils`, `--volume`, `--radius` and `--output` to use your own inputs.
 `--sampling polar_quadrature` selects the experimental weighted sampler.
+`--alpha-weighting smooth` selects smooth radial alpha weights; both options
+are available in the two-stage, autograd and asynchronous preparation examples.
+Those examples also accept `--alpha-basis flux_legendre` to select the
+development source's flux-polynomial alpha basis. The default is `zernike`;
+the autograd example uses these options with `--two-stage`.
+`autograd.py` also accepts `--volume`, `--radius` and `--device`. Its reported
+value-plus-gradient time includes one complete call and one objective reverse
+pass; the first run can include cold initialization costs.
 
 ```sh
 python examples/two_stage.py --output output/metrics.json
 python examples/autograd.py --two-stage --batch
+python examples/autograd.py --two-stage --sampling polar_quadrature --alpha-weighting smooth
+python examples/autograd.py --two-stage --sampling polar_quadrature --alpha-weighting smooth --alpha-basis flux_legendre
 ```
 
 [simsopt_async.py](simsopt_async.py) separates GPU source capture and alpha+nu

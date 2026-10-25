@@ -58,7 +58,7 @@ def _oriented_target_volume(initial_signed_volume,requested_volume):
     return float(np.copysign(requested,initial))
 
 
-def validate_surface(surface,field,*,iota,G):
+def validate_surface(surface,field,*,iota,G,axis_samples=None):
     xyz=np.asarray(surface.gamma());gp=np.asarray(surface.gammadash1());gt=np.asarray(surface.gammadash2())
     B=_field_values(field,xyz);magnitude=np.linalg.norm(B,axis=-1)
     normal=np.cross(gp,gt);normal_norm=np.linalg.norm(normal,axis=-1)
@@ -69,10 +69,15 @@ def validate_surface(surface,field,*,iota,G):
     fraction=(xyz.shape[0]-1)/xyz.shape[0]
     winding=(angle[-1]-angle[0])/(fraction*2*np.pi/surface.nfp)
     finite=bool(all(np.isfinite(v).all() for v in (xyz,B,magnitude,normal_norm,residual,winding)))
+    topology={'checked':False,'reason':'source_axis_unavailable'}
+    if axis_samples is not None and finite:
+        from .topology import angular_covering
+        topology=angular_covering(xyz,axis_samples,surface.nfp)
     return {'finite':finite,'relative_l2':float(np.linalg.norm(weighted)/(max(abs(G),1e-300)*np.sqrt(magnitude.size))),
             'normal_B_sine_p95':float(np.percentile(sine,95)),
             'normal_min':float(np.min(normal_norm)),'toroidal_winding_min':float(np.min(winding)),
-            'signed_volume_m3':float(surface.volume()),'point_count':magnitude.size}
+            'signed_volume_m3':float(surface.volume()),'point_count':magnitude.size,
+            'angular_covering':topology}
 
 
 class StandardSimsoptSolver:
@@ -110,11 +115,15 @@ class StandardSimsoptSolver:
             dense=surface_from_dofs(dofs,nfp=seed.nfp,order=seed.order,nphi=size,
                                     stellsym=seed.stellsym,offset=offset)
             grids.append(dict(size=size,offset=offset[0],**validate_surface(dense,
-                validation_field if validation_field is not None else field,iota=iota,G=G)))
+                validation_field if validation_field is not None else field,iota=iota,G=G,
+                axis_samples=getattr(seed,'source_axis_samples',None))))
         dense=grids[-1]
         hard={'newton_converged':converged,'finite':dense['finite'],
               'toroidal_winding':dense['toroidal_winding_min']>0,
               'normal_nonzero':dense['normal_min']>1e-12,'nonzero_volume':abs(dense['signed_volume_m3'])>0}
+        if getattr(seed,'source_axis_samples',None) is not None:
+            hard['single_angular_covering']=all(row['angular_covering'].get('valid_convention',False)
+                                               for row in grids)
         strict={'dense_relative_l2':dense['relative_l2']<=cfg.max_final_relative_l2,
                 'dense_normal_field_p95':dense['normal_B_sine_p95']<=cfg.max_final_normal_p95}
         accepted=all(hard.values())

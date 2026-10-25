@@ -157,9 +157,19 @@ class SurfaceSeed:
     kind: str = INITIALIZER_KIND
     source_kind: str = SOURCE_KIND
     diagnostics: dict = field(default_factory=dict)
+    source_axis_samples: np.ndarray | None = None
+
+    def __post_init__(self):
+        if self.source_axis_samples is not None:
+            axis=np.array(self.source_axis_samples,dtype=np.float64,copy=True)
+            if axis.ndim!=2 or axis.shape[1]!=4 or len(axis)<2 or not np.isfinite(axis).all():
+                raise ValueError('source_axis_samples must be finite (samples>=2,4) data')
+            axis.setflags(write=False)
+            self.source_axis_samples=axis
 
     def save(self, path):
-        values = {key:getattr(self,key) for key in self.__dataclass_fields__ if key!='diagnostics'}
+        values = {key:getattr(self,key) for key in self.__dataclass_fields__
+                  if key!='diagnostics' and getattr(self,key) is not None}
         values.update(rho=1.0,s_edge=self.s_level)
         np.savez(Path(path), **values)
 
@@ -169,7 +179,7 @@ class SurfaceSeed:
             require_kind(z['kind'], INITIALIZER_KIND, "alpha+nu input")
             if 'source_kind' in z:
                 require_kind(z['source_kind'], SOURCE_KIND, "alpha+nu source")
-            values = {key:(z[key].copy() if key=='dofs' else scalar(z[key]))
+            values = {key:(z[key].copy() if key in ('dofs','source_axis_samples') else scalar(z[key]))
                       for key in cls.__dataclass_fields__ if key not in ('diagnostics',) and key in z}
         return cls(**values)
 
@@ -189,9 +199,11 @@ class StandardSurface:
         if not self.accepted:
             raise ValueError("a rejected surface cannot be saved as an accepted standard surface")
         require_kind(self.seed.kind, INITIALIZER_KIND, "standard surface source")
+        source_axis=({} if self.seed.source_axis_samples is None else
+                     {'source_axis_samples':self.seed.source_axis_samples})
         np.savez(path, dofs=self.dofs, nfp=self.seed.nfp, order=self.seed.order,
                  stellsym=self.seed.stellsym, iota=self.iota, G=self.G,
                  s_level=self.seed.s_level, s_edge=self.seed.s_level, rho=1.,
                  radius_mean_m=self.seed.radius_mean_m,
                  spectral_fit_rms_m=self.seed.spectral_fit_rms_m, kind=self.kind,
-                 source_surface_kind=self.seed.kind)
+                 source_surface_kind=self.seed.kind, **source_axis)

@@ -7,17 +7,18 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The 0.4.0a1 development release adds optional two-stage psi fitting, full-order
-Fourier tensors and a Simsopt surface workflow. Existing calls retain the
-single-stage defaults. Select numerical options explicitly with
-`EvaluationConfig`.
+The 0.5.0a1 development release adds a flux-polynomial alpha basis, faster
+geometry metrics and shared preparation for tensor batches. The Simsopt workflow
+preserves the source magnetic axis and checks surface angular covering. Existing
+calls retain the single-stage defaults; select numerical options explicitly with
+`EvaluationConfig`. See the [release history](CHANGELOG.md) for changes.
 
 ## Installation
 
 Install the Linux x86-64 wheel with Python 3.10+:
 
 ```sh
-python -m pip install ./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 The wheel includes the GPU backend. Pip installs NumPy and the CUDA 12.8 runtime
@@ -49,6 +50,11 @@ python examples/custom_loss.py
 python examples/two_stage.py
 ```
 
+After installing CUDA-enabled PyTorch, run `python examples/autograd.py` for
+evaluation plus one objective gradient. `TensorEvaluator.evaluate_batch`
+accepts independent parameter tensors; `capture_sources` shares two-stage fits
+when preparing one geometry at several target volumes.
+
 Use `psi_fit="two_stage"` to refit psi in a closed training domain. The optional
 PyTorch interface computes local reverse gradients and accepts independent
 batches, including order-16 coils. For standard surface reconstruction,
@@ -56,6 +62,19 @@ batches, including order-16 coils. For standard surface reconstruction,
 The [asynchronous example](examples/simsopt_async.py) separates those phases.
 Install the `simsopt` extra for the surface workflow; GPU preparation also uses
 the optional CUDA-enabled PyTorch installation described in the guide.
+
+Select the two-stage path and flux-polynomial alpha fitting with:
+
+```python
+config = EvaluationConfig(
+    target_volume=0.05, psi_a=0.15, fast=True, flux_method="stokes",
+    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
+    alpha_radial_weighting="smooth", alpha_radial_basis="flux_legendre",
+)
+```
+
+These options are described in [the API guide](docs/api.md). A reconstructed
+surface's acceptance and quality are available separately in the Simsopt result.
 
 QS metrics are residual RMS quantities. `qs_volume` averages over the selected
 volume; `qs_outer` averages over its outer radial bin. Simsopt reference helpers

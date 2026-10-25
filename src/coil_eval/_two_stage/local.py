@@ -21,18 +21,23 @@ def nearby(backend,coils,candidates,center_raw,config):
         'relative_normal_drift_p95':'target_quality_error','surface_volume':'surface_volume',
         'psi_fit_rms':'psi_train_rms'}
     with TensorEvaluator(backend.library,config=config,device_id=backend.device_id) as evaluator:
+        selection_started=perf_counter()
+        choice,choice_timings=evaluator._choose_local_flux(
+            pack_coils(coils,device=evaluator.device),snapshot)
+        selection_seconds=perf_counter()-selection_started
         for begin in range(0,len(candidates),config.psi_fd_batch_size):
             group=candidates[begin:begin+config.psi_fd_batch_size]
             parameters=torch.stack([pack_coils(c,device=evaluator.device) for c in group])
             with torch.no_grad():
                 response=evaluator._evaluate(parameters,batch=True,
                     _snapshots=[snapshot]*len(group),_local_value=True,
-                    _parameter_grad=False,_engineering=False)
+                    _parameter_grad=False,_engineering=False,_flux_choice=choice)
             values={name:getattr(response.metrics,name).detach().double().cpu().numpy()
                     for name in mapping}
             chunk_timings.append(response.timings)
             for index in range(len(group)):
                 diagnostics=dict(raw['diagnostics'])
+                diagnostics['flux_integration']=dict(response.diagnostics['flux_integration'][index])
                 diagnostics.update({key:float(values[name][index]) for name,key in mapping.items()})
                 volume_error=abs(diagnostics['surface_volume']/config.target_volume-1)
                 valid=all(np.isfinite(values[name][index]) for name in mapping) and volume_error<=.01
@@ -47,7 +52,8 @@ def nearby(backend,coils,candidates,center_raw,config):
                  for items in zip(*[_coil_arrays(c) for c in candidates]))
     backend._add_geometry(results,center_arrays,arrays,int(coils.nfp))
     record={'scope':'shared_batch','query_count':len(candidates),'total_s':perf_counter()-started,
-            'stages_s':{'center_capture':capture_seconds},'chunks':chunk_timings,
+            'stages_s':{'center_capture':capture_seconds,'center_flux_selection':selection_seconds},
+            'center_flux_choice':choice,'center_flux_selection_timings':choice_timings,'chunks':chunk_timings,
             'method':'two_stage_fixed_discrete_branch','batch_size':config.psi_fd_batch_size}
     for result in results:
         result['local_timing']=record

@@ -3,6 +3,7 @@
 #include "pipeline/device_helpers.cuh"
 #include "pipeline/session_state.cuh"
 #include "pipeline/alpha.cuh"
+#include "pipeline/alpha_radial_basis.cuh"
 #include "pipeline/common.cuh"
 #include <cublas_v2.h>
 #include <cusolverDn.h>
@@ -19,10 +20,12 @@ double factorial_int(int value) {
 ClebschModesNative build_clebsch_modes_native(
     int radial_order,
     int poloidal_order,
-    int toroidal_order
+    int toroidal_order,
+    int radial_basis
 ) {
     ClebschModesNative modes;
     modes.radial_order = radial_order;
+    modes.radial_basis = radial_basis;
     const int m_max = std::min(radial_order, poloidal_order);
     for (int m = 0; m <= m_max; ++m) {
         const int n_min = m == 0 ? 1 : -toroidal_order;
@@ -36,6 +39,11 @@ ClebschModesNative build_clebsch_modes_native(
                     modes.kind.push_back(kind);
                     const size_t old_size = modes.radial_coefficients.size();
                     modes.radial_coefficients.resize(old_size + radial_order + 1, 0.0f);
+                    if (radial_basis == 1) {
+                        const auto coefficients=flux_legendre_radial_coefficients(l,m,radial_order+1);
+                        std::copy(coefficients.begin(),coefficients.end(),modes.radial_coefficients.begin()+old_size);
+                        continue;
+                    }
                     const int half_plus = (l + m) / 2;
                     const int half_minus = (l - m) / 2;
                     for (int k = 0; k <= half_minus; ++k) {
@@ -365,7 +373,8 @@ bool fit_alpha_native(
     const ClebschModesNative modes = build_clebsch_modes_native(
         config.alpha_radial_order,
         config.alpha_poloidal_order,
-        config.alpha_toroidal_order
+        config.alpha_toroidal_order,
+        g_alpha_radial_basis
     );
     const int mode_count = static_cast<int>(modes.m.size());
     const int column_count = mode_count + config.iota_degree + 1;

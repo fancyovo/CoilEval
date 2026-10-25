@@ -9,7 +9,7 @@ CUDA 准备阶段还使用可选的 PyTorch 依赖。相应依赖会在运行具
 使用本地安装包安装磁面相关依赖：
 
 ```sh
-python -m pip install "./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 `simsopt` 可选依赖组包含 Simsopt 与 SciPy。
@@ -32,10 +32,12 @@ for capture in captures:
     print(capture.valid, capture.result.status)
 ```
 
-`capture_sources(coils, configs, library=None, device_id=0)` 接收单份或一组
+`capture_sources(coils, configs, library=None, device_id=0, include_torsion=True)` 接收单份或一组
 `EvaluationConfig`，始终按输入顺序返回列表。配置选择 `psi_fit='two_stage'`，
 各份配置只允许目标体积不同。同一几何的多个体积共享磁轴、第一次拟合、训练区域与
 第二次拟合，各目标体积分别完成下游求值。
+只准备源数据而不需要可选扭率诊断时，可设置 `include_torsion=False`。
+评分指标与源系数的定义保持一致。
 
 每个 `SourceCapture` 包含 `.result`（`EvaluationResult`）、`.source`（`SourcePsi`）
 和 `.alpha`（`AlphaFit`）。准备磁面前检查 `.valid`。不可用目标保留结果，source/alpha
@@ -44,6 +46,8 @@ for capture in captures:
 `SourcePsi` 提供系数、模式数组、磁轴样本、场周期、拟合半径和所选层级；
 `AlphaFit` 提供模式、lambda 与 iota 系数。`from_snapshot()` 用于对接已有原生捕获。
 `SourcePsi.read(path, level=...)` 和 `AlphaFit.read(path, nfp=...)` 可读取保存的拟合记录。
+`AlphaFit.radial_basis` 记录求值时使用的径向基，包括 `'flux_legendre'`，初始值计算
+使用相同的基。保存的 alpha NPZ 文件可包含标量 `radial_basis`；旧文件采用 `'zernike'`。
 
 ## 准备 alpha+nu 初始值
 
@@ -63,8 +67,11 @@ precision='fp32')` 是支持上下文管理器的磁场回调。输入为 `(N,3)
 单位米；输出 B，单位特斯拉。也可选择 `precision='fp64'`。
 `close()` 释放磁场资源，可重复调用。
 
-`AlphaNuInitializer(field, library=None, config=None, device_id=0)` 接收 Cartesian B 回调，
+`AlphaNuInitializer(field, library=None, config=None, device_id=None)` 接收 Cartesian B 回调，
 `prepare(source, alpha, rho=1.0)` 返回 `SurfaceSeed`。
+使用 `InitializerConfig(device='cuda')` 时，`device_id` 同时选择原生提取与 PyTorch
+工作的 GPU。显式的 `device='cuda:N'` 在省略 `device_id` 时选择 N；两个显式设置
+冲突时抛出 `ValueError`。两者均省略时仍使用 GPU 0；CPU 初始化保留所选 CPU 实现。
 source、alpha 和磁场应对应相同的线圈几何与体积。捕获接口使用求值器原生 alpha 基；
 单独提供的高阶 alpha 拟合可能产生不同初始值，比较时应使用相同目标体积。
 
@@ -82,6 +89,9 @@ source、alpha 和磁场应对应相同的线圈几何与体积。捕获接口�
 
 重复使用初始值生成器可复用投影因子。`seed.diagnostics` 提供提取、映射、拟合和计时信息。
 `SurfaceSeed.save` 和 `SurfaceSeed.read` 保留求解器使用的 alpha+nu 与 source-psi 类型标记。
+初始化器生成的 seed 还保留 `source_axis_samples`，各列依次为
+`(R, Z, dR/dphi, dZ/dphi)`，用于角坐标拓扑检查。读取早期文件时该数组可省略；
+被接受的标准磁面文件也保留该数组。
 
 `geometry_method='cached_basis'` 可选择缓存磁面几何基。
 此开发版默认保留 reference 几何方法。
@@ -129,6 +139,15 @@ BiotSavart 磁场。`StandardSimsoptSolver(config=SolverConfig(...))` 先进行�
 `max_final_relative_l2=1e-4`、`max_final_normal_p95=1e-4` 和 `validation_grids=(49,97)`。
 `StandardSurface` 包含最终 dofs、iota、G、接受状态、质量和诊断。
 `save()` 保存被接受的磁面；未被接受的候选几何仍保留在返回对象中，供用户检查。
+
+初始值带有源磁轴采样时，求解器会在求解网格及各验证网格上检查角度覆盖。
+相对源磁轴的顺时针极向角沿极向参数应绕行一次，沿一个环向场周期应绕行零次；
+柱坐标环向角对应的绕行次数应分别为零和一次。
+`hard_downstream_checks['single_angular_covering']` 记录这项接受检查，
+各网格的 `angular_covering` 记录实测绕数。
+可用 `SolverConfig(validation_grids=(97,129))` 加密检查。
+缺少磁轴采样的早期初始值保留原有几何检查，并记录 `source_axis_unavailable`。
+通过接受检查的磁面另以 `strict_pass` 或 `accepted_with_quality_warning` 报告稠密残差质量。
 
 ## 参考 QS 指标
 

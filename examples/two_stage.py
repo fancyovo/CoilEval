@@ -12,11 +12,15 @@ def main():
     parser.add_argument("--volume", type=float, default=.05, help="Target volume in m^3")
     parser.add_argument("--radius", type=float, default=.15, help="Fitting radius in metres")
     parser.add_argument("--sampling", choices=("cartesian", "polar_quadrature"), default="cartesian")
+    parser.add_argument("--alpha-weighting", choices=("histogram", "smooth"), default="histogram")
+    parser.add_argument("--alpha-basis", choices=("zernike", "flux_legendre"), default="zernike")
+    parser.add_argument("--device", type=int, default=0, help="CUDA device index")
     parser.add_argument("--output", type=Path, help="Save EvaluationResult as JSON")
     args = parser.parse_args()
     config = EvaluationConfig(target_volume=args.volume, psi_a=args.radius,
-        fast=True, flux_method="stokes", psi_fit="two_stage", psi_refit_sampling=args.sampling)
-    with Evaluator(args.library, config=config) as evaluator:
+        fast=True, flux_method="stokes", psi_fit="two_stage", psi_refit_sampling=args.sampling,
+        alpha_radial_weighting=args.alpha_weighting, alpha_radial_basis=args.alpha_basis)
+    with Evaluator(args.library, config=config, device_id=args.device) as evaluator:
         result = evaluator.evaluate(CoilSet.read_json(args.coils))
     print("Status:", result.status)
     if result.valid:

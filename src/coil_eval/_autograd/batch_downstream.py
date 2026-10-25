@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import math
-from dataclasses import fields
+from dataclasses import fields, replace
 from typing import Mapping
 
 import numpy as np
 import torch
 from torch.nn import functional as F
+from .column_norms import column_norms
+from .triangular import independent_triangular_solve
 
 from .downstream import (DownstreamConfig, _arange, _xyz,
     clebsch_modes, iota_profile_extrema, outer_qs_rms, volume_points,smooth_alpha_weights)
@@ -21,7 +23,8 @@ def _configs(configs, count):
     if len(result) != count or not count:
         raise ValueError('one downstream config is required per query')
     independent = {'volume_rho_min', 'target_quality_threshold',
-                   'target_quality_temperature', 'target_quality_weight'}
+                   'target_quality_temperature', 'target_quality_weight',
+                   'stokes_validation_rtol'}
     for name in (f.name for f in fields(DownstreamConfig) if f.name not in independent):
         if any(getattr(c, name) != getattr(result[0], name) for c in result[1:]):
             raise ValueError(f'batch downstream requires shared {name}')
@@ -122,6 +125,9 @@ class _BatchAlphaDesign(torch.autograd.Function):
     """Bounded-column feature recomputation, with every moving feature VJP."""
     @staticmethod
     def forward(ctx, rho, theta, phi, bt, bp, weight, scale, metadata, nfp, iota_degree, chunk):
+        # Bound recomputation temporaries as the batch grows. Retaining the
+        # graph for component VJPs keeps the full fit state alive concurrently.
+        chunk = min(chunk, max(1, (1 << 22) // max(1, rho.numel())))
         ctx.save_for_backward(rho, theta, phi, bt, bp, weight, scale)
         ctx.mode_data, ctx.nfp, ctx.iota_degree, ctx.chunk = metadata, nfp, iota_degree, chunk
         columns = metadata[0].numel() + iota_degree + 1
@@ -152,10 +158,10 @@ class _BatchAlphaDesign(torch.autograd.Function):
 def batch_frozen_pcgls(A, b, cache, ridge, iterations=4, *, live_column_scale=False):
     upper = cache['upper'].to(A).detach()
     x = cache['scaled_solution'].to(A).detach()
-    penalty=(torch.linalg.vector_norm(A,dim=1,dtype=torch.float64).clamp_min(1e-20).to(A.dtype).square()
+    penalty=(column_norms(A).clamp_min(1e-20).to(A.dtype).square()
              if live_column_scale else 1.)
     def tri(v, transposed=False):
-        return torch.linalg.solve_triangular(upper.transpose(-1, -2) if transposed else upper,
+        return independent_triangular_solve(upper.transpose(-1, -2) if transposed else upper,
                     v[..., None], upper=not transposed).squeeze(-1)
     def apply(v):
         return torch.bmm(A, v[..., None]).squeeze(-1)
@@ -204,7 +210,8 @@ def batch_alpha_fit(points, B, cache, config, *, volume_rho_min=None):
         weight = counts.gather(1, bins).clamp_min(1).to(B.dtype).rsqrt() / field_norm2.clamp_min(1e-30).sqrt()
         weight = weight * (nf / weight.double().square().sum(-1, keepdim=True)).sqrt().to(B.dtype)
     else:raise ValueError('alpha_radial_weighting must be histogram or smooth')
-    modes = clebsch_modes(c.alpha_radial_order, c.alpha_poloidal_order, c.alpha_toroidal_order)
+    modes = clebsch_modes(c.alpha_radial_order, c.alpha_poloidal_order, c.alpha_toroidal_order,
+                         c.alpha_radial_basis)
     metadata = tuple(torch.as_tensor(v, device=B.device, dtype=B.dtype) for v in modes)
     mode_count = len(modes[0])
     scale = cache['scale'].to(B).detach()
@@ -301,7 +308,31 @@ def batch_downstream(front, alpha_caches, field, configs, *, return_arrays=False
     geometries = [front.geometry(i) for i in range(nq)]
     cache = _stack_dict(alpha_caches) if not isinstance(alpha_caches, Mapping) else alpha_caches
     flux = batch_flux_calibration(geometries, levels, field, configs)
-    points = _stack_dict([volume_points(g, levels[i], _slice_dict(flux, i), configs[i])
+    from .flux_validation import stokes_check
+    flux_validation, area_queries = [], []
+    for i, config in enumerate(configs):
+        if config.stokes_flux:
+            use_area, info = stokes_check(_slice_dict(flux, i), levels[i],
+                                          _slice_dict(cache, i), config.stokes_validation_rtol)
+        else:
+            use_area, info = False, dict(method='area', validation='not_requested', fallback=False)
+        flux_validation.append(info)
+        if use_area:
+            area_queries.append(i)
+    if area_queries:
+        indices = torch.tensor(area_queries, device=levels.device, dtype=torch.int64)
+        area = batch_flux_calibration(
+            [geometries[i] for i in area_queries], levels.index_select(0, indices),
+            field.select_queries(indices),
+            [replace(configs[i], stokes_flux=False) for i in area_queries])
+        # index_copy removes the rejected Stokes VJP on selected rows. Both
+        # their geometry and field contributions flow through live area work.
+        flux = {name: value.index_copy(0, indices, area[name]) for name, value in flux.items()}
+    points = _stack_dict([volume_points(g, levels[i], _slice_dict(flux, i), configs[i],
+                           source_indices=(cache['volume_source_indices'][i]
+                                           if 'volume_source_indices' in cache else None),
+                           sampling_shape=(cache['volume_sampling_shape'][i]
+                                           if 'volume_sampling_shape' in cache else None))
                           for i, g in enumerate(geometries)])
     phi = _arange(c.axis_sample_count, levels) * (2 * math.pi / (c.nfp * c.axis_sample_count))
     axis_points, axis_tangents = [], []
@@ -326,6 +357,7 @@ def batch_downstream(front, alpha_caches, field, configs, *, return_arrays=False
     result = {**qs, **quality, **alpha, 'surface_volume': flux['surface_volume'],
               'surface_level': levels, 'flux_edge': flux['edge_flux'],
               'flux_coefficients': flux['coefficients'], 'major_radius': flux['major_radius']}
+    result['flux_validation'] = flux_validation
     if return_arrays:
         result.update(points=points, B=B, gradB=gradB, flux_sections=flux['sections'])
     return result

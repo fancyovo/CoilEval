@@ -4,6 +4,9 @@
 #include "pipeline/common.cuh"
 #include "pipeline/flux.cuh"
 #include "pipeline/volume.cuh"
+#include "pipeline/alpha.cuh"
+#include "pipeline/session_state.cuh"
+#include "coil_field_internal.h"
 #include <cub/cub.cuh>
 #include "pipeline/axis.cuh"
 #include "pipeline/psi.cuh"
@@ -198,6 +201,46 @@ __global__ void gather_volume_points_kernel(
     flux_derivative[index] = source_flux_derivative[source];
 }
 
+bool capture_alpha_volume_sampling(const DeviceVolumePoints& points,
+                                   const SgpuScoreConfig& config,
+                                   std::uint64_t target_cache_id) {
+    auto& warm = g_alpha_warm_preconditioner;
+    warm.volume_sampling_ready = false;
+    warm.volume_source_indices.clear();
+    if (points.count != config.volume_point_count || points.count <= 0 ||
+        points.source_indices.size() != static_cast<size_t>(points.count)) {
+        sgpu_internal_set_error("formal volume sampling branch is unavailable");
+        return false;
+    }
+    const int rays = config.volume_phi_count * config.volume_theta_count;
+    const int nr = (static_cast<int>(std::ceil(config.volume_point_count * 1.25)) + rays - 1) / rays;
+    warm.volume_source_indices.resize(points.count);
+    if (cudaMemcpy(warm.volume_source_indices.data(), points.source_indices.data(),
+                   static_cast<size_t>(points.count) * sizeof(int),
+                   cudaMemcpyDeviceToHost) != cudaSuccess) {
+        warm.volume_source_indices.clear();
+        sgpu_internal_set_error("formal volume sampling branch export failed");
+        return false;
+    }
+    int previous = -1;
+    for (int index : warm.volume_source_indices) {
+        if (index <= previous || index >= rays * nr) {
+            warm.volume_source_indices.clear();
+            sgpu_internal_set_error("formal volume sampling branch indices are invalid");
+            return false;
+        }
+        previous = index;
+    }
+    warm.volume_phi_count = config.volume_phi_count;
+    warm.volume_theta_count = config.volume_theta_count;
+    warm.volume_radial_count = nr;
+    warm.volume_rho_min = config.volume_rho_min;
+    warm.volume_device_id = config.device_id;
+    warm.volume_target_cache_id = target_cache_id;
+    warm.volume_sampling_ready = true;
+    return true;
+}
+
 bool build_volume_points_native(
     const DevicePsiData& device_psi,
     const AxisData& axis,
@@ -314,6 +357,7 @@ bool build_volume_points_native(
         output.volume_weight.data(), output.flux_derivative.data()
     );
     if (!cuda_stage_ok(cudaDeviceSynchronize(), result, "volume point compaction")) return false;
+    output.source_indices = std::move(d_selected_indices);
     result.volume_point_count = output_count;
     return true;
 }

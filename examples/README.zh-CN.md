@@ -10,10 +10,17 @@
 [two_stage.py](two_stage.py) 选择可选的两阶段 psi 拟合。
 使用 `--coils`、`--volume`、`--radius` 和 `--output` 指定输入与输出。
 `--sampling polar_quadrature` 选择实验性的加权采样。
+`--alpha-weighting smooth` 选择平滑的径向 alpha 权重；两阶段、autograd 和异步准备
+三个示例均提供这两个选项。`autograd.py` 还支持 `--volume`、`--radius` 和 `--device`。
+三个示例还支持 `--alpha-basis flux_legendre`，选择开发源码中的磁通多项式 alpha 基函数；
+默认仍为 `zernike`。autograd 示例应同时使用 `--two-stage`。
+它打印的一次求值加梯度时间覆盖完整调用与一次目标反传，首次运行可能包含冷启动成本。
 
 ```sh
 python examples/two_stage.py --output output/metrics.json
 python examples/autograd.py --two-stage --batch
+python examples/autograd.py --two-stage --sampling polar_quadrature --alpha-weighting smooth
+python examples/autograd.py --two-stage --sampling polar_quadrature --alpha-weighting smooth --alpha-basis flux_legendre
 ```
 
 [simsopt_async.py](simsopt_async.py) 将 GPU 源捕获和 alpha+nu 准备，与 CPU 标准 Simsopt

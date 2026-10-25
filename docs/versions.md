@@ -11,12 +11,13 @@
 | 0.3.0a2 | Linux CUDA 12.8 binary wheel and automatic backend loading | Install a wheel; omit `library` |
 | 0.3.0a3 | Validated CUDA runtime dependency set | Install the updated wheel |
 | 0.4.0a1 | Two-stage psi, higher Fourier orders and Simsopt integration | `psi_fit='two_stage'`; `coil_eval.simsopt` |
+| 0.5.0a1 | Flux-polynomial alpha, shared tensor preparation and surface covering checks | `alpha_radial_basis='flux_legendre'`; batch and Simsopt APIs |
 
 The default NumPy behavior stays compatible across these versions. New numerical
 paths are selected explicitly. Use an exact version and save the configuration
 alongside results when repeating an evaluation.
 
-In 0.4.0a1, `psi_fit='single_stage'` remains the default. Two-stage fitting uses
+In 0.5.0a1, `psi_fit='single_stage'` remains the default. Two-stage fitting uses
 `psi_refit_sampling='cartesian'` unless selected otherwise. Weighted
 `'polar_quadrature'` is an optional experimental sampler. The Tensor API accepts
 both fitting methods and preserves physical units for every Fourier order.

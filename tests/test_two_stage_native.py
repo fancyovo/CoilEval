@@ -99,11 +99,13 @@ def factory(monkeypatch):
             lattice_indices=np.arange(8).reshape(4,2),spacing=.02,metadata=dict(target_count=4))
     monkeypatch.setattr(module,'max_closed_boundary',boundary)
     monkeypatch.setattr(module,'sample_frozen_sections',sample)
-    def snapshot(driver):
+    def snapshot(driver,*,shared=None,names=None):
         lib=driver.lib;lib.snapshot_count+=1
-        return dict(axis_samples=np.full((8,4),lib.volume),psi_coefficients=np.array([.01,1.1]),
+        result=dict(axis_samples=np.ones((8,4)),psi_coefficients=np.array([.01,1.1]),
             target_level=np.array(lib.volume),alpha_mode_l=np.array([0]),
             alpha_center_scaled_solution=np.array([lib.volume+1,.2,.3]),alpha_scale=np.ones(3))
+        result.update({key:value for key,value in (shared or {}).items() if key in result})
+        return {key:value for key,value in result.items() if names is None or key in names}
     monkeypatch.setattr(module,'copy_reverse_snapshot',snapshot)
     def create(**kwargs):
         library=FakeLibrary(**kwargs);libraries.append(library)
@@ -136,7 +138,7 @@ def test_multiple_volumes_begin_and_refit_once_resume_each_in_order(factory):
     assert all(r['timing']['two_stage_group']==record for r,s in results)
 
 
-def test_capture_owns_volume_arrays_and_shares_only_readonly_fit_factors(factory):
+def test_capture_owns_volume_state_and_shares_readonly_common_arrays(factory):
     driver,library,_=factory()
     results=driver.evaluate_many(make_coils(),configurations(),capture=True,diagnostics=True)
     assert library.factor_count==2 and library.snapshot_count==3
@@ -151,8 +153,13 @@ def test_capture_owns_volume_arrays_and_shares_only_readonly_fit_factors(factory
         assert not first['two_stage'][name].flags.writeable
     first['target_level'][...]=-99
     first['alpha_center_scaled_solution'][0]=-99
-    first['two_stage']['stage1_coefficients'][0]=-99
-    first['two_stage']['sampling']['rz'][0,0]=-99
+    for name in ('axis_samples','psi_coefficients','alpha_mode_l'):
+        assert first[name] is second[name] and not first[name].flags.writeable
+    for scope,name in ((None,'stage1_coefficients'),('sampling','rz'),('boundary','polygons_rz')):
+        left=first['two_stage'] if scope is None else first['two_stage'][scope]
+        right=second['two_stage'] if scope is None else second['two_stage'][scope]
+        assert left[name] is right[name] and not left[name].flags.writeable
+        with pytest.raises(ValueError):left[name].flat[0]=-99
     first['two_stage']['boundary']['diagnostics']['limiting_ray']['theta_index']=-99
     assert second['target_level']==.01
     assert second['alpha_center_scaled_solution'][0]==1.01
@@ -160,6 +167,68 @@ def test_capture_owns_volume_arrays_and_shares_only_readonly_fit_factors(factory
     assert second['two_stage']['sampling']['rz'][0,0]==1.
     assert second['two_stage']['boundary']['diagnostics']['limiting_ray']['theta_index']==1
     assert first['score_result'] is results[0][0]
+
+
+def test_optional_torsion_diagnostic_preserves_the_default_and_can_be_skipped(factory,monkeypatch):
+    driver,library,_=factory();calls=[]
+    def torsion(lib,result,*arrays):
+        calls.append(True)
+        result['diagnostics']['coil_torsion_abs_arclength_p95']=7.
+        return result
+    monkeypatch.setattr(module.native,'_with_torsion',torsion)
+    default=driver.evaluate_many(make_coils(),configurations())
+    assert len(calls)==3 and all(r['diagnostics']['coil_torsion_abs_arclength_p95']==7. for r,s in default)
+    calls.clear()
+    minimal=driver.evaluate_many(make_coils(),configurations(),capture=True,include_torsion=False)
+    assert not calls and all('coil_torsion_abs_arclength_p95' not in r['diagnostics'] for r,s in minimal)
+    assert [r['score'] for r,s in default]==[r['score'] for r,s in minimal]
+
+
+@pytest.mark.parametrize('version,expected_flag,backend',[(None,1,'legacy_host_filter'),(0,1,'legacy_host_filter'),(1,4,'native')])
+def test_source_only_capture_uses_capability_and_skips_python_factor_exports(factory,version,expected_flag,backend):
+    driver,library,_=factory()
+    if version is not None:
+        library.sgpu_source_capture_version=Function(lambda:version)
+    results=driver.evaluate_many(make_coils(),configurations(),capture='sources',include_torsion=False)
+    assert library.flags==[expected_flag,0] and library.factor_count==0
+    assert library.snapshot_count==3 and driver._context is None
+    first,second=results[0][1],results[1][1]
+    assert 'psi_upper' not in first and 'psi_scale' not in first
+    assert first['two_stage']['stage1_upper'] is None
+    assert first['metadata']['capture_kind']=='sources'
+    assert first['metadata']['source_capture_backend']==backend
+    assert first['psi_coefficients'] is second['psi_coefficients']
+    assert first['alpha_coefficients'][0]==pytest.approx(1.03)
+    assert second['alpha_coefficients'][0]==pytest.approx(1.01)
+
+
+def test_source_capture_rejects_reverse_diagnostic_mix_before_native_calls(factory):
+    driver,library,_=factory()
+    with pytest.raises(ValueError,match='source-only'):
+        driver.evaluate_many(make_coils(),configurations(),capture='sources',diagnostics=True)
+    assert not library.calls and not library.flags
+
+
+def test_optional_alpha_basis_setter_records_the_selected_basis(factory):
+    driver,library,_=factory();calls=[]
+    library.sgpu_two_stage_set_alpha_radial_basis_v1=Function(
+        lambda context,mode:calls.append((context.value,mode)) or 0)
+    base=configurations()[0]
+    config=SimpleNamespace(**{**base.to_dict(),'alpha_radial_basis':'flux_legendre'},
+                           native_options=base.native_options)
+    result,snapshot=driver.evaluate(make_coils(),config,capture=True)
+    assert calls==[(37,1)]
+    assert result['diagnostics']['alpha_radial_basis']=='flux_legendre'
+    assert snapshot['config']['alpha_radial_basis']=='flux_legendre'
+
+
+def test_new_alpha_basis_explains_missing_native_support_and_closes(factory):
+    driver,library,_=factory();base=configurations()[0]
+    config=SimpleNamespace(**{**base.to_dict(),'alpha_radial_basis':'flux_legendre'},
+                           native_options=base.native_options)
+    with pytest.raises(RuntimeError,match='selected alpha radial basis; rebuild'):
+        driver.evaluate(make_coils(),config)
+    assert driver._context is None and library.flags==[0,0]
 
 
 @pytest.mark.parametrize('field,value',[('psi_a',.2),('psi_refit_points',8),('alpha_iterations',2),('fast',True),('h',2e-4)])

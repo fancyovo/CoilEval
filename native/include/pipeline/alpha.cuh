@@ -11,6 +11,8 @@ struct AlphaRadialWeightingOptions {
     double count_floor = 32.0;
 };
 extern thread_local AlphaRadialWeightingOptions g_alpha_radial_weighting;
+// 0: original Zernike, 1: polynomial in flux radius squared (Legendre).
+extern thread_local int g_alpha_radial_basis;
 
 struct ClebschModesNative {
     std::vector<int> l;
@@ -19,6 +21,7 @@ struct ClebschModesNative {
     std::vector<int> kind;
     std::vector<float> radial_coefficients;
     int radial_order = 0;
+    int radial_basis = 0;
 };
 
 struct AlphaFitNative {
@@ -55,17 +58,31 @@ struct AlphaFitNative {
 };
 
 struct AlphaWarmPreconditionerCache {
+    int radial_basis = 0;
     int column_count = 0;
     int qr_rows = 0;
     std::vector<float> upper_factor;
     std::vector<float> center_scale;
     std::vector<float> center_scaled_solution;
+    // Discrete formal row selection shared by analytic and local endpoints.
+    std::vector<int> volume_source_indices;
+    int volume_phi_count = 0;
+    int volume_theta_count = 0;
+    int volume_radial_count = 0;
+    double volume_rho_min = 0.0;
+    int volume_device_id = -1;
+    std::uint64_t volume_target_cache_id = 0;
+    bool volume_sampling_ready = false;
 };
+
+bool capture_alpha_volume_sampling(const DeviceVolumePoints&, const SgpuScoreConfig&,
+                                   std::uint64_t target_cache_id);
 
 ClebschModesNative build_clebsch_modes_native(
     int radial_order,
     int poloidal_order,
-    int toroidal_order
+    int toroidal_order,
+    int radial_basis = 0
 );
 
 bool fit_alpha_native(

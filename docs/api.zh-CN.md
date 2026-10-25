@@ -35,8 +35,10 @@
 | `alpha_radial_weighting` | `'histogram'` | `'histogram'` 或两阶段实验性的 `'smooth'` 径向密度权重 |
 | `alpha_weight_sigma` | `0.05` | 平滑权重在归一化 rho 上的 Gaussian 宽度 |
 | `alpha_count_floor` | `32.0` | 平滑密度分母中的正加性伪计数 |
+| `alpha_radial_basis` | `'zernike'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
+| `stokes_validation_rtol` | `1e-3` | Tensor 磁通一致性容差；`None` 关闭检查 |
 
-0.4.0a1 默认保留单阶段设置。显式选择两阶段路径：
+0.5.0a1 默认保留单阶段设置。显式选择两阶段路径：
 
 ```python
 config = EvaluationConfig(
@@ -55,8 +57,18 @@ config = EvaluationConfig(
 `alpha_radial_weighting='smooth'` 是 `psi_fit='two_stage'` 的可选实验性设置，
 使用正的 sigma 与伪计数参数控制平滑密度权重。默认仍采用 histogram 权重。
 
+`alpha_radial_basis='flux_legendre'` 使用归一化磁通的多项式拟合角度修正。
+此选项要求 `psi_fit='two_stage'`，同时作用于标量求值、局部梯度与捕获的 alpha 数据。
+默认仍使用原始的 `'zernike'` 基。
+
 `flux_method='stokes'` 要求 `fast=True`，为局部近邻和差分端点选择边界积分。
 独立中心调用保留其中心积分规则。结果的 `diagnostics['configuration']` 保存所选设置。
+
+Tensor 求值将 Stokes 磁通及其导数与捕获中心的面积积分多项式比较。
+任一相对误差超过 `stokes_validation_rtol` 时，该查询改用可反传的面积积分。
+设为 `None` 可选择原始的不检查 Tensor 积分行为。此设置用于 Tensor 接口；
+NumPy 评估器沿用上面说明的积分规则。实际方法与误差诊断见
+[Tensor 结果文档](torch.zh-CN.md#结果与局部导数)。
 
 ## 求值会话
 
@@ -66,12 +78,31 @@ config = EvaluationConfig(
 | 方法 | 返回内容 |
 | --- | --- |
 | `evaluate(coils)` | 单个 `EvaluationResult` |
-| `evaluate_many(coil_sets)` | 按输入顺序逐个独立求值 |
+| `evaluate_many(coil_sets, configs=None)` | 按输入顺序返回独立结果，兼容的输入共享批量磁轴追踪 |
 | `evaluate_nearby(center, candidates)` | 使用有效中心局部模型的结果 |
 | `loss_and_grad(coils, loss_fn, scales=..., h=..., basis=...)` | 标量目标与物理参数梯度 |
 
 每次独立求值会替换会话的有效中心。应在下一次独立求值前，使用相同会话和线程调用
-`evaluate_nearby`。保存的结果可通过 `EvaluationResult.read_json(path)` 加载查看。
+`evaluate_nearby`。`close()` 释放会话，可重复调用。
+保存的结果可通过 `EvaluationResult.read_json(path)` 加载查看。
+
+`evaluate_many` 默认使用会话配置，也可以通过 `configs` 为每个输入提供一个
+`EvaluationConfig`，在同一批中使用不同的目标体积和拟合半径。
+每个结果记录自己的配置；只有最后一个结果保留有效中心，其邻域求值也使用该结果的配置。
+后续单点调用继续使用会话原来的默认配置。
+
+```python
+results = evaluator.evaluate_many(
+    [coils_a, coils_b],
+    configs=[EvaluationConfig(target_volume=0.03, psi_a=0.15),
+             EvaluationConfig(target_volume=0.05, psi_a=0.18)],
+)
+```
+
+批量评分仅需要 NumPy 和原生后端。兼容的四线圈输入共享磁轴追踪计算，
+每个输入仍执行原有的磁轴选别和完整正式评分。混合线圈布局和旧版原生库保留顺序求值。
+`timings['shared_independent_batch']` 给出准备、各输入及整批耗时；
+`python_wall_s` 将公开批量调用的总耗时分配到各结果，包含该输入的求值及其分摊的准备时间。
 
 ## 结果与指标
 
@@ -83,7 +114,8 @@ config = EvaluationConfig(
 | --- | --- |
 | `qs_volume` | 所选体积内归一化 QS 残差的 RMS |
 | `qs_outer` | 外侧径向 bin 内归一化 QS 残差的 RMS |
-| `iota_boundary`、`iota_min`、`iota_max` | 边界旋转变换与拟合剖面极值 |
+| `iota_boundary` | 目标边界处的拟合旋转变换 |
+| `iota_min`、`iota_max` | 拟合剖面在 rho 平方上均匀取 257 点后的最小值和最大值 |
 | `relative_normal_drift_p95` | 一场周期法向位移 P95 除以平均小半径 |
 | `coil_length_mean` | 基本线圈平均长度，m |
 | `coil_curvature_max`、`coil_curvature_p95` | 采样最大曲率和可选百分位曲率，m⁻¹ |
@@ -96,6 +128,8 @@ config = EvaluationConfig(
 QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均，再开平方。
 整个体积、外侧径向 bin 和 Simsopt 参考结果的磁通壳层 RMS 对应不同区域，
 详见 [Simsopt 接口](simsopt.zh-CN.md)。
+两个原生 QS 字段都除以所选螺旋度的 `max(sqrt(M*M + N*N), 1)`。
+外侧 bin 保留最后一个径向 bin 内的原生点权重；iota 剖面采样覆盖所选径向范围。
 参考接口实现 QH 螺旋度 `(1,nfp)`，与原生结果比较时应选择相同螺旋度。
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` 提供可组合的标量惩罚。
@@ -118,6 +152,9 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 同时更新其连续响应；可用时采用可选的 CUDA PyTorch 路径。
 `'formal'` 在每个端点沿中心磁轴分支重新构建两阶段拟合。
 有限步长可能改变离散选择，因此与局部导数存在差异。
+配置超出 Tensor 接口支持范围，或环境中没有 CUDA 版 PyTorch 时，采用正式重建。
+`diagnostics['nearby_method']`、`['nearby_backend']` 和 `['geometry_model']`
+记录实际执行路径，`['nearby_fallback_reason']` 说明回退原因。
 [Tensor 接口](torch.zh-CN.md) 为 PyTorch 目标提供局部反传梯度。
 
 中心或端点不可用时抛出 `InvalidEvaluationError`，其 `.results` 包含可用结果。

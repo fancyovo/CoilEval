@@ -215,6 +215,7 @@ int sgpu_score_coils(
     const SgpuScoreConfig* config,
     SgpuScoreResult* result
 ) {
+    auto coarse_cache = g_axis_coarse_slot.take();
     if (!result) {
         sgpu_internal_set_error("score result pointer is null");
         return 1;
@@ -230,6 +231,12 @@ int sgpu_score_coils(
     }
     std::string config_error;
     if (!validate_config(*config, config_error)) return fail_result(result, config_error.c_str());
+    if (coarse_cache.available && !coarse_cache.matches(
+            coeffs_x, coeffs_y, coeffs_z, currents_a, n_base_coils, n_coeff, nfp, config)) {
+        g_axis_coarse_slot.status = 3;
+        if (coarse_cache.refinement_available) g_axis_coarse_slot.refinement_status = 3;
+        return fail_result(result, "one-shot axis coarse cache physical/config key mismatch");
+    }
     result->target_volume_requested=config->target_volume;
     if (cudaSetDevice(config->device_id) != cudaSuccess) return fail_result(result, "cudaSetDevice failed");
 
@@ -271,7 +278,7 @@ int sgpu_score_coils(
             SGPU_NVTX_RANGE("score.axis");
             if (!find_axis_native(
                     field, coeffs_x, coeffs_y, coeffs_z, n_base_coils, n_coeff,
-                    nfp, *config, axis, axis_trace_time, result->timings)) {
+                    nfp, *config, axis, axis_trace_time, result->timings, &coarse_cache)) {
                 return_code = fail_from_backend(result, "axis search");
                 break;
             }
@@ -415,6 +422,7 @@ int sgpu_score_coils_capture_psi_center(
 ) {
     if (!coeffs_x || !coeffs_y || !coeffs_z || !currents_a || !config || !result ||
         !psi_coefficients || psi_coefficient_capacity <= 0 || !psi_coefficient_count) {
+        (void)g_axis_coarse_slot.take();
         sgpu_internal_set_error("invalid psi-center capture input");
         return 1;
     }
@@ -423,7 +431,7 @@ int sgpu_score_coils_capture_psi_center(
     g_captured_iota_profile.clear();
     g_alpha_warm_preconditioner = AlphaWarmPreconditionerCache{};
     sgpu_clear_psi_warm_preconditioner();
-    sgpu_set_psi_warm_preconditioner_capture(1);
+    sgpu_set_psi_warm_preconditioner_capture(source_capture_only() ? 0 : 1);
     FixedFrontG2Cache cache;
     g_active_gradient_group = 3;
     g_active_g2_cache = &cache;
@@ -435,42 +443,46 @@ int sgpu_score_coils_capture_psi_center(
     g_active_gradient_group = 0;
     sgpu_set_psi_warm_preconditioner_capture(0);
     if (code != 0 || result->status != SGPU_SCORE_OK || !cache.ready ||
-        cache.psi.coeffs.empty() || !sgpu_has_psi_warm_preconditioner(
-            static_cast<int>(cache.psi.coeffs.size())) || !cache.alpha.adjoint_ready) {
+        cache.psi.coeffs.empty() || (!source_capture_only() && !sgpu_has_psi_warm_preconditioner(
+            static_cast<int>(cache.psi.coeffs.size()))) || !cache.alpha.adjoint_ready) {
         if (cache.field) sgpu_destroy_field(cache.field);
         sgpu_clear_psi_warm_preconditioner();
         sgpu_internal_set_error("psi-center capture score is not ok");
         return code != 0 ? code : 1;
     }
-    g_alpha_warm_preconditioner.column_count = cache.alpha.column_count;
-    g_alpha_warm_preconditioner.qr_rows = cache.alpha.qr_rows;
-    g_alpha_warm_preconditioner.upper_factor.resize(
-        static_cast<size_t>(cache.alpha.column_count) * cache.alpha.column_count
-    );
-    g_alpha_warm_preconditioner.center_scale.resize(cache.alpha.column_count);
-    g_alpha_warm_preconditioner.center_scaled_solution.resize(cache.alpha.column_count);
-    if (cudaMemcpy2D(
-            g_alpha_warm_preconditioner.upper_factor.data(),
-            static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
-            cache.alpha.qr_matrix.data(),
-            static_cast<size_t>(cache.alpha.qr_rows) * sizeof(float),
-            static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
-            cache.alpha.column_count,
-            cudaMemcpyDeviceToHost) != cudaSuccess ||
-        cudaMemcpy(
-            g_alpha_warm_preconditioner.center_scale.data(), cache.alpha.scales.data(),
-            static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
-            cudaMemcpyDeviceToHost) != cudaSuccess ||
-        cudaMemcpy(
-            g_alpha_warm_preconditioner.center_scaled_solution.data(),
-            cache.alpha.scaled_solution.data(),
-            static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
-            cudaMemcpyDeviceToHost) != cudaSuccess) {
-        if (cache.field) sgpu_destroy_field(cache.field);
-        sgpu_clear_psi_warm_preconditioner();
-        g_alpha_warm_preconditioner = AlphaWarmPreconditionerCache{};
-        sgpu_internal_set_error("alpha-center preconditioner capture failed");
-        return 1;
+    if (!source_capture_only()) {
+        g_alpha_warm_preconditioner.radial_basis = cache.alpha.modes.radial_basis;
+        g_alpha_warm_preconditioner.column_count = cache.alpha.column_count;
+        g_alpha_warm_preconditioner.qr_rows = cache.alpha.qr_rows;
+        g_alpha_warm_preconditioner.upper_factor.resize(
+            static_cast<size_t>(cache.alpha.column_count) * cache.alpha.column_count
+        );
+        g_alpha_warm_preconditioner.center_scale.resize(cache.alpha.column_count);
+        g_alpha_warm_preconditioner.center_scaled_solution.resize(cache.alpha.column_count);
+        if (cudaMemcpy2D(
+                g_alpha_warm_preconditioner.upper_factor.data(),
+                static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
+                cache.alpha.qr_matrix.data(),
+                static_cast<size_t>(cache.alpha.qr_rows) * sizeof(float),
+                static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
+                cache.alpha.column_count,
+                cudaMemcpyDeviceToHost) != cudaSuccess ||
+            cudaMemcpy(
+                g_alpha_warm_preconditioner.center_scale.data(), cache.alpha.scales.data(),
+                static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
+                cudaMemcpyDeviceToHost) != cudaSuccess ||
+            cudaMemcpy(
+                g_alpha_warm_preconditioner.center_scaled_solution.data(),
+                cache.alpha.scaled_solution.data(),
+                static_cast<size_t>(cache.alpha.column_count) * sizeof(float),
+                cudaMemcpyDeviceToHost) != cudaSuccess ||
+            !capture_alpha_volume_sampling(cache.points, *config, result->target_volume_cache_id)) {
+            if (cache.field) sgpu_destroy_field(cache.field);
+            sgpu_clear_psi_warm_preconditioner();
+            g_alpha_warm_preconditioner = AlphaWarmPreconditionerCache{};
+            sgpu_internal_set_error("alpha-center preconditioner capture failed");
+            return 1;
+        }
     }
     if (static_cast<int>(cache.psi.coeffs.size()) > psi_coefficient_capacity) {
         if (cache.field) sgpu_destroy_field(cache.field);

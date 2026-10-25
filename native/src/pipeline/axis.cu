@@ -8,16 +8,7 @@
 
 namespace coil_eval::pipeline {
 
-namespace {
 
-struct AxisDomain {
-    double r_min;
-    double r_max;
-    double z_min;
-    double z_max;
-};
-
-}  // namespace
 
 
 AxisDomain build_axis_domain(
@@ -368,7 +359,8 @@ bool search_axis_grid(
     int newton_iters,
     std::vector<AxisCandidate>& candidates,
     bool fallback,
-    double* timings
+    double* timings,
+    sgpu_axis_coarse::Entry* coarse_cache
 ) {
     std::vector<double> rs(grid), zs(grid), R(static_cast<size_t>(grid) * grid), Z(R.size());
     for (int i = 0; i < grid; ++i) {
@@ -384,7 +376,18 @@ bool search_axis_grid(
     }
     std::vector<double> R_end, Z_end;
     auto substage_started = Clock::now();
-    if (!trace_map(field, R, Z, nfp, config.axis_trace_steps, false, R_end, Z_end)) return false;
+    if (!fallback && coarse_cache && coarse_cache->available) {
+        if (!coarse_cache->grid_matches(R, Z)) {
+            g_axis_coarse_slot.status = 3;
+            coarse_cache->available = false;
+            sgpu_internal_set_error("one-shot axis coarse cache grid mismatch");
+            return false;
+        }
+        R_end = std::move(coarse_cache->R1);
+        Z_end = std::move(coarse_cache->Z1);
+        coarse_cache->available = false;
+        g_axis_coarse_slot.status = 2;
+    } else if (!trace_map(field, R, Z, nfp, config.axis_trace_steps, false, R_end, Z_end)) return false;
     timings[fallback ? SGPU_SCORE_TIME_AXIS_FALLBACK_GRID_TRACE
                      : SGPU_SCORE_TIME_AXIS_PRIMARY_GRID_TRACE] += seconds_since(substage_started);
     std::vector<double> dR(R.size()), dZ(Z.size());
@@ -396,7 +399,31 @@ bool search_axis_grid(
     candidates = find_grid_candidates(rs, zs, dR, dZ, max_candidates);
     timings[SGPU_SCORE_TIME_AXIS_CANDIDATE_EXTRACT] += seconds_since(substage_started);
     substage_started = Clock::now();
-    if (!refine_axis_candidates(field, candidates, domain, nfp, config, newton_iters)) return false;
+    if (!fallback && coarse_cache && coarse_cache->refinement_available) {
+        bool matches = g_axis_coarse_slot.status == 2 &&
+            coarse_cache->refinement_config_matches(config) &&
+            newton_iters == coarse_cache->config.axis_newton_iters &&
+            candidates.size() == coarse_cache->winding.size() &&
+            coarse_cache->refinement.size() == candidates.size() * 6;
+        for (size_t i = 0; matches && i < candidates.size(); ++i) {
+            const double seed[] = {candidates[i].R, candidates[i].Z, candidates[i].residual};
+            matches = std::memcmp(seed, coarse_cache->refinement.data() + i * 6, 3 * sizeof(double)) == 0 &&
+                int(candidates[i].winding) == coarse_cache->winding[i];
+        }
+        if (!matches) {
+            g_axis_coarse_slot.refinement_status = 3;
+            coarse_cache->refinement_available = false;
+            sgpu_internal_set_error("one-shot axis refinement seed/config mismatch");
+            return false;
+        }
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            candidates[i].R = coarse_cache->refinement[i * 6 + 3];
+            candidates[i].Z = coarse_cache->refinement[i * 6 + 4];
+            candidates[i].residual = coarse_cache->refinement[i * 6 + 5];
+        }
+        coarse_cache->refinement_available = false;
+        g_axis_coarse_slot.refinement_status = 2;
+    } else if (!refine_axis_candidates(field, candidates, domain, nfp, config, newton_iters)) return false;
     timings[SGPU_SCORE_TIME_AXIS_CANDIDATE_REFINE] += seconds_since(substage_started);
     std::sort(candidates.begin(), candidates.end(), [](const auto& lhs, const auto& rhs) {
         return lhs.residual < rhs.residual;
@@ -493,7 +520,8 @@ bool find_axis_native(
     const SgpuScoreConfig& config,
     AxisData& axis,
     double& trace_time,
-    double* timings
+    double* timings,
+    sgpu_axis_coarse::Entry* coarse_cache
 ) {
     SGPU_NVTX_RANGE("axis.total");
     trace_time = 0.0;
@@ -626,7 +654,7 @@ bool find_axis_native(
         if (!search_axis_grid(
                 field, domain, nfp, config, config.axis_grid,
                 config.axis_max_candidates, config.axis_newton_iters, candidates,
-                false, timings)) {
+                false, timings, coarse_cache)) {
             return false;
         }
     }
@@ -645,7 +673,7 @@ bool find_axis_native(
         if (!search_axis_grid(
                 field, domain, nfp, config, config.axis_fallback_grid,
                 config.axis_fallback_max_candidates, config.axis_fallback_newton_iters,
-                fallback, true, timings)) {
+                fallback, true, timings, nullptr)) {
             return false;
         }
         axis.candidate_count = static_cast<int>(candidates.size() + fallback.size());

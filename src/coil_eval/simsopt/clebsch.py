@@ -5,6 +5,7 @@ from functools import lru_cache
 import math
 import time
 import numpy as np
+from .._alpha_basis import radial_polynomial
 
 
 @lru_cache(maxsize=16)
@@ -14,15 +15,8 @@ def build_modes(radial_order, poloidal_order, toroidal_order):
                  for l in range(m,radial_order+1,2) for kind in (0,1))
 
 
-@lru_cache(maxsize=128)
-def radial_polynomial(l,m):
-    return tuple((l-2*k,(-1)**k*math.factorial(l-k)/
-                  (math.factorial(k)*math.factorial((l+m)//2-k)*math.factorial((l-m)//2-k)))
-                 for k in range((l-m)//2+1))
-
-
-def radial(rho,l,m):
-    return sum(c*np.asarray(rho)**power for power,c in radial_polynomial(int(l),int(m)))
+def radial(rho,l,m,basis='zernike'):
+    return sum(c*np.asarray(rho)**power for power,c in radial_polynomial(int(l),int(m),basis))
 
 
 @dataclass
@@ -32,6 +26,11 @@ class AlphaFit:
     iota_coefficients: np.ndarray
     nfp: int
     diagnostics: dict=field(default_factory=dict)
+    radial_basis: str='zernike'
+
+    def __post_init__(self):
+        if self.radial_basis not in ('zernike','flux_legendre'):
+            raise ValueError('alpha radial basis must be zernike or flux_legendre')
 
     @classmethod
     def from_snapshot(cls,snapshot):
@@ -41,10 +40,15 @@ class AlphaFit:
         else:
             coefficients=(np.asarray(snapshot['alpha_center_scaled_solution'])/
                           np.asarray(snapshot['alpha_scale']))[:len(mode)]
+        basis=snapshot.get('config',{}).get('alpha_radial_basis','zernike')
+        if 'alpha_radial_basis_mode' in snapshot:
+            captured=int(np.asarray(snapshot['alpha_radial_basis_mode']).reshape(()))
+            if captured not in (0,1) or ('zernike','flux_legendre')[captured]!=basis:
+                raise ValueError('captured alpha basis differs from snapshot configuration')
         return cls(mode,coefficients.copy(),np.asarray(snapshot['alpha_iota_coefficients']).copy(),
                    int(np.asarray(snapshot['nfp']).reshape(())),{'origin':'native_capture',
                    'theta_convention':'negative geometric polar angle',
-                   'rho_convention':'sqrt(signed_flux / signed_edge_flux)'})
+                   'rho_convention':'sqrt(signed_flux / signed_edge_flux)'},radial_basis=basis)
 
     @classmethod
     def read(cls,path,*,nfp):
@@ -52,7 +56,9 @@ class AlphaFit:
             kind=np.asarray(z['mode_kind'])
             if kind.dtype.kind in ('U','S','O'):kind=(kind.astype(str)=='sin').astype(int)
             mode=np.column_stack([z['mode_'+k] for k in ('l','m','n')]+[kind])
-            return cls(mode,z['lambda_coeffs'].copy(),z['iota_coeffs'].copy(),nfp,{'origin':'saved_alpha_fit'})
+            basis=str(np.asarray(z['radial_basis']).item()) if 'radial_basis' in z else 'zernike'
+            return cls(mode,z['lambda_coeffs'].copy(),z['iota_coeffs'].copy(),nfp,
+                       {'origin':'saved_alpha_fit'},radial_basis=basis)
 
     def iota(self,rho):
         rho=np.asarray(rho)
@@ -73,7 +79,7 @@ class AlphaFit:
         result=[np.empty(rho.size) for _ in range(3)]
         for start in range(0,rho.size,16384):
             end=min(start+16384,rho.size)
-            rr=np.stack([radial(rho.ravel()[start:end],l,m) for l,m in radial_keys],axis=1)
+            rr=np.stack([radial(rho.ravel()[start:end],l,m,self.radial_basis) for l,m in radial_keys],axis=1)
             if device=='cpu':
                 cc,ss=rr@weights[0],rr@weights[1]
                 phase=theta.ravel()[start:end,None]*mm-self.nfp*phi.ravel()[start:end,None]*nn
@@ -93,7 +99,8 @@ class AlphaFit:
         return tuple(value.reshape(shape) for value in result)
 
 
-def fit_alpha(coordinates,B,*,nfp,orders=(12,12,16),iota_degree=0,device='cuda',precision='fp32'):
+def fit_alpha(coordinates,B,*,nfp,orders=(12,12,16),iota_degree=0,device='cuda',precision='fp32',
+              radial_basis='zernike'):
     """Reference dense alpha QR with caller-owned sampling/flux coordinates.
 
     Coordinates use cylindrical vector components, clockwise theta and radians.
@@ -113,7 +120,7 @@ def fit_alpha(coordinates,B,*,nfp,orders=(12,12,16),iota_degree=0,device='cuda',
     for j,(l,m,n,kind) in enumerate(mode):
         key=int(l),int(m)
         if key not in radial_cache:
-            radial_cache[key]=sum(c*rho**p for p,c in radial_polynomial(*key))
+            radial_cache[key]=sum(c*rho**p for p,c in radial_polynomial(*key,radial_basis))
         key=int(m),int(n)
         if key not in phase_cache:
             phase=m*theta-n*nfp*phi;phase_cache[key]=(torch.cos(phase),torch.sin(phase))
@@ -130,4 +137,5 @@ def fit_alpha(coordinates,B,*,nfp,orders=(12,12,16),iota_degree=0,device='cuda',
     diagnostics={'origin':'dense_qr','point_count':len(rho),'columns':design.shape[1],
                  'residual_rms':float(torch.sqrt(torch.mean(residual**2))),
                  'seconds':time.perf_counter()-start,'precision':precision}
-    return AlphaFit(mode,coefficients[:len(mode)],coefficients[len(mode):],int(nfp),diagnostics)
+    return AlphaFit(mode,coefficients[:len(mode)],coefficients[len(mode):],int(nfp),diagnostics,
+                    radial_basis=radial_basis)

@@ -40,6 +40,7 @@ add_library(coil_eval_native SHARED
     src/pipeline/common.cu
     src/pipeline/coil_geometry.cu
     src/pipeline/axis.cu
+    src/pipeline/axis_batch.cu
     src/pipeline/psi.cu
     src/pipeline/surface.cu
     src/pipeline/policy.cu

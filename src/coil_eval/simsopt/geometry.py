@@ -165,7 +165,7 @@ def _alpha_dense_theta_derivative(alpha,rho,nphi,ntheta):
     modes=np.asarray(alpha.modes,dtype=int)
     if not len(modes):return np.zeros((nphi,ntheta)),'separable_fourier'
     keys,inverse=np.unique(modes[:,:2],axis=0,return_inverse=True)
-    values=np.asarray([float(radial(float(rho),l,m)) for l,m in keys])
+    values=np.asarray([float(radial(float(rho),l,m,getattr(alpha,'radial_basis','zernike'))) for l,m in keys])
     amplitude=np.asarray(alpha.lambda_coefficients)*values[inverse]
     mm,nn=modes[:,1],modes[:,2]
     ms,mi=np.unique(mm,return_inverse=True);ns,ni=np.unique(nn,return_inverse=True)

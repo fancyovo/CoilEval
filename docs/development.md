@@ -51,7 +51,7 @@ evaluation session state is owned by `pipeline/session_state.cu`.
 Use additive configuration and public methods for compatible changes. Record
 new behavior in CHANGELOG.md and update both documentation languages. Release
 tags use `v` followed by the package version. A prerelease uses a Python version
-such as `0.4.0a1`. Earlier tags remain available for reproducible installations.
+such as `0.5.0a1`. Earlier tags remain available for reproducible installations.
 
 The optional `src/coil_eval/_autograd` package groups field, trace, front and downstream operators; `native/src/autograd` contains their CUDA primitives. `src/coil_eval/torch.py` owns the public Tensor API. Install PyTorch to run the mathematical operator tests. Set `COIL_EVAL_TEST_INSTALLED=1` when running the suite against an installed wheel.
 

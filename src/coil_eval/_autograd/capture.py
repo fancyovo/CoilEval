@@ -20,8 +20,13 @@ def _bind(lib):
     lib._full_chain_capture_bound = True
 
 
-def copy_reverse_snapshot(field):
-    """Copy the calling thread's latest native snapshot; no pointers are retained."""
+def copy_reverse_snapshot(field, *, names=None, shared=None):
+    """Copy owned native arrays, optionally selecting or reusing known fields.
+
+    ``shared`` contains readonly arrays known to be common to this capture
+    group. Shapes are checked against native metadata before reuse. Native
+    pointers are never retained. A caller may mutate the returned container.
+    """
     _bind(field.lib)
     count = field.lib.sgpu_reverse_capture_array_count()
     if count <= 0:
@@ -34,11 +39,19 @@ def copy_reverse_snapshot(field):
         field._check(field.lib.sgpu_reverse_capture_array_info(
             index, name, len(name), shape, len(shape), ct.byref(ndim)))
         dims = tuple(shape[i] for i in range(ndim.value))
+        key = name.value.decode("ascii")
+        if names is not None and key not in names:
+            continue
+        if shared is not None and key in shared:
+            values = shared[key]
+            if not isinstance(values, np.ndarray) or values.shape != dims or values.flags.writeable:
+                raise ValueError(f'shared capture array {key} must be readonly with shape {dims}')
+            result[key] = values
+            continue
         values = np.empty(dims, dtype=np.float64)
         field._check(field.lib.sgpu_reverse_capture_copy(
             index, values.ctypes.data_as(ct.POINTER(ct.c_double)), values.size))
-        key = name.value.decode("ascii")
-        if "_mode_" in key:
+        if "_mode_" in key or key in ('volume_source_indices', 'volume_sampling_shape'):
             values = values.astype(np.int64)
         result[key] = values
     return result
@@ -54,7 +67,7 @@ def _config_dict(config):
 
 def capture_center(field, coeffs_x, coeffs_y, coeffs_z, currents_a, *,
                    target_helicity=(1, 4), config_overrides=None, fast=True,
-                   diagnostics=False):
+                   diagnostics=False, include_torsion=True):
     """Capture a complete native center and return an independently owned dict.
 
     ``field`` is BatchCoilFieldGpu, including a one-query handle. Multiple dicts
@@ -67,7 +80,8 @@ def capture_center(field, coeffs_x, coeffs_y, coeffs_z, currents_a, *,
     try:
         captured = field.capture_psi_center(
             coeffs_x, coeffs_y, coeffs_z, currents_a,
-            target_helicity=target_helicity, config_overrides=config_overrides)
+            target_helicity=target_helicity, config_overrides=config_overrides,
+            include_torsion=include_torsion)
         snapshot = copy_reverse_snapshot(field)
         snapshot["config"] = _config_dict(captured["_config_struct"])
         snapshot["score_result"] = captured["score_result"]

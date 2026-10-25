@@ -1,8 +1,13 @@
 #pragma once
 
 #include "pipeline/types.cuh"
+#include "pipeline/axis_coarse_cache.cuh"
 
 namespace coil_eval::pipeline {
+
+struct AxisDomain {
+    double r_min, r_max, z_min, z_max;
+};
 
 struct AxisCandidate {
     double R = 0.0;
@@ -26,6 +31,14 @@ struct AxisData {
     bool branch_lost = false;
     double hint_distance = std::numeric_limits<double>::quiet_NaN();
 };
+
+AxisDomain build_axis_domain(const double* x, const double* y, const double* z,
+    int nbase, int ncoeff, const SgpuScoreConfig& config);
+std::vector<AxisCandidate> find_grid_candidates(const std::vector<double>& rs,
+    const std::vector<double>& zs, const std::vector<double>& dR,
+    const std::vector<double>& dZ, int max_candidates);
+bool refine_axis_candidates(void* field, std::vector<AxisCandidate>& candidates,
+    const AxisDomain& domain, int nfp, const SgpuScoreConfig& config, int iterations);
 
 bool trace_map(
     void* field,
@@ -66,7 +79,8 @@ bool find_axis_native(
     const SgpuScoreConfig& config,
     AxisData& axis,
     double& trace_time,
-    double* timings
+    double* timings,
+    sgpu_axis_coarse::Entry* coarse_cache = nullptr
 );
 
 

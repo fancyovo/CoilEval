@@ -35,7 +35,7 @@ def test_geometry_matches_scalar_reference(flat,fold):
 
 
 def test_flat_stationary_point_is_not_a_fold():
-    result=first_connected_branch([0.,0.,.125,-1/3,.25],1.)
+    result=first_connected_branch([0.,0.,.375,-1.,.75],1.)
     assert result['reason']=='radius_cap'
     assert result['flat_nonfold_count']==1
 
@@ -60,7 +60,7 @@ def test_batched_critical_roots_match_scalar_policy():
 
 
 def test_batched_repeated_roots_keep_flat_nonfold_policy():
-    polynomial=np.asarray([[0.,0.,.125,-1/3,.25]])
+    polynomial=np.asarray([[0.,0.,.375,-1.,.75]])
     actual,folds,flat,count=branch_limits(polynomial,np.ones(1),first_connected_branch)
     np.testing.assert_allclose(actual,1.)
     assert not folds[0] and flat[0]==1

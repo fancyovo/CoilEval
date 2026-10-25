@@ -17,7 +17,7 @@
 using namespace coil_eval::pipeline;
 namespace {
 struct PsiFactorCapture {
-    PsiFactorCapture() { sgpu_set_psi_warm_preconditioner_capture(1); }
+    PsiFactorCapture() { sgpu_set_psi_warm_preconditioner_capture(source_capture_only() ? 0 : 1); }
     ~PsiFactorCapture() { sgpu_set_psi_warm_preconditioner_capture(0); }
 };
 struct AlphaWeightingOverride {
@@ -26,10 +26,17 @@ struct AlphaWeightingOverride {
         : previous(g_alpha_radial_weighting) { g_alpha_radial_weighting=options; }
     ~AlphaWeightingOverride() { g_alpha_radial_weighting=previous; }
 };
-bool two_stage_alpha_capture(const FixedFrontG2Cache& cache) {
+struct AlphaBasisOverride {
+    int previous;
+    explicit AlphaBasisOverride(int basis) : previous(g_alpha_radial_basis) { g_alpha_radial_basis=basis; }
+    ~AlphaBasisOverride() { g_alpha_radial_basis=previous; }
+};
+bool two_stage_alpha_capture(const FixedFrontG2Cache& cache, const SgpuScoreConfig& config,
+                             const SgpuScoreResult& result) {
     const auto& a=cache.alpha;
     if (!a.adjoint_ready) return false;
     auto& warm=g_alpha_warm_preconditioner;
+    warm.radial_basis=a.modes.radial_basis;
     warm.column_count=a.column_count; warm.qr_rows=a.qr_rows;
     warm.upper_factor.resize(static_cast<size_t>(a.column_count)*a.column_count);
     warm.center_scale.resize(a.column_count);warm.center_scaled_solution.resize(a.column_count);
@@ -37,7 +44,8 @@ bool two_stage_alpha_capture(const FixedFrontG2Cache& cache) {
         a.qr_matrix.data(),static_cast<size_t>(a.qr_rows)*sizeof(float),
         static_cast<size_t>(a.column_count)*sizeof(float),a.column_count,cudaMemcpyDeviceToHost)==cudaSuccess &&
         cudaMemcpy(warm.center_scale.data(),a.scales.data(),a.column_count*sizeof(float),cudaMemcpyDeviceToHost)==cudaSuccess &&
-        cudaMemcpy(warm.center_scaled_solution.data(),a.scaled_solution.data(),a.column_count*sizeof(float),cudaMemcpyDeviceToHost)==cudaSuccess;
+        cudaMemcpy(warm.center_scaled_solution.data(),a.scaled_solution.data(),a.column_count*sizeof(float),cudaMemcpyDeviceToHost)==cudaSuccess &&
+        capture_alpha_volume_sampling(cache.points, config, result.target_volume_cache_id);
 }
 } // namespace
 namespace {
@@ -47,6 +55,7 @@ struct TwoStageNativeContextV1 {
     PsiData first;
     SgpuScoreConfig config{};
     AlphaRadialWeightingOptions alpha_weighting;
+    int alpha_radial_basis = 0;
     std::vector<double> x, y, z, current;
     int coils = 0, coefficients = 0, nfp = 0;
     ~TwoStageNativeContextV1() { if (field) sgpu_destroy_field(field); }
@@ -99,6 +108,7 @@ extern "C" int sgpu_two_stage_begin_v1(
     double* axis_arrays,int axis_capacity,int* axis_count,
     double* psi_coefficients,int psi_capacity,int* psi_count
 ) {
+    auto coarse_cache = g_axis_coarse_slot.take();
     if (!result) return 1;
     initialize_result(result,config ? config->device_id : -1);
     if (context) *context=nullptr;
@@ -115,6 +125,11 @@ extern "C" int sgpu_two_stage_begin_v1(
     first_config.target_volume=0;
     std::string reason;
     if (!validate_config(first_config,reason)) return fail_result(result,reason.c_str());
+    if (coarse_cache.available && !coarse_cache.matches(x,y,z,currents,coils,coefficients,nfp,&first_config)) {
+        g_axis_coarse_slot.status=3;
+        if (coarse_cache.refinement_available) g_axis_coarse_slot.refinement_status=3;
+        return fail_result(result,"one-shot axis coarse cache physical/config key mismatch");
+    }
     if (g_active_psi_warm_coefficients || g_active_g2_cache || g_active_gradient_group)
         return fail_result(result,"two-stage entry must not run inside a gradient/warm context");
     if (cudaSetDevice(config->device_id)!=cudaSuccess) return fail_result(result,"cudaSetDevice failed");
@@ -132,7 +147,7 @@ extern "C" int sgpu_two_stage_begin_v1(
     result->stage_completed=SCORE_STAGE_FIELD;
     double trace_time=0;
     started=Clock::now();
-    if (!find_axis_native(ctx->field,x,y,z,coils,coefficients,nfp,first_config,ctx->axis,trace_time,result->timings)) {
+    if (!find_axis_native(ctx->field,x,y,z,coils,coefficients,nfp,first_config,ctx->axis,trace_time,result->timings,&coarse_cache)) {
         delete ctx; return fail_from_backend(result,"two-stage axis search");
     }
     result->timings[SGPU_SCORE_TIME_AXIS_TRACE]=trace_time;
@@ -174,6 +189,7 @@ extern "C" int sgpu_two_stage_resume_v1(
     double* iota_coefficients,int iota_capacity,int* iota_count,
     double* boundary_iota,const char* snapshot_directory
 ) {
+    if (source_capture_only()) g_reverse_snapshot.clear();
     if (!result) return 1;
     initialize_result(result,config ? config->device_id : -1);
     if (iota_count) *iota_count=0;
@@ -196,6 +212,7 @@ extern "C" int sgpu_two_stage_resume_v1(
         return fail_result(result,"resume must not run inside gradient/warm context");
     if (cudaSetDevice(config->device_id)!=cudaSuccess) return fail_result(result,"cudaSetDevice failed");
     AlphaWeightingOverride alpha_weighting_scope(ctx->alpha_weighting);
+    AlphaBasisOverride alpha_basis_scope(ctx->alpha_radial_basis);
     const auto total=Clock::now();
     g_boundary_iota=std::numeric_limits<double>::quiet_NaN();
     g_captured_iota_profile.clear();
@@ -253,7 +270,7 @@ extern "C" int sgpu_two_stage_resume_v1(
         *iota_count=static_cast<int>(cache.alpha.iota_coefficients.size());
         *boundary_iota=g_boundary_iota;
         g_captured_iota_profile=cache.alpha.iota_coefficients;
-        if (g_reverse_capture_flags && (!two_stage_alpha_capture(cache) ||
+        if (g_reverse_capture_flags && ((!source_capture_only() && !two_stage_alpha_capture(cache,*config,*result)) ||
             !capture_reverse_snapshot(cache,ctx->nfp,*config,*result))) {
             code=fail_result(result,"two-stage reverse snapshot capture failed");break;
         }
@@ -315,5 +332,12 @@ extern "C" int sgpu_two_stage_set_alpha_radial_weighting_v1(
     ctx->alpha_weighting.mode=mode;
     ctx->alpha_weighting.sigma=sigma;
     ctx->alpha_weighting.count_floor=count_floor;
+    return 0;
+}
+
+extern "C" int sgpu_two_stage_set_alpha_radial_basis_v1(void* context,int basis) {
+    auto* ctx=static_cast<TwoStageNativeContextV1*>(context);
+    if (!ctx || (basis!=0 && basis!=1)) return 1;
+    ctx->alpha_radial_basis=basis;
     return 0;
 }

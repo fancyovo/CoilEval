@@ -92,10 +92,10 @@ def branch_limits(polynomials, maximum, scalar, *, workers=1):
         fallback|=(close&valid[:,1:]).any(axis=1)
     qlong=q.astype(np.longdouble)
     eps=64*np.finfo(np.longdouble).eps
-    nearpoints=np.where(near,real,0).astype(np.longdouble)
-    nearvalue=_values(qlong,nearpoints)
-    nearscale=_values(abs(qlong),abs(nearpoints))
-    fallback|=((near&~critical)&(nearvalue<=eps*nearscale)).any(axis=1)
+    # A companion root near the real axis is explicitly ambiguous even when
+    # q(real(root)) is positive. The scalar resolver isolates its actual real
+    # roots exactly instead of inferring an entire interval from one value.
+    fallback|=(near&~critical).any(axis=1)
     rootpoints=np.where(valid,ordered,0).astype(np.longdouble)
     rootvalue=_values(qlong,rootpoints)
     rootscale=_values(abs(qlong),abs(rootpoints))

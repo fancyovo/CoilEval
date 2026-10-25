@@ -12,6 +12,7 @@ import numpy as np
 
 from .polynomial import ray_polynomials as _ray_polynomials
 from .branches import branch_limits, resolve_workers
+from .root_isolation import certified_first_branch
 
 
 class MaxClosedBoundaryError(ValueError):
@@ -30,7 +31,7 @@ def _signed_value(coefficients, value):
     return result, bound
 
 
-def first_connected_branch(polynomial, maximum_u):
+def _floating_first_connected_branch(polynomial, maximum_u):
     """Find the first true fold; allow flat nonfold stationary points.
 
     Returned u is a physical branch endpoint, without an inward margin. Roots
@@ -107,6 +108,47 @@ def first_connected_branch(polynomial, maximum_u):
                 interval_signs=signs, native_bernstein_applied=False)
 
 
+def first_connected_branch(polynomial, maximum_u):
+    """Keep the fast branch search and isolate uncertain real roots exactly.
+
+    Near-real complex roots can lie beyond an already established first fold.
+    They do not invalidate that axis-connected branch. For ambiguous companion
+    roots, exact rational Sturm isolation resolves the actual real roots and
+    interval signs without discarding narrow negative-derivative intervals.
+    """
+    try:
+        floating = _floating_first_connected_branch(polynomial, maximum_u)
+    except MaxClosedBoundaryError as error:
+        # Input validity and nonpositive physical capacity remain hard errors.
+        # Only numerical root/sign classification uses the exact resolver.
+        if not any(word in str(error) for word in ('root', 'derivative sign', 'partition')):
+            raise
+        trigger='floating_root_exception'
+        original_error, original_diagnostics=str(error),error.diagnostics
+    else:
+        # A rounded derivative can turn a tiny real negative interval into an
+        # apparent double root. A near-real companion pair is also ambiguous
+        # regardless of the polynomial sign at only its real part.
+        merged=any(point['numerical_root_multiplicity']>1 for point in floating['critical_points'])
+        near_complex=bool(floating['positive_near_real_complex_pairs'])
+        if not (merged or near_complex):
+            return floating
+        trigger='merged_companion_roots' if merged else 'near_real_complex_pair'
+        original_error='ambiguous companion root classification'
+        original_diagnostics=dict(critical_points=floating['critical_points'],
+            near_real_complex_pairs=floating['positive_near_real_complex_pairs'])
+    try:
+        result = certified_first_branch(polynomial, maximum_u)
+    except (ArithmeticError, ValueError, OverflowError) as unresolved:
+        raise MaxClosedBoundaryError('exact derivative-root isolation could not resolve the connected branch',
+            dict(original_error=original_error, original_diagnostics=original_diagnostics,
+                 isolation_error=str(unresolved))) from unresolved
+    result.update(native_bernstein_applied=False, positive_near_real_complex_pairs=[],
+        exact_root_isolation_applied=True, exact_root_isolation_trigger=trigger,
+        floating_root_error=original_error, floating_root_diagnostics=original_diagnostics)
+    return result
+
+
 def max_closed_boundary(model, phis, ntheta=256, max_radius=None, *, workers=None):
     """Freeze the largest common first-root boundary on the supplied phi/ray grid.
 
@@ -147,8 +189,19 @@ def max_closed_boundary(model, phis, ntheta=256, max_radius=None, *, workers=Non
     R_limits=np.nextafter(axis_R[:,None]/(-cosine[None,negative]),0.)
     physical_caps[:,negative]=np.minimum(physical_caps[:,negative],R_limits)
     R_limited=physical_caps<maximum
+    exact_root_count=0
+    exact_root_reasons={}
+    def scalar_branch(polynomial, maximum_u):
+        nonlocal exact_root_count
+        result=first_connected_branch(polynomial, maximum_u)
+        resolved=bool(result.get('exact_root_isolation_applied',False))
+        exact_root_count+=int(resolved)
+        if resolved:
+            trigger=result['exact_root_isolation_trigger']
+            exact_root_reasons[trigger]=exact_root_reasons.get(trigger,0)+1
+        return result
     try:
-        caps,folded,flat_counts,fallback_count=branch_limits(polynomials,physical_caps/a,first_connected_branch,workers=workers_effective)
+        caps,folded,flat_counts,fallback_count=branch_limits(polynomials,physical_caps/a,scalar_branch,workers=workers_effective)
     except MaxClosedBoundaryError as error:
         if 'flat_ray_index' not in error.diagnostics:
             raise
@@ -201,7 +254,7 @@ def max_closed_boundary(model, phis, ntheta=256, max_radius=None, *, workers=Non
     for array in (phis, polygons): digest.update(np.ascontiguousarray(array, dtype='<f8').tobytes())
     diagnostics = dict(
         schema='max-axis-connected-closed-s-boundary-within-a-v1',
-        branch_algorithm='real critical roots of q=p_prime/u; midpoint derivative signs; first positive-to-negative fold; flat nonfold points allowed',
+        branch_algorithm='real critical roots of q=p_prime/u; exact rational isolation for ambiguous roots; first positive-to-negative fold; flat nonfold points allowed',
         native_bernstein_applied=False, magnetic_quality_gate_applied=False, fit_error_gate_applied=False,
         geometric_phi_count=len(phis), theta_count=ntheta, nfp=nfp,
         configured_max_radius_m=maximum, max_radius_m=maximum, scalar_scale_a_m=a,
@@ -210,6 +263,8 @@ def max_closed_boundary(model, phis, ntheta=256, max_radius=None, *, workers=Non
         branch_cap_radius_min_m=float(a*caps.min()), branch_cap_radius_max_m=float(a*caps.max()),
         fold_limited_ray_count=int(fold_count), flat_nonfold_stationary_points_allowed=int(flat_count),
         batched_root_scalar_fallback_count=fallback_count,
+        certified_root_isolation_ray_count=exact_root_count,
+        certified_root_isolation_reasons=exact_root_reasons,
         geometry_workers_requested=workers_requested, geometry_workers_effective=workers_effective,
         cylindrical_R_limited_ray_count=int(R_cap_count), uncertain_critical_root_count=0,
         selected_ds_dr_min=float(derivative.min()), selected_ds_dr_max=float(derivative.max()),
@@ -226,7 +281,7 @@ def max_closed_boundary(model, phis, ntheta=256, max_radius=None, *, workers=Non
         active_capacity_polynomial=polynomials[limiting].tolist(),
         active_capacity_source='fold' if folded[limiting] else 'R_positive_cap' if R_limited[limiting] else 'fixed_radius_cap',
         active_capacity_gap=float(np.partition(levels.ravel(),1)[1]-maximum_level),
-        numerical_root_policy='unresolved near-real/merged derivative roots or interval signs cause explicit failure; no native fallback',
+        numerical_root_policy='ambiguous companion roots use exact binary-rational Sturm isolation; unresolved exact isolation is an explicit failure',
         topology_scope='positive axis-connected first roots give simple star-shaped sampled section polygons; finite phi/theta grid is not a global magnetic-surface certificate',
         volume_scope='full-device exact polygon first-R moments; independent radial-ray trapezoid; no target-volume adjustment',
     )

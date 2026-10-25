@@ -19,6 +19,9 @@ struct DeviceVolumePoints {
     DeviceBuffer<float> R;
     DeviceBuffer<float> volume_weight;
     DeviceBuffer<float> flux_derivative;
+    // Formal sampler branch: original candidate index for each retained row.
+    // Candidates themselves leave this empty; only the final cloud owns it.
+    DeviceBuffer<int> source_indices;
     int count = 0;
 
     bool allocate(int point_count) {

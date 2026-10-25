@@ -11,7 +11,7 @@ are imported when their operations run.
 Install the surface dependencies from a local wheel with:
 
 ```sh
-python -m pip install "./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 The `simsopt` extra includes Simsopt and SciPy. Set up CUDA-enabled PyTorch
@@ -34,11 +34,13 @@ for capture in captures:
     print(capture.valid, capture.result.status)
 ```
 
-`capture_sources(coils, configs, library=None, device_id=0)` accepts one
+`capture_sources(coils, configs, library=None, device_id=0, include_torsion=True)` accepts one
 `EvaluationConfig` or a sequence and always returns a list in input order.
 Configurations select `psi_fit='two_stage'` and differ only in `target_volume`.
 One geometry shares its magnetic axis, first fit, training domain and second
 fit across those volumes. Each volume receives its own downstream evaluation.
+Set `include_torsion=False` when preparing sources without the optional torsion
+diagnostic. Scoring metrics and source coefficients retain the same definitions.
 
 Each `SourceCapture` contains `.result` (`EvaluationResult`), `.source`
 (`SourcePsi`) and `.alpha` (`AlphaFit`). Check `.valid` before preparing a
@@ -50,6 +52,9 @@ fitting radius and selected level. `AlphaFit` exposes its modes, lambda and
 iota coefficients. `from_snapshot()` supports advanced integrations with an
 existing native capture. `SourcePsi.read(path, level=...)` and
 `AlphaFit.read(path, nfp=...)` load saved fit records.
+`AlphaFit.radial_basis` records the captured evaluator's radial basis, including
+`'flux_legendre'`; initializer evaluation uses that same basis. Saved alpha NPZ
+files may include a scalar `radial_basis`; older files use `'zernike'`.
 
 ## Prepare an alpha+nu initializer
 
@@ -69,8 +74,13 @@ precision='fp32')` is a context-managed callable. Its `(N,3)` Cartesian inputs
 use metres; its output is B in tesla. `precision='fp64'` is also available.
 `close()` releases the field and is safe to call more than once.
 
-`AlphaNuInitializer(field, library=None, config=None, device_id=0)` accepts a
+`AlphaNuInitializer(field, library=None, config=None, device_id=None)` accepts a
 Cartesian B callback. `prepare(source, alpha, rho=1.0)` returns `SurfaceSeed`.
+With `InitializerConfig(device='cuda')`, `device_id` selects both native
+extraction and PyTorch work. An explicit `device='cuda:N'` selects N when
+`device_id` is omitted; conflicting explicit choices raise `ValueError`.
+Omitting both choices retains GPU 0. CPU initialization keeps its selected
+CPU implementation.
 The source, alpha and field should describe the same coil geometry and volume.
 Capture uses the evaluator's native alpha basis. A separately supplied dense
 alpha fit can produce a different initializer and should be evaluated on the
@@ -92,6 +102,9 @@ Reuse an initializer to reuse its projection factors. `seed.diagnostics`
 contains extraction, mapping, fit and timing information. `SurfaceSeed.save`
 and `SurfaceSeed.read` preserve the alpha+nu and source-psi type markers used
 by the solver.
+Initializer-generated seeds also retain `source_axis_samples` with columns
+`(R, Z, dR/dphi, dZ/dphi)` for angular-topology checks. This array is optional
+when reading earlier seed files; accepted standard-surface files retain it.
 
 `geometry_method='cached_basis'` optionally caches the surface geometry basis.
 The reference geometry method remains the default in this development release.
@@ -145,6 +158,17 @@ an independent B evaluation for the final geometry checks.
 `StandardSurface` contains the final dofs, iota, G, acceptance, quality and
 diagnostics. `save()` writes accepted surfaces; rejected candidates remain
 available through the returned object for inspection.
+
+With source-axis samples in the seed, the solver checks angular covering on
+the solve grid and each validation grid. The clockwise poloidal angle must
+wind once along the poloidal parameter and zero times along a toroidal field
+period; the cylindrical toroidal angle must have the corresponding degrees
+zero and one. `hard_downstream_checks['single_angular_covering']` records this
+acceptance check, and each grid's `angular_covering` records the measured
+degrees. Select `SolverConfig(validation_grids=(97,129))` for finer checks.
+Legacy seeds without axis samples retain their existing geometry checks and
+record `source_axis_unavailable`. Dense residual quality is reported separately
+as `strict_pass` or `accepted_with_quality_warning` for accepted surfaces.
 
 ## Reference QS quantities
 

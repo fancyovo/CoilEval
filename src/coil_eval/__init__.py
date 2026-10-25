@@ -4,6 +4,6 @@ from .evaluator import CenterContextError, EvaluationError, Evaluator, InvalidEv
 from .losses import quality_penalty
 from .types import CoilSet, EvaluationResult, GradientResult, LocalMetrics
 
-__version__ = "0.4.0a1"
+__version__ = "0.5.0a1"
 __all__ = ["CoilSet", "EvaluationConfig", "EvaluationResult", "GradientResult", "LocalMetrics",
            "Evaluator", "EvaluationError", "InvalidEvaluationError", "CenterContextError", "quality_penalty"]

@@ -2153,6 +2153,7 @@ class BatchCoilFieldGpu:
         target_helicity: tuple[int, int] = (1, 0),
         config_overrides: dict | None = None,
         coefficient_capacity: int = 8192,
+        include_torsion: bool = True,
     ):
         """Score the center and retain its psi QR factor on this host thread."""
         center_x, center_y, center_z, center_current = _coerce_score_inputs(
@@ -2184,8 +2185,11 @@ class BatchCoilFieldGpu:
             ctypes.byref(coefficient_count),
         )
         self._check(code)
+        score_result = _with_boundary_iota(self.lib, _score_result_dict(result))
+        if include_torsion:
+            score_result = _with_torsion(self.lib, score_result, center_x, center_y, center_z)
         return {
-            "score_result": _with_torsion(self.lib, _with_boundary_iota(self.lib, _score_result_dict(result)), center_x, center_y, center_z),
+            "score_result": score_result,
             "psi_coefficients": coefficients[: coefficient_count.value].copy(),
             "_result_struct": result,
             "_config_struct": config,

@@ -364,6 +364,42 @@ int sgpu_create_field_batch_f32(
     return 0;
 }
 
+int sgpu_batch_field_use_host_segments(void* handle,
+    const double* coeffs_x, const double* coeffs_y, const double* coeffs_z,
+    const double* currents, int nbase, int ncoeff, int nfp, int segments_per_coil) {
+    BatchCoilField* field = reinterpret_cast<BatchCoilField*>(handle);
+    if (!field || !coeffs_x || !coeffs_y || !coeffs_z || !currents || nbase <= 0 ||
+        ncoeff < 3 || (ncoeff % 2) == 0 || nfp <= 0 || segments_per_coil <= 0 ||
+        static_cast<std::int64_t>(nbase) * 2 * nfp * segments_per_coil != field->n_segments) {
+        set_error("invalid host-segment batch dimensions");
+        return 1;
+    }
+    if (cuda_check(cudaSetDevice(field->device_id), "host-segment batch cudaSetDevice")) return 1;
+    try {
+        const size_t coefficients = static_cast<size_t>(nbase) * ncoeff;
+        std::vector<double> x, y, z, wx, wy, wz;
+        for (int query = 0; query < field->query_count; ++query) {
+            const size_t offset = static_cast<size_t>(query) * coefficients;
+            generate_segments(coeffs_x + offset, coeffs_y + offset, coeffs_z + offset,
+                currents + static_cast<size_t>(query) * nbase, nbase, ncoeff, nfp,
+                segments_per_coil, x, y, z, wx, wy, wz);
+            const size_t segment_offset = static_cast<size_t>(query) * field->n_segments;
+            const auto copy = [&](float* destination, const std::vector<double>& values) {
+                const auto floats = to_float_vector(values);
+                return cuda_check(cudaMemcpy(destination + segment_offset, floats.data(),
+                    floats.size() * sizeof(float), cudaMemcpyHostToDevice), "copy exact host batch segments");
+            };
+            if (copy(field->d_x, x) || copy(field->d_y, y) || copy(field->d_z, z) ||
+                copy(field->d_wx, wx) || copy(field->d_wy, wy) || copy(field->d_wz, wz)) return 1;
+        }
+        set_error("");
+        return 0;
+    } catch (const std::exception& error) {
+        set_error(error.what());
+        return 1;
+    }
+}
+
 void sgpu_destroy_field_batch(void* handle) {
     BatchCoilField* field = reinterpret_cast<BatchCoilField*>(handle);
     if (!field) return;

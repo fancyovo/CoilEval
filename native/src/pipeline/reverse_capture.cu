@@ -3,6 +3,7 @@
 #include "pipeline/target_volume.cuh"
 #include "coil_field.h"
 #include "coil_field_internal.h"
+#include <cmath>
 #include <cstring>
 namespace coil_eval::pipeline {
 thread_local int g_reverse_capture_flags = 0;
@@ -35,8 +36,70 @@ bool reverse_device(std::vector<ReverseCapturedArray>& arrays, const char* name,
     return true;
 }
 
+bool capture_source_snapshot(const FixedFrontG2Cache& cache, int nfp,
+                             const SgpuScoreConfig& config, const SgpuScoreResult& result) {
+    g_reverse_snapshot.clear();
+    const auto& alpha = cache.alpha;
+    const int na = static_cast<int>(cache.axis.R.size());
+    const int nm = static_cast<int>(alpha.modes.l.size());
+    if (!cache.ready || !alpha.adjoint_ready || nm != alpha.mode_count ||
+        alpha.scales.size() < static_cast<size_t>(nm) ||
+        alpha.scaled_solution.size() < static_cast<size_t>(nm)) {
+        sgpu_internal_set_error("source capture alpha solution is unavailable");
+        return false;
+    }
+    // The formal target solve already selected this level. Source initialization
+    // does not need the additional target-adjoint contraction used by reverse.
+    const auto& target = g_target_volume_cache;
+    if (!(config.target_volume > 0.0) || target.id == 0 ||
+        target.id != result.target_volume_cache_id || target.target != config.target_volume ||
+        target.coefficients != cache.psi.coeffs) {
+        sgpu_internal_set_error("source capture target volume differs from the formal result");
+        return false;
+    }
+    std::vector<float> scaled(nm), scales(nm);
+    if (nm && (cudaMemcpy(scaled.data(), alpha.scaled_solution.data(), nm*sizeof(float),
+                   cudaMemcpyDeviceToHost) != cudaSuccess ||
+        cudaMemcpy(scales.data(), alpha.scales.data(), nm*sizeof(float),
+                   cudaMemcpyDeviceToHost) != cudaSuccess)) {
+        sgpu_internal_set_error("source capture alpha coefficient export failed");
+        return false;
+    }
+    std::vector<double> coefficients(nm);
+    for (int i=0; i<nm; ++i) coefficients[i] = static_cast<double>(scaled[i])/scales[i];
+    std::vector<ReverseCapturedArray> arrays;
+    reverse_scalar(arrays, "capture_version", 1);
+    reverse_scalar(arrays, "nfp", nfp);
+    reverse_add(arrays, "axis_R", cache.axis.R);
+    reverse_add(arrays, "axis_Z", cache.axis.Z);
+    reverse_add(arrays, "axis_R_phi", cache.axis.R_phi);
+    reverse_add(arrays, "axis_Z_phi", cache.axis.Z_phi);
+    std::vector<double> samples(static_cast<size_t>(na)*4);
+    for (int i=0; i<na; ++i) {
+        samples[4*i]=cache.axis.R[i]; samples[4*i+1]=cache.axis.Z[i];
+        samples[4*i+2]=cache.axis.R_phi[i]; samples[4*i+3]=cache.axis.Z_phi[i];
+    }
+    reverse_add(arrays, "axis_samples", samples, {na,4});
+    reverse_add(arrays, "psi_coefficients", cache.psi.coeffs);
+    reverse_add(arrays, "psi_mode_a", cache.psi.modes.a);
+    reverse_add(arrays, "psi_mode_b", cache.psi.modes.b);
+    reverse_add(arrays, "psi_mode_m", cache.psi.modes.m);
+    reverse_add(arrays, "psi_mode_kind", cache.psi.modes.kind);
+    reverse_scalar(arrays, "target_level", target.level);
+    reverse_add(arrays, "alpha_mode_l", alpha.modes.l);
+    reverse_add(arrays, "alpha_mode_m", alpha.modes.m);
+    reverse_add(arrays, "alpha_mode_n", alpha.modes.n);
+    reverse_add(arrays, "alpha_mode_kind", alpha.modes.kind);
+    reverse_add(arrays, "alpha_coefficients", coefficients);
+    reverse_scalar(arrays, "alpha_radial_basis_mode", alpha.modes.radial_basis);
+    reverse_add(arrays, "alpha_iota_coefficients", alpha.iota_coefficients);
+    g_reverse_snapshot.swap(arrays);
+    return true;
+}
+
 bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
                               const SgpuScoreConfig& config, const SgpuScoreResult& result) {
+    if (source_capture_only()) return capture_source_snapshot(cache,nfp,config,result);
     std::vector<ReverseCapturedArray> arrays;
     const int na = static_cast<int>(cache.axis.R.size());
     const int np = static_cast<int>(cache.psi.coeffs.size());
@@ -66,6 +129,7 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
     reverse_add(arrays, "psi_scale", psi_scale);
     const auto& alpha = cache.alpha;
     reverse_add(arrays, "alpha_mode_l", alpha.modes.l);
+    reverse_scalar(arrays, "alpha_radial_basis_mode", alpha.modes.radial_basis);
     reverse_add(arrays, "alpha_mode_m", alpha.modes.m);
     reverse_add(arrays, "alpha_mode_n", alpha.modes.n);
     reverse_add(arrays, "alpha_mode_kind", alpha.modes.kind);
@@ -94,6 +158,27 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
     reverse_scalar(arrays, "flux_edge", result.flux_edge);
     reverse_scalar(arrays, "vacuum_G", cache.G);
     reverse_add(arrays, "qs_sums", std::vector<double>(cache.qs_sums.begin(), cache.qs_sums.end()));
+    // Selection is discrete but the retained rows' moving coordinates are not.
+    // Export its small integer branch for both ordinary and diagnostic reverse
+    // captures, without forcing a copy of the complete point records.
+    const auto& points = cache.points;
+    if (points.count > 0) {
+        if (points.source_indices.size() != static_cast<size_t>(points.count)) {
+            sgpu_internal_set_error("formal volume source indices are unavailable");
+            return false;
+        }
+        const int rays = config.volume_phi_count * config.volume_theta_count;
+        const int nr = (static_cast<int>(std::ceil(config.volume_point_count * 1.25)) + rays - 1) / rays;
+        reverse_add(arrays, "volume_sampling_shape", std::vector<int>{
+            config.volume_phi_count, config.volume_theta_count, nr, rays * nr});
+        const auto& warm = g_alpha_warm_preconditioner;
+        if (warm.volume_sampling_ready && warm.volume_source_indices.size() == static_cast<size_t>(points.count) &&
+            warm.volume_target_cache_id == result.target_volume_cache_id &&
+            warm.volume_phi_count == config.volume_phi_count &&
+            warm.volume_theta_count == config.volume_theta_count && warm.volume_radial_count == nr)
+            reverse_add(arrays, "volume_source_indices", warm.volume_source_indices);
+        else if (!reverse_device(arrays, "volume_source_indices", points.source_indices)) return false;
+    }
     if (config.target_volume > 0.0) {
         // Populate through the exact same GPU contraction used by the local
         // fast oracle. This also preserves its signed quadrature residual.
@@ -163,14 +248,16 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
 using namespace coil_eval::pipeline;
 extern "C" {
 int sgpu_set_reverse_capture(int flags) {
-    if (flags < 0 || flags > 3 || flags == 2) {
-        sgpu_internal_set_error("reverse capture flags must be 0, 1 or 3");
+    if (flags != 0 && flags != 1 && flags != 3 && flags != SOURCE_CAPTURE_ONLY) {
+        sgpu_internal_set_error("reverse capture flags must be 0, 1, 3 or 4");
         return 1;
     }
     g_reverse_capture_flags = flags;
     g_reverse_snapshot.clear();
     return 0;
 }
+
+int sgpu_source_capture_version() { return 1; }
 
 int sgpu_reverse_capture_array_count() {
     return static_cast<int>(g_reverse_snapshot.size());

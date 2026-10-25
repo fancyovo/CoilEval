@@ -57,13 +57,14 @@ def prepare(args):
     coils_path = directory / "coils.json"
     coils.write_json(coils_path)
     base = EvaluationConfig(target_volume=args.volumes[0], psi_a=args.radius,
-        fast=True, flux_method="stokes", psi_fit="two_stage", psi_refit_sampling=args.sampling)
+        fast=True, flux_method="stokes", psi_fit="two_stage", psi_refit_sampling=args.sampling,
+        alpha_radial_weighting=args.alpha_weighting, alpha_radial_basis=args.alpha_basis)
     configs = [replace(base, target_volume=volume) for volume in args.volumes]
     captures = capture_sources(coils, configs, library=args.library, device_id=args.device)
     tasks, failures = [], []
     with GpuCoilField(coils, library=args.library, device_id=args.device) as field, AlphaNuInitializer(
             field, library=args.library, device_id=args.device,
-            config=InitializerConfig(device="cuda", alpha_fold_policy=args.alpha_fold_policy,
+            config=InitializerConfig(device=f"cuda:{args.device}", alpha_fold_policy=args.alpha_fold_policy,
                                      alpha_min_jacobian=args.alpha_min_jacobian)) as initializer:
         for index, (config, capture) in enumerate(zip(configs, captures)):
             output = directory / f"volume_{index:03d}"
@@ -141,6 +142,8 @@ def main():
     gpu.add_argument("--volumes", type=float, nargs="+", default=[.01, .03, .05], help="Target volumes in m^3")
     gpu.add_argument("--radius", type=float, default=.15, help="Shared fitting radius in metres")
     gpu.add_argument("--sampling", choices=("cartesian", "polar_quadrature"), default="cartesian")
+    gpu.add_argument("--alpha-weighting", choices=("histogram", "smooth"), default="histogram")
+    gpu.add_argument("--alpha-basis", choices=("zernike", "flux_legendre"), default="zernike")
     gpu.add_argument("--alpha-fold-policy", choices=("reject", "damp"), default="reject")
     gpu.add_argument("--alpha-min-jacobian", type=float, default=.05)
     cpu = phases.add_parser("solve", help="Consume saved seeds in a CPU-only process pool")

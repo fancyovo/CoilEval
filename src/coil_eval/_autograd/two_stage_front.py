@@ -29,6 +29,10 @@ def _live_tensor(value, *, device, dtype):
     return torch.as_tensor(value,device=device,dtype=dtype)
 
 
+def _stack_live(values, *, device, dtype):
+    return torch.stack([_live_tensor(value,device=device,dtype=dtype) for value in values])
+
+
 class SectionPsiOperator:
     """Irregular-point psi design, factored as 63 monomials x 25 trig terms.
 
@@ -512,9 +516,10 @@ def build_batch_two_stage_front(field,centers,*,config_overrides=None,
         raise ValueError('batch field and all center configs must share nfp')
     device=field.positions.device
     def stack(name):
-        return torch.stack([torch.as_tensor(c[name],device=device,dtype=torch.float64) for c in centers])
+        return _stack_live([c[name] for c in centers],device=device,dtype=torch.float64)
     def stack_stage1(name):
-        return torch.stack([torch.as_tensor(c['two_stage']['stage1_'+name],device=device,dtype=torch.float64) for c in centers])
+        return _stack_live([c['two_stage']['stage1_'+name] for c in centers],
+                          device=device,dtype=torch.float64)
     starts=stack('axis_samples')[:,0,:2]
     axis_builder=_batch_axis_local_value if local_value else differentiable_batch_axis
     with torch.enable_grad():

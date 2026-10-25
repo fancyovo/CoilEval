@@ -1,6 +1,8 @@
 """Persistent source-psi -> alpha -> nu initialization with injected fields."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from operator import index
+import re
 import time
 import numpy as np
 from .clebsch import AlphaFit
@@ -44,6 +46,33 @@ class InitializerConfig:
             raise ValueError('invalid alpha fold policy or minimum Jacobian')
 
 
+def _initializer_device(config, device_id):
+    """Resolve one native/Torch GPU without importing an optional dependency."""
+    if device_id is not None:
+        try:
+            if isinstance(device_id, (bool, np.bool_)):
+                raise TypeError
+            device_id = index(device_id)
+        except TypeError as exc:
+            raise ValueError('device_id must be a nonnegative integer') from exc
+        if device_id < 0:
+            raise ValueError('device_id must be a nonnegative integer')
+    device = str(config.device)
+    match = re.fullmatch(r'(cpu|cuda)(?::([0-9]+))?', device)
+    if match is None:
+        raise ValueError('initializer device must be cpu, cpu:<index>, cuda or cuda:<index>')
+    kind, suffix = match.groups()
+    if kind == 'cuda':
+        explicit = None if suffix is None else int(suffix)
+        if explicit is not None and device_id is not None and explicit != device_id:
+            raise ValueError(f'InitializerConfig.device={device!r} conflicts with device_id={device_id}')
+        device_id = explicit if explicit is not None else (0 if device_id is None else device_id)
+        config = replace(config, device=f'cuda:{device_id}')
+    elif device_id is None:
+        device_id = 0
+    return config, device_id
+
+
 class AlphaNuInitializer:
     """Reuse imports and exact geometry factors across independent samples.
 
@@ -52,9 +81,9 @@ class AlphaNuInitializer:
     may use the existing native alpha capture or a separately validated dense
     alpha fit; the selected origin is retained in the result diagnostics.
     """
-    def __init__(self,field,*,library=None,config=None,device_id=0):
-        self.field=field;self.library=library;self.config=config or InitializerConfig()
-        self.device_id=device_id
+    def __init__(self,field,*,library=None,config=None,device_id=None):
+        self.field=field;self.library=library
+        self.config,self.device_id=_initializer_device(config or InitializerConfig(),device_id)
         if library is None and str(self.config.device).startswith('cuda'):
             from .._native_loader import resolve_library
             self.library=resolve_library()
@@ -112,6 +141,7 @@ class AlphaNuInitializer:
         timings['total_s']=time.perf_counter()-started
         return SurfaceSeed(np.asarray(corrected.get_dofs()).copy(),source.nfp,cfg.surface_order,
             iota,G,source.level,float(np.mean(radii)),mapping['spectral_fit_rms_m'],
+            source_axis_samples=source.axis_samples.copy(),
             diagnostics={'timings':timings,'extraction':extraction,'alpha_transform':transform,
                          'alpha_projection':projection,'nu_mapping':mapping,'nu_fit':correction.diagnostics,
                          'alpha_origin':dict(alpha.diagnostics),'source_provenance':dict(source.provenance),

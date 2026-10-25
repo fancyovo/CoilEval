@@ -14,6 +14,32 @@ from .sampling import sample_frozen_sections
 
 _D=ct.POINTER(ct.c_double)
 _I=ct.POINTER(ct.c_int)
+
+_COMMON_CAPTURE_ARRAYS = (
+    'capture_version', 'nfp', 'axis_R', 'axis_Z', 'axis_R_phi', 'axis_Z_phi', 'axis_samples',
+    'psi_coefficients', 'psi_mode_a', 'psi_mode_b', 'psi_mode_m', 'psi_mode_kind',
+    'alpha_mode_l', 'alpha_mode_m', 'alpha_mode_n', 'alpha_mode_kind', 'alpha_radial_coefficients',
+    'alpha_radial_basis_mode',
+)
+_SOURCE_CAPTURE_ARRAYS = frozenset(_COMMON_CAPTURE_ARRAYS) | {
+    'target_level', 'alpha_coefficients', 'alpha_iota_coefficients',
+    # Old libraries expose the physical alpha solution through these vectors.
+    'alpha_scale', 'alpha_center_scaled_solution',
+}
+
+
+def _shared_array_tree(value):
+    """Copy containers while retaining readonly owned group-common arrays."""
+    if isinstance(value, np.ndarray):
+        value.setflags(write=False)
+        return value
+    if isinstance(value, dict):
+        return {key: _shared_array_tree(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_shared_array_tree(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_shared_array_tree(item) for item in value)
+    return value
 def pointer(a):
     return a.ctypes.data_as(_D)
 
@@ -37,6 +63,10 @@ class TwoStageNative:
         if alpha_weighting is not None:
             alpha_weighting.argtypes=[ct.c_void_p,ct.c_int,ct.c_double,ct.c_double]
             alpha_weighting.restype=ct.c_int
+        alpha_basis=getattr(self.lib,'sgpu_two_stage_set_alpha_radial_basis_v1',None)
+        if alpha_basis is not None:
+            alpha_basis.argtypes=[ct.c_void_p,ct.c_int]
+            alpha_basis.restype=ct.c_int
         weighted_fit=getattr(self.lib,'sgpu_two_stage_fit_weighted_v1',None)
         if weighted_fit is not None:
             weighted_fit.argtypes=[ct.c_void_p,_D,_D,_D,ct.c_int,_D,_D,_D,_D,ct.c_int]
@@ -97,7 +127,15 @@ class TwoStageNative:
             return dict(partial_result=native._score_result_dict(raw))
         alpha_options=dict(alpha_radial_weighting=getattr(config,'alpha_radial_weighting','histogram'),
             alpha_weight_sigma=float(getattr(config,'alpha_weight_sigma',.05)),
-            alpha_count_floor=float(getattr(config,'alpha_count_floor',32.)))
+            alpha_count_floor=float(getattr(config,'alpha_count_floor',32.)),
+            alpha_radial_basis=getattr(config,'alpha_radial_basis','zernike'))
+        if alpha_options['alpha_radial_basis']!='zernike':
+            setter=getattr(self.lib,'sgpu_two_stage_set_alpha_radial_basis_v1',None)
+            if setter is None:
+                raise RuntimeError('native library does not provide the selected alpha radial basis; rebuild the library')
+            if alpha_options['alpha_radial_basis']!='flux_legendre':
+                raise ValueError('alpha_radial_basis must be zernike or flux_legendre')
+            self._check(setter(context,1))
         if alpha_options['alpha_radial_weighting']=='smooth':
             setter=getattr(self.lib,'sgpu_two_stage_set_alpha_radial_weighting_v1',None)
             if setter is None:
@@ -162,7 +200,7 @@ class TwoStageNative:
             s1_scale=s1_scale,s1_upper=s1_upper,s2_scale=s2_scale,s2_upper=s2_upper,
             boundary=boundary,sample=sample,branch=branch,training_count=len(rows[0]))
 
-    def _resume(self,prepared,cfg,arrays,capture):
+    def _resume(self,prepared,cfg,arrays,capture_mode,include_torsion):
         coefficients=prepared['coefficients']
         raw=native._SgpuScoreResult()
         iota=np.empty(cfg.iota_degree+1,dtype=np.float64)
@@ -173,24 +211,34 @@ class TwoStageNative:
             ct.byref(edge_iota),None))
         formal_seconds=perf_counter()-stage
         stage=perf_counter()
-        result=native._with_torsion(self.lib,native._score_result_dict(raw),*arrays[:3])
+        result=native._score_result_dict(raw)
+        if include_torsion:
+            result=native._with_torsion(self.lib,result,*arrays[:3])
         result['diagnostics'].update(iota_target_surface=edge_iota.value,psi_fit_method='two_stage',
             **prepared['alpha_options'],
             psi_refit_domain_volume=prepared['boundary']['volume_m3'],
             psi_refit_training_count=prepared['training_count'],psi_refit_branch=deepcopy(prepared['branch']))
         snapshot=None
-        if capture and raw.status==0:
+        if capture_mode is not None and raw.status==0:
             # All per-volume native arrays are copied before the next resume
             # replaces thread-local native capture storage. Only the explicitly
             # read-only common preconditioners are shared across snapshots.
-            snapshot=copy_reverse_snapshot(self)
+            shared=prepared['shared_snapshot_arrays']
+            snapshot=copy_reverse_snapshot(self,shared=shared,
+                names=_SOURCE_CAPTURE_ARRAYS if capture_mode=='sources' else None)
+            for name in _COMMON_CAPTURE_ARRAYS:
+                if name in snapshot and name not in shared:
+                    snapshot[name].setflags(write=False)
+                    shared[name]=snapshot[name]
             snapshot.update(config=_config_dict(cfg),score_result=result)
             snapshot['config'].update(prepared['alpha_options'])
-            snapshot['psi_scale'],snapshot['psi_upper']=prepared['s2_scale'],prepared['s2_upper']
-            snapshot['two_stage']=dict(stage1_coefficients=prepared['first'].copy(),
-                stage1_scale=prepared['s1_scale'],stage1_upper=prepared['s1_upper'],
-                boundary=deepcopy(prepared['boundary']),sampling=deepcopy(prepared['sample']))
+            if capture_mode=='reverse':
+                snapshot['psi_scale'],snapshot['psi_upper']=prepared['s2_scale'],prepared['s2_upper']
+            snapshot['two_stage']=_shared_array_tree(prepared['shared_two_stage'])
             snapshot['metadata']=dict(capture_version=1,psi_fit_method='two_stage',
+                capture_kind=capture_mode,
+                source_capture_backend=('native' if prepared['native_source_capture'] else 'legacy_host_filter')
+                    if capture_mode=='sources' else None,
                 discrete_choices=('fixed active limiting ray and quadrature nodes for local derivatives'
                     if prepared['sample'].get('kind')=='polar_quadrature' else
                     'fixed active limiting ray and lattice membership for local derivatives'))
@@ -199,16 +247,22 @@ class TwoStageNative:
                 snapshot['alpha_coefficients']=(snapshot['alpha_center_scaled_solution']/snapshot['alpha_scale'])[:nmode]
         return (result,snapshot),formal_seconds,perf_counter()-stage
 
-    def evaluate(self,coils,config,*,capture=False,diagnostics=False,axis_hint=None):
+    def evaluate(self,coils,config,*,capture=False,diagnostics=False,axis_hint=None,include_torsion=True):
         """Return a raw result plus an optional owned reverse/initializer snapshot."""
-        return self.evaluate_many(coils,[config],capture=capture,diagnostics=diagnostics,axis_hint=axis_hint)[0]
+        return self.evaluate_many(coils,[config],capture=capture,diagnostics=diagnostics,
+                                  axis_hint=axis_hint,include_torsion=include_torsion)[0]
 
-    def evaluate_many(self,coils,configs,*,capture=False,diagnostics=False,axis_hint=None):
+    def evaluate_many(self,coils,configs,*,capture=False,diagnostics=False,axis_hint=None,include_torsion=True):
         """Evaluate volumes on one axis/S1/domain/S2 fit, preserving input order.
 
         Only ``target_volume`` may differ between configurations. Every native
         continuation recomputes the complete formal downstream chain. Contexts
         are closed before return; captured arrays are owned host storage.
+        Group-common arrays are shared readonly; per-volume state is independent.
+        ``include_torsion=False`` skips the additional host torsion diagnostic.
+        ``capture='sources'`` returns only initialization source fields. New
+        libraries omit reverse-state preparation; older libraries retain their
+        full native preparation and filter the host copy for compatibility.
 
         ``last_many_timing`` and each result's ``timing['two_stage_group']``
         contain one measured shared preparation, the per-volume formal and
@@ -217,6 +271,14 @@ class TwoStageNative:
         shared preparation must be counted only once for group throughput.
         """
         from .._backend import _coil_arrays
+        if isinstance(capture,(bool,np.bool_)):
+            capture_mode='reverse' if capture else None
+        elif capture in ('reverse','sources'):
+            capture_mode=capture
+        else:
+            raise ValueError("capture must be a boolean, 'reverse' or 'sources'")
+        if capture_mode=='sources' and diagnostics:
+            raise ValueError('source-only capture does not include reverse diagnostics')
         configs=list(configs)
         if not configs:
             self.last_many_timing=dict(query_count=0,completed_volumes=0,shared_preparation_s=0.,
@@ -243,15 +305,29 @@ class TwoStageNative:
         timings={};results=[];formal=[];postprocess=[]
         shared_seconds=None
         try:
-            self._check(self.lib.sgpu_set_reverse_capture(3 if diagnostics else 1 if capture else 0))
-            prepared=self._prepare(coils,configs[0],native_configs[0],arrays,capture,timings)
+            capability=getattr(self.lib,'sgpu_source_capture_version',None)
+            source_native=False
+            if capture_mode=='sources' and capability is not None:
+                capability.argtypes=[];capability.restype=ct.c_int
+                source_native=int(capability())>=1
+            flag=4 if source_native else 3 if diagnostics else 1 if capture_mode is not None else 0
+            self._check(self.lib.sgpu_set_reverse_capture(flag))
+            prepared=self._prepare(coils,configs[0],native_configs[0],arrays,capture_mode=='reverse',timings)
+            if capture_mode is not None and 'partial_result' not in prepared:
+                prepared['native_source_capture']=source_native
+                prepared['shared_snapshot_arrays']=({
+                    'psi_scale':prepared['s2_scale'],'psi_upper':prepared['s2_upper']}
+                    if capture_mode=='reverse' else {})
+                prepared['shared_two_stage']=_shared_array_tree(dict(
+                    stage1_coefficients=prepared['first'],stage1_scale=prepared['s1_scale'],
+                    stage1_upper=prepared['s1_upper'],boundary=prepared['boundary'],sampling=prepared['sample']))
             shared_seconds=perf_counter()-started
             if 'partial_result' in prepared:
                 results=[(deepcopy(prepared['partial_result']),None) for _ in configs]
                 formal=[0.]*len(configs);postprocess=[0.]*len(configs)
             else:
                 for cfg in native_configs:
-                    result,formal_seconds,postprocess_seconds=self._resume(prepared,cfg,arrays,capture)
+                    result,formal_seconds,postprocess_seconds=self._resume(prepared,cfg,arrays,capture_mode,include_torsion)
                     results.append(result);formal.append(formal_seconds);postprocess.append(postprocess_seconds)
         finally:
             self.lib.sgpu_set_reverse_capture(0)

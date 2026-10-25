@@ -36,8 +36,10 @@ and `write_json(path)` preserve these units and conventions.
 | `alpha_radial_weighting` | `'histogram'` | `'histogram'` or two-stage experimental `'smooth'` radial density weighting |
 | `alpha_weight_sigma` | `0.05` | Gaussian width in normalized rho for smooth weighting |
 | `alpha_count_floor` | `32.0` | Positive additive pseudocount for smooth density denominators |
+| `alpha_radial_basis` | `'zernike'` | Original radial basis or two-stage `'flux_legendre'` |
+| `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-The original single-stage settings remain the default in 0.4.0a1. Select the
+The original single-stage settings remain the default in 0.5.0a1. Select the
 two-stage path explicitly:
 
 ```python
@@ -60,10 +62,23 @@ differ from `psi_refit_points`; inspect `diagnostics['psi_refit_training_count']
 `psi_fit='two_stage'`. Its positive sigma and pseudocount settings control the
 smooth density weights. Histogram weighting remains the default.
 
+`alpha_radial_basis='flux_legendre'` fits the angular correction with
+polynomials of normalized flux. Select it with `psi_fit='two_stage'`; the
+choice applies to scalar evaluation, local gradients and captured alpha data.
+The original `'zernike'` basis remains the default.
+
 `flux_method='stokes'` requires `fast=True` and selects boundary integration for
 local neighborhoods and finite-difference endpoints. Independent center calls
 retain their center integration rule. Results save the selected settings in
 `diagnostics['configuration']`.
+
+Tensor evaluation compares its Stokes flux and flux derivative with the captured
+center's area-integral polynomial. If either relative error exceeds
+`stokes_validation_rtol`, that query uses differentiable area integration.
+`None` selects the original unchecked Tensor integration behavior. The setting
+applies to the Tensor interface; the NumPy evaluator retains the integration
+rules described above. See [tensor results](torch.md#results-and-local-derivatives)
+for the selected method and error diagnostics.
 
 ## Evaluator sessions
 
@@ -74,13 +89,35 @@ built library.
 | Method | Return value |
 | --- | --- |
 | `evaluate(coils)` | One `EvaluationResult` |
-| `evaluate_many(coil_sets)` | Independent results in input order, evaluated sequentially |
+| `evaluate_many(coil_sets, configs=None)` | Independent results in input order, with batched axis tracing for compatible inputs |
 | `evaluate_nearby(center, candidates)` | Results using the live center's local model |
 | `loss_and_grad(coils, loss_fn, scales=..., h=..., basis=...)` | Scalar objective and physical parameter gradient |
 
 Each independent call replaces the session's active center. Call
 `evaluate_nearby` before the next independent evaluation, using the same session
-and thread. Saved results can be loaded with `EvaluationResult.read_json(path)`.
+and thread. `close()` releases the session and can be called repeatedly.
+Saved results can be loaded with `EvaluationResult.read_json(path)`.
+
+`evaluate_many` uses the session configuration unless `configs` supplies one
+`EvaluationConfig` per input. This supports distinct target volumes and fitting
+radii in one batch. Each result records its own configuration; only the final
+result remains a live center, and its neighborhood uses that configuration.
+The session's default configuration stays available for subsequent scalar calls.
+
+```python
+results = evaluator.evaluate_many(
+    [coils_a, coils_b],
+    configs=[EvaluationConfig(target_volume=0.03, psi_a=0.15),
+             EvaluationConfig(target_volume=0.05, psi_a=0.18)],
+)
+```
+
+Value batches require NumPy and the native backend. Compatible four-coil inputs
+share magnetic-axis tracing work; each input retains its ordinary axis selection
+and complete formal score. Mixed coil layouts and older native libraries retain
+sequential evaluation. `timings['shared_independent_batch']` reports preparation,
+per-query and total batch time; `python_wall_s` allocates the public batch wall
+time across its results, including each query and its share of preparation.
 
 ## Results and metrics
 
@@ -93,7 +130,8 @@ native stage timings can overlap or contain other stages.
 | --- | --- |
 | `qs_volume` | Normalized QS residual RMS over the selected volume |
 | `qs_outer` | Normalized QS residual RMS in the outer radial bin |
-| `iota_boundary`, `iota_min`, `iota_max` | Boundary rotational transform and fitted profile extrema |
+| `iota_boundary` | Fitted rotational transform at the target boundary |
+| `iota_min`, `iota_max` | Minimum/maximum of the fitted profile on 257 uniformly spaced rho-squared samples |
 | `relative_normal_drift_p95` | One-period normal displacement P95 divided by mean minor radius |
 | `coil_length_mean` | Mean basic-coil length, m |
 | `coil_curvature_max`, `coil_curvature_p95` | Sampled maximum and optional percentile curvature, m⁻¹ |
@@ -107,6 +145,9 @@ QS values use an RMS definition. Aggregate their squares with the appropriate
 weights, then take the square root. A volume RMS, an outer-bin RMS and the
 Simsopt reference's flux-shell RMS describe different regions; see
 [Simsopt integration](simsopt.md).
+Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
+selected helicity. The outer bin uses the native point weights in the final
+radial bin; iota profile samples cover the selected radial range.
 The reference helpers implement QH helicity `(1,nfp)`; use matching native
 helicity when comparing those results.
 
@@ -133,6 +174,10 @@ domain and sampling choices while updating their continuous response. It uses
 the optional CUDA PyTorch path when available. `'formal'` reconstructs the
 two-stage fit at each endpoint, following the center's axis branch. Finite-step
 differences can change discrete choices and differ from a local derivative.
+Configurations outside the Tensor API's supported settings, or environments
+without CUDA-enabled PyTorch, use formal reconstruction. Inspect
+`diagnostics['nearby_method']`, `['nearby_backend']` and `['geometry_model']`
+for the executed path; `['nearby_fallback_reason']` explains a local fallback.
 The [Tensor API](torch.md) provides local reverse gradients for PyTorch losses.
 
 An unusable center or endpoint raises `InvalidEvaluationError`; `.results`

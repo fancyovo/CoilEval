@@ -59,13 +59,15 @@ def _decode_result(raw, config, *, mode="independent", context=None):
         except (KeyError, TypeError, ValueError) as exc:
             status = "invalid_metrics"
             d["metric_error"] = str(exc)
-    d.update({"configuration": config.to_dict(), "trace_periods": 1, "full_physical_evaluation": "not_run",
-              "geometry_model": "formal" if mode == "independent" else "center_linearized"})
+    d.update({"configuration": config.to_dict(), "trace_periods": 1, "full_physical_evaluation": "not_run"})
+    d.setdefault("geometry_model", "formal" if mode == "independent" else "center_linearized")
     if metrics is not None:
         d["quality_threshold_pass"] = metrics.relative_normal_drift_p95 <= 0.01
     timing = {"native": raw.get("timing", {})}
     if "local_timing" in raw:
         timing["shared_local_batch"] = raw["local_timing"]
+    if "independent_batch_timing" in raw:
+        timing["shared_independent_batch"] = raw["independent_batch_timing"]
     return EvaluationResult(status, metrics, d, timing, mode, context)
 
 
@@ -75,6 +77,7 @@ class _Center:
     generation: int
     coils: CoilSet
     raw: dict
+    config: EvaluationConfig
 
 
 class Evaluator:
@@ -120,22 +123,67 @@ class Evaluator:
                 raise EvaluationError(f"native {method} failed: {exc}") from exc
             raise
 
-    def _result(self, raw, *, mode="independent", context=None):
-        return _decode_result(raw, self.config, mode=mode, context=context)
+    def _result(self, raw, *, mode="independent", context=None, config=None):
+        return _decode_result(raw, self.config if config is None else config, mode=mode, context=context)
 
     def evaluate(self, coils: CoilSet) -> EvaluationResult:
         self._check_session()
         self._generation += 1
         start = time.perf_counter()
         raw = self._invoke("evaluate", coils, self.config)
-        context = _Center(self._owner, self._generation, coils, raw)
+        context = _Center(self._owner, self._generation, coils, raw, self.config)
         result = self._result(raw, context=context)
         return EvaluationResult(result.status, result.metrics, result.diagnostics,
                                 {**result.timings, "python_wall_s": time.perf_counter()-start}, result.mode, context)
 
-    def evaluate_many(self, coils: Sequence[CoilSet]) -> tuple[EvaluationResult, ...]:
-        """Independent evaluations in input order; only the last is a live center."""
-        return tuple(self.evaluate(c) for c in coils)
+    def evaluate_many(self, coils: Sequence[CoilSet], *,
+                      configs: Sequence[EvaluationConfig] | None = None) -> tuple[EvaluationResult, ...]:
+        """Independent results with optional per-query configurations.
+
+        Results retain input order. Only the final result is a live center,
+        using its own configuration for subsequent neighborhood calls.
+        """
+        self._check_session()
+        coils = tuple(coils)
+        query_configs = (self.config,)*len(coils) if configs is None else tuple(configs)
+        if len(query_configs) != len(coils) or any(not isinstance(c, EvaluationConfig) for c in query_configs):
+            raise ValueError('provide one EvaluationConfig per coil set')
+        if not coils:
+            return ()
+        if not callable(getattr(self._backend, 'evaluate_many', None)):
+            if configs is None:
+                return tuple(self.evaluate(c) for c in coils)
+            results = []
+            for c, cfg in zip(coils, query_configs):
+                self._generation += 1
+                start = time.perf_counter()
+                raw = self._invoke('evaluate', c, cfg)
+                context = _Center(self._owner, self._generation, c, raw, cfg)
+                result = self._result(raw, context=context, config=cfg)
+                results.append(EvaluationResult(result.status, result.metrics, result.diagnostics,
+                    {**result.timings, 'python_wall_s': time.perf_counter()-start}, result.mode, context))
+            return tuple(results)
+        first_generation = self._generation
+        # As with a scalar call, any attempted independent evaluation makes an
+        # earlier center stale, including when the backend raises part-way.
+        self._generation += len(coils)
+        start = time.perf_counter()
+        records = (self._invoke('evaluate_many', coils, self.config) if configs is None else
+                   self._invoke('evaluate_many', coils, self.config, query_configs))
+        if len(records) != len(coils):
+            raise EvaluationError('native independent batch returned the wrong number of results')
+        elapsed = time.perf_counter()-start
+        results = []
+        shared = records[0].get('independent_batch_timing', {})
+        query_s = shared.get('query_s', ())
+        overhead = (elapsed-sum(query_s))/len(coils) if len(query_s) == len(coils) else elapsed/len(coils)
+        for index, (c, raw, cfg) in enumerate(zip(coils, records, query_configs)):
+            context = _Center(self._owner, first_generation+index+1, c, raw, cfg)
+            result = self._result(raw, context=context, config=cfg)
+            wall = query_s[index]+overhead if len(query_s) == len(coils) else overhead
+            results.append(EvaluationResult(result.status, result.metrics, result.diagnostics,
+                {**result.timings, 'python_wall_s': wall}, result.mode, context))
+        return tuple(results)
 
     def evaluate_nearby(self, center: EvaluationResult,
                         candidates: Sequence[CoilSet]) -> tuple[EvaluationResult, ...]:
@@ -151,10 +199,10 @@ class Evaluator:
                 raise ValueError("nearby candidates must preserve the center's coil dimensions and nfp")
         if not candidates:
             return ()
-        raw = self._invoke("nearby", state.coils, candidates, state.raw, self.config)
+        raw = self._invoke("nearby", state.coils, candidates, state.raw, state.config)
         if len(raw) != len(candidates):
             raise EvaluationError("native nearby batch returned the wrong number of endpoints")
-        return tuple(self._result(r, mode="nearby") for r in raw)
+        return tuple(self._result(r, mode="nearby", config=state.config) for r in raw)
 
     def loss_and_grad(self, coils: CoilSet, loss_fn: Callable[[LocalMetrics], float], *,
                       scales=None, h: float | None = None, basis=None) -> GradientResult:
@@ -197,6 +245,8 @@ class Evaluator:
                               {"python_wall_s": time.perf_counter()-start, "endpoint_count": len(endpoints)})
 
     def close(self):
+        if self._closed:
+            return
         self._check_session()
         if hasattr(self._backend, "close"):
             self._backend.close()

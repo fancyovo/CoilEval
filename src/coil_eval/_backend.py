@@ -9,6 +9,7 @@ session: the native QR and target-volume caches are thread-local scratch.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Sequence
@@ -68,6 +69,18 @@ def _center_axis(center_raw: dict[str, Any]) -> tuple[float, float]:
     return axis
 
 
+def _nearby_metadata(results, *, requested, effective, backend, fallback=None):
+    """Report the path actually executed, including formal local fallbacks."""
+    for result in results:
+        diagnostics = result.setdefault("diagnostics", {})
+        diagnostics.update(nearby_method_requested=requested, nearby_method=effective,
+                           nearby_backend=backend,
+                           geometry_model="formal" if effective == "formal" else "center_linearized")
+        if fallback is not None:
+            diagnostics["nearby_fallback_reason"] = fallback
+    return results
+
+
 class NativeBackend:
     """Duck-typed backend for the standalone evaluator's public session.
 
@@ -99,6 +112,75 @@ class NativeBackend:
             config_overrides=options,
         )
 
+    def evaluate_many(self, coils: Sequence[Any], config: Any,
+                      configs: Sequence[Any] | None = None) -> list[dict[str, Any]]:
+        """Batch compatible axis searches, then retain ordinary formal scoring.
+
+        Preparation never arms a cache. Each original input consumes its own
+        exact physical/configuration key immediately around its ordinary call,
+        in input order. Other coil layouts and older libraries use that same
+        ordinary call without a cache. This path needs NumPy and ctypes only.
+        """
+        coils = list(coils)
+        configs = [config]*len(coils) if configs is None else list(configs)
+        if len(configs) != len(coils):
+            raise ValueError('provide one evaluation config per coil set')
+        if not coils:
+            return []
+        if self._active_batch is not None:
+            raise RuntimeError("native independent batches must not overlap neighborhood calls")
+        from ._autograd.axis_batch import prepare_axis_batch
+        started = perf_counter()
+        arrays = [_coil_arrays(c) for c in coils]
+        groups = {}
+        for index, (c, blocks, query_config) in enumerate(zip(coils, arrays, configs)):
+            options = query_config.native_options()
+            trace_signature = (self.device_id, int(query_config.segments_per_coil),
+                int(options.get('axis_grid', 48)), int(options.get('axis_trace_steps', 960)))
+            groups.setdefault((blocks[0].shape, int(c.nfp), trace_signature), []).append(index)
+        prepared = []
+        lookup = {}
+        preparation_started = perf_counter()
+        for (shape, nfp, trace_signature), indices in groups.items():
+            supported = shape[0] == 4 and shape[1] >= 3 and shape[1] % 2 == 1
+            if len(indices) > 1 and supported:
+                physical = np.stack([np.column_stack(arrays[index]) for index in indices])
+                batch = prepare_axis_batch(physical, [configs[index] for index in indices], self.library,
+                    device=self.device_id, nfp=nfp, include_refinement=True, allow_missing=True)
+                metadata = batch.metadata
+            else:
+                batch = None
+                metadata = dict(enabled=False, status='disabled', batch=len(indices),
+                    reason='single_query' if len(indices) == 1 else 'unsupported_coil_layout')
+            group = len(prepared)
+            prepared.append((batch, indices, metadata))
+            for slot, index in enumerate(indices):
+                lookup[index] = (group, slot)
+        preparation_seconds = perf_counter()-preparation_started
+        records = []
+        query_seconds = []
+        for index, c in enumerate(coils):
+            group, slot = lookup[index]
+            batch = prepared[group][0]
+            tick = perf_counter()
+            with batch.capture(slot) if batch is not None else nullcontext():
+                records.append(self.evaluate(c, configs[index]))
+            query_seconds.append(perf_counter()-tick)
+        total_seconds = perf_counter()-started
+        shared = dict(scope='shared_independent_batch', query_count=len(coils),
+            total_s=total_seconds, axis_preparation_s=preparation_seconds,
+            query_s=query_seconds, input_order_preserved=True,
+            groups=[dict(input_indices=indices, axis=metadata,
+                         observations=batch.observations() if batch is not None else [])
+                    for batch, indices, metadata in prepared])
+        for index, record in enumerate(records):
+            group, slot = lookup[index]
+            record.setdefault('diagnostics', {})['independent_batch_axis'] = dict(
+                group=group, group_slot=slot, enabled=bool(prepared[group][2]['enabled']),
+                reason=prepared[group][2].get('reason'))
+            record['independent_batch_timing'] = shared
+        return records
+
     def nearby(
         self,
         coils: Any,
@@ -119,20 +201,32 @@ class NativeBackend:
             return []
         if config.psi_fit == "two_stage":
             from ._two_stage.native import TwoStageNative
-            if (config.psi_nearby_method=="local" and config.fast and config.flux_method=="stokes"
-                    and tuple(config.helicity)==(1,4) and coils.nfp==4 and coils.n_base_coils==4):
+            fallback = None
+            if config.psi_nearby_method == "local":
+                from ._tensor_config import validate_tensor_config
+                try:
+                    validate_tensor_config(config)
+                    if coils.nfp != 4 or coils.n_base_coils != 4:
+                        raise ValueError("local tensor response requires nfp=4 and four basic coils")
+                except (TypeError, ValueError) as exc:
+                    fallback = str(exc)
+            if config.psi_nearby_method == "local" and fallback is None:
                 try:
                     import torch
                 except ImportError:
                     torch=None
                 if torch is not None and torch.version.cuda is not None:
                     from ._two_stage.local import nearby
-                    return nearby(self,coils,candidates,center_raw,config)
+                    return _nearby_metadata(nearby(self,coils,candidates,center_raw,config),
+                        requested="local", effective="local", backend="torch")
+                fallback = "CUDA-enabled PyTorch is unavailable"
             driver=TwoStageNative(self.library,self.device_id)
             axis=_center_axis(center_raw)
             # Formal independent reconstruction is the initial correctness
             # oracle. Optimized local neighborhoods are measured separately.
-            return [driver.evaluate(candidate,config,axis_hint=axis)[0] for candidate in candidates]
+            return _nearby_metadata(
+                [driver.evaluate(candidate,config,axis_hint=axis)[0] for candidate in candidates],
+                requested=config.psi_nearby_method, effective="formal", backend="native", fallback=fallback)
         if self._active_batch is not None:
             raise RuntimeError("native neighborhood calls must not overlap")
         total_started = perf_counter()
@@ -287,7 +381,7 @@ class NativeBackend:
         }
         for result in local_results:
             result["local_timing"] = dict(timing_record)
-        return local_results
+        return _nearby_metadata(local_results, requested="local", effective="local", backend="native")
 
     def _add_geometry(
         self,

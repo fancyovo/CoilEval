@@ -5,15 +5,16 @@
 CoilEval 使用 NVIDIA GPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-0.4.0a1 开发版新增可选的两阶段 psi 拟合、高阶 Fourier 张量与 Simsopt 磁面工作流。
-已有调用保留单阶段默认设置，可通过 `EvaluationConfig` 显式选择数值路径。
+0.5.0a1 开发版新增磁通多项式 alpha 基函数，加速线圈几何指标，并在张量批量求值中共享准备工作。
+Simsopt 工作流保留源磁轴并检查磁面的角度覆盖。已有调用保留单阶段默认设置，
+可通过 `EvaluationConfig` 显式选择数值路径。改动见[版本记录](docs/changelog.zh-CN.md)。
 
 ## 安装
 
 使用 Python 3.10+ 安装 Linux x86-64 安装包：
 
 ```sh
-python -m pip install ./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 安装包包含 GPU 后端，pip 会安装 NumPy 和 CUDA 12.8 运行库。
@@ -44,11 +45,27 @@ python examples/custom_loss.py
 python examples/two_stage.py
 ```
 
+配置 CUDA 版 PyTorch 后，可运行 `python examples/autograd.py` 完成求值和一次目标反传。
+`TensorEvaluator.evaluate_batch` 接收独立参数张量；`capture_sources` 在同一几何的多个目标体积之间
+共享两阶段拟合。
+
 `psi_fit="two_stage"` 在闭合训练区域重新拟合 psi。
 可选的 PyTorch 接口提供局部反传梯度和独立批量求值，支持 16 阶线圈。
 `coil_eval.simsopt` 可在 GPU 上准备 alpha+nu 初始值，再在 CPU 上运行标准磁面重建；
 [异步示例](examples/simsopt_async.py) 将两个阶段分开运行。
 磁面工作流使用 `simsopt` 可选依赖组；GPU 准备阶段还需要按安装文档配置 CUDA 版 PyTorch。
+
+通过以下配置选择两阶段路径与磁通多项式 alpha 拟合：
+
+```python
+config = EvaluationConfig(
+    target_volume=0.05, psi_a=0.15, fast=True, flux_method="stokes",
+    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
+    alpha_radial_weighting="smooth", alpha_radial_basis="flux_legendre",
+)
+```
+
+各选项见 [API 文档](docs/api.zh-CN.md)。Simsopt 返回结果分别提供重建磁面的接受状态与质量状态。
 
 QS 指标采用残差 RMS 定义：`qs_volume` 对所选体积求平均，`qs_outer` 对外侧径向 bin
 求平均；Simsopt 参考接口还提供求解磁面上的磁通壳层 RMS。

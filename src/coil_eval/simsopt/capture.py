@@ -22,13 +22,14 @@ class SourceCapture:
         return self.result.valid and self.source is not None and self.alpha is not None
 
 
-def capture_sources(coils, configs, *, library=None, device_id=0):
+def capture_sources(coils, configs, *, library=None, device_id=0, include_torsion=True):
     """Capture one coil geometry at one or more target volumes.
 
     A single EvaluationConfig or an iterable is accepted; the result is always
     a list in input order. Configurations use ``psi_fit='two_stage'`` and may
     differ only in target_volume. One axis/S1/domain/S2 fit is shared. Source
     arrays are owned host data and remain valid after this function returns.
+    ``include_torsion=False`` omits the optional torsion diagnostic.
     """
     if not isinstance(coils, CoilSet):
         raise TypeError("coils must be a CoilSet")
@@ -52,7 +53,7 @@ def capture_sources(coils, configs, *, library=None, device_id=0):
     driver = TwoStageNative(resolve_library(library), device_id=device_id)
     try:
         try:
-            rows = driver.evaluate_many(coils, configs, capture=True)
+            rows = driver.evaluate_many(coils, configs, capture="sources", include_torsion=include_torsion)
         except GpuError as exc:
             raise EvaluationError(f"native source capture failed: {exc}") from exc
     finally:
@@ -63,7 +64,11 @@ def capture_sources(coils, configs, *, library=None, device_id=0):
     for config, (raw, snapshot) in zip(configs, rows):
         result = _decode_result(raw, config)
         source = alpha = None
-        if result.valid and snapshot is not None:
+        if result.valid and snapshot is None:
+            result = EvaluationResult("invalid_source_capture", result.metrics,
+                {**result.diagnostics, "source_capture_error": "native result has no owned source snapshot"},
+                result.timings, result.mode)
+        elif result.valid:
             try:
                 source = SourcePsi.from_snapshot(snapshot)
                 alpha = AlphaFit.from_snapshot(snapshot)

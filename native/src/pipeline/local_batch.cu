@@ -123,7 +123,7 @@ bool score_local_batch_impl(
     const int alpha_column_count = static_cast<int>(
         build_clebsch_modes_native(
             config.alpha_radial_order, config.alpha_poloidal_order,
-            config.alpha_toroidal_order
+            config.alpha_toroidal_order,g_alpha_warm_preconditioner.radial_basis
         ).m.size()
     ) + config.iota_degree + 1;
     if (g_alpha_warm_preconditioner.column_count != alpha_column_count ||
@@ -561,6 +561,23 @@ bool score_local_batch_impl(
     const int candidate_target = static_cast<int>(std::ceil(config.volume_point_count * 1.25));
     const int volume_radial = (candidate_target + volume_rays - 1) / volume_rays;
     const int volume_points = config.volume_point_count;
+    const auto& volume_branch = g_alpha_warm_preconditioner;
+    if (!volume_branch.volume_sampling_ready ||
+        volume_branch.volume_source_indices.size() != static_cast<size_t>(volume_points) ||
+        volume_branch.volume_phi_count != volume_phi ||
+        volume_branch.volume_theta_count != volume_theta_count ||
+        volume_branch.volume_radial_count != volume_radial ||
+        volume_branch.volume_rho_min != config.volume_rho_min ||
+        volume_branch.volume_device_id != config.device_id ||
+        volume_branch.volume_target_cache_id != center.target_volume_cache_id) {
+        sgpu_internal_set_error("local volume sampling branch differs from its captured center");
+        return false;
+    }
+    DeviceBuffer<int> d_volume_source_indices;
+    if (!copy_to_device(d_volume_source_indices, volume_branch.volume_source_indices)) {
+        sgpu_internal_set_error("local volume sampling branch upload failed");
+        return false;
+    }
     const size_t volume_total = static_cast<size_t>(query_count) * volume_points;
     DeviceBuffer<float> d_volume_xyz(volume_total * 3), d_volume_grad_s(volume_total * 3);
     DeviceBuffer<float> d_volume_grad_theta(volume_total * 3), d_volume_grad_phi(volume_total * 3);
@@ -611,7 +628,7 @@ bool score_local_batch_impl(
         local_batch_generate_volume_points_kernel<<<
             static_cast<unsigned int>((volume_total + threads - 1) / threads), threads
         >>>(
-            d_volume_boundary.data(), query_count, volume_phi, volume_theta_count,
+            d_volume_boundary.data(), d_volume_source_indices.data(), query_count, volume_phi, volume_theta_count,
             volume_radial, volume_points, nfp,
             static_cast<float>(config.volume_rho_min), static_cast<float>(center.surface_level),
             d_flux_coefficients.data(), config.flux_polynomial_degree, d_edge_flux.data(),
@@ -643,7 +660,7 @@ bool score_local_batch_impl(
     const int fit_count = std::min(config.alpha_fit_point_count, volume_points);
     const ClebschModesNative alpha_modes = build_clebsch_modes_native(
         config.alpha_radial_order, config.alpha_poloidal_order,
-        config.alpha_toroidal_order
+        config.alpha_toroidal_order,g_alpha_warm_preconditioner.radial_basis
     );
     const int mode_count = static_cast<int>(alpha_modes.m.size());
     const int column_count = mode_count + config.iota_degree + 1;

@@ -71,6 +71,7 @@ __global__ void local_batch_reduce_flux_sections_kernel(
 
 __global__ void local_batch_generate_volume_points_kernel(
     const float* __restrict__ boundary_radii,
+    const int* __restrict__ source_indices,
     int query_count,
     int n_phi,
     int n_theta,

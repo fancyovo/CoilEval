@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from functools import lru_cache
 from typing import Callable, Mapping
 
@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch.nn import functional as F
+from .._alpha_basis import radial_polynomial
+from .column_norms import column_norms
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,8 @@ class DownstreamConfig:
     alpha_radial_weighting: str = 'histogram'
     alpha_weight_sigma: float = .05
     alpha_count_floor: float = 32.
+    alpha_radial_basis: str = 'zernike'
+    stokes_validation_rtol: float | None = 1e-3
 
     @classmethod
     def from_mapping(cls, source: Mapping):
@@ -185,14 +189,38 @@ def flux_calibration(geometry, level: Tensor, field: Callable,
                                        / mean[-1].abs().clamp_min(1e-30)))
 
 
-def volume_points(geometry, level: Tensor, flux: Mapping, config: DownstreamConfig):
-    """Native local endpoint cloud, including each point's moving coordinates."""
+def volume_points(geometry, level: Tensor, flux: Mapping, config: DownstreamConfig,
+                  *, source_indices=None, sampling_shape=None):
+    """Rebuild moving volume points on the captured formal sampling branch.
+
+    A native formal evaluation removes invalid candidates before stratifying.
+    Its retained candidate indices are fixed locally; axis, psi, boundary radii
+    and every selected point remain differentiable. Older snapshots without
+    this branch retain the historical unfiltered local sampling convention.
+    """
     c = config
     rays = c.volume_phi_count * c.volume_theta_count
     nr = (math.ceil(c.volume_point_count * 1.25) + rays - 1) // rays
     candidate_count = rays * nr
-    source = torch.div(torch.arange(c.volume_point_count, device=level.device) * candidate_count,
-                       c.volume_point_count, rounding_mode='floor')
+    if source_indices is None:
+        source = torch.div(torch.arange(c.volume_point_count, device=level.device) * candidate_count,
+                           c.volume_point_count, rounding_mode='floor')
+    else:
+        raw = torch.as_tensor(source_indices, device=level.device).detach()
+        source = raw.to(torch.int64)
+        if raw.ndim != 1 or raw.numel() != c.volume_point_count:
+            raise ValueError('formal volume source indices have the wrong point count')
+        if not bool(torch.all(raw == source) & torch.all(source >= 0)
+                    & torch.all(source < candidate_count)
+                    & torch.all(source[1:] > source[:-1])):
+            raise ValueError('formal volume source indices must be ordered unique candidate indices')
+        if sampling_shape is None:
+            raise ValueError('formal volume source indices require their sampling shape')
+        actual_shape = torch.as_tensor(sampling_shape, device=level.device).detach()
+        expected_shape = actual_shape.new_tensor(
+            [c.volume_phi_count, c.volume_theta_count, nr, candidate_count])
+        if actual_shape.shape != (4,) or not bool(torch.all(actual_shape == expected_shape)):
+            raise ValueError('formal volume sampling shape differs from its configuration')
     ir = source % nr
     it = (source // nr) % c.volume_theta_count
     ip = source // (nr * c.volume_theta_count)
@@ -201,7 +229,18 @@ def volume_points(geometry, level: Tensor, flux: Mapping, config: DownstreamConf
     phi_ray = ((pi + .417) * (2 * math.pi / (c.nfp * c.volume_phi_count))).expand(-1, c.volume_theta_count)
     shifted = ti + .613 + .217 * pi
     theta_ray = shifted.remainder(c.volume_theta_count) * (2 * math.pi / c.volume_theta_count)
-    boundary_ray = geometry.solve_rays(geometry.rays(phi_ray, theta_ray), level)
+    if source_indices is None:
+        boundary_ray = geometry.solve_rays(geometry.rays(phi_ray, theta_ray), level)
+    else:
+        # Some discarded rays have no real boundary root at all. Solving the
+        # full angular grid would incorrectly reject a valid formal sample.
+        # Source indices are sorted, so this preserves native ray ordering.
+        used_rays = torch.unique_consecutive(torch.div(source, nr, rounding_mode='floor'))
+        selected_phi = phi_ray.flatten()[used_rays]
+        selected_theta = theta_ray.flatten()[used_rays]
+        selected_radius = geometry.solve_rays(geometry.rays(selected_phi, selected_theta), level)
+        boundary_ray = selected_radius.new_zeros(rays).scatter(0, used_rays, selected_radius)
+        boundary_ray = boundary_ray.reshape(c.volume_phi_count, c.volume_theta_count)
     boundary = boundary_ray[ip, it]
     phi, theta = phi_ray[ip, it], theta_ray[ip, it]
     fraction = (c.volume_rho_min ** 2 + (1 - c.volume_rho_min ** 2)
@@ -227,7 +266,7 @@ def volume_points(geometry, level: Tensor, flux: Mapping, config: DownstreamConf
 
 
 @lru_cache(maxsize=16)
-def clebsch_modes(radial_order, poloidal_order, toroidal_order):
+def clebsch_modes(radial_order, poloidal_order, toroidal_order, radial_basis='zernike'):
     """Exactly score_pipeline.cu::build_clebsch_modes_native ordering."""
     ms, ns, kinds, radial = [], [], [], []
     for m in range(min(radial_order, poloidal_order) + 1):
@@ -236,10 +275,8 @@ def clebsch_modes(radial_order, poloidal_order, toroidal_order):
                 for kind in range(2):
                     ms.append(m); ns.append(n); kinds.append(kind)
                     row = [0.] * (radial_order + 1)
-                    for k in range((ell - m) // 2 + 1):
-                        row[ell - 2 * k] = ((-1) ** k * math.factorial(ell - k)
-                            / (math.factorial(k) * math.factorial((ell + m) // 2 - k)
-                               * math.factorial((ell - m) // 2 - k)))
+                    for power,coefficient in radial_polynomial(ell,m,radial_basis):
+                        row[power]=coefficient
                     radial.append(row)
     return tuple(ms), tuple(ns), tuple(kinds), tuple(tuple(r) for r in radial)
 
@@ -306,7 +343,7 @@ def frozen_pcgls(A: Tensor, b: Tensor, cache: Mapping, ridge: float, iterations=
     """Reverse the actual fixed-step native recurrence; no converged-solve substitution."""
     upper = cache['upper'].to(device=A.device, dtype=A.dtype).detach()
     x = cache['scaled_solution'].to(device=A.device, dtype=A.dtype).detach()
-    penalty=(torch.linalg.vector_norm(A,dim=0,dtype=torch.float64).clamp_min(1e-20).to(A.dtype).square()
+    penalty=(column_norms(A).clamp_min(1e-20).to(A.dtype).square()
              if live_column_scale else 1.)
     def tri(v, transposed=False):
         return torch.linalg.solve_triangular(upper.T if transposed else upper,
@@ -369,7 +406,8 @@ def alpha_fit(points: Mapping, B: Tensor, cache: Mapping, config: DownstreamConf
         weight = counts[bins].clamp_min(1).to(B.dtype).rsqrt() / field_norm2.clamp_min(1e-30).sqrt()
         weight = weight * (nf / weight.double().square().sum()).sqrt().to(weight.dtype)
     else:raise ValueError('alpha_radial_weighting must be histogram or smooth')
-    mode_lists = clebsch_modes(c.alpha_radial_order, c.alpha_poloidal_order, c.alpha_toroidal_order)
+    mode_lists = clebsch_modes(c.alpha_radial_order, c.alpha_poloidal_order, c.alpha_toroidal_order,
+                              c.alpha_radial_basis)
     metadata = tuple(torch.as_tensor(v, device=B.device, dtype=B.dtype) for v in mode_lists)
     mode_count = len(mode_lists[0])
     scale = cache['scale'].to(device=B.device, dtype=B.dtype).detach()
@@ -462,7 +500,18 @@ def downstream(geometry, level: Tensor, alpha_cache: Mapping, field: Callable,
                trace: Callable, potential: Callable | None, config: DownstreamConfig,
                *, return_arrays=False):
     flux = flux_calibration(geometry, level, field, potential, config)
-    points = volume_points(geometry, level, flux, config)
+    from .flux_validation import stokes_check
+    if config.stokes_flux:
+        use_area, flux_validation = stokes_check(
+            flux, level, alpha_cache, config.stokes_validation_rtol)
+        if use_area:
+            flux = flux_calibration(geometry, level, field, potential,
+                                    replace(config, stokes_flux=False))
+    else:
+        flux_validation = dict(method='area', validation='not_requested', fallback=False)
+    points = volume_points(geometry, level, flux, config,
+                           source_indices=alpha_cache.get('volume_source_indices'),
+                           sampling_shape=alpha_cache.get('volume_sampling_shape'))
     B, gradB = field(points['xyz'], gradient=True)
     alpha = alpha_fit(points, B, alpha_cache, config)
     G = vacuum_G(geometry, level, flux['edge_flux'], field, config)
@@ -471,6 +520,7 @@ def downstream(geometry, level: Tensor, alpha_cache: Mapping, field: Callable,
     result = {**qs, **quality, **alpha, 'surface_volume': flux['surface_volume'],
               'surface_level': level, 'flux_edge': flux['edge_flux'],
               'flux_coefficients': flux['coefficients'], 'major_radius': flux['major_radius']}
+    result['flux_validation'] = flux_validation
     if return_arrays:
         result.update(points=points, B=B, gradB=gradB, flux_sections=flux['sections'])
     return result

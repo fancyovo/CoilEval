@@ -230,6 +230,7 @@ __global__ void local_batch_reduce_flux_sections_kernel(
 
 __global__ void local_batch_generate_volume_points_kernel(
     const float* __restrict__ boundary_radii,
+    const int* __restrict__ source_indices,
     int query_count,
     int n_phi,
     int n_theta,
@@ -270,9 +271,9 @@ __global__ void local_batch_generate_volume_points_kernel(
     const int query = static_cast<int>(flat / output_count);
     const int output_index = static_cast<int>(flat - static_cast<size_t>(query) * output_count);
     const int candidate_count = n_phi * n_theta * n_radial;
-    int source = min(candidate_count - 1, static_cast<int>(
-        static_cast<long long>(output_index) * candidate_count / output_count
-    ));
+    int source = source_indices ? source_indices[output_index] :
+        min(candidate_count - 1, static_cast<int>(
+            static_cast<long long>(output_index) * candidate_count / output_count));
     const int radial_index = source % n_radial;
     source /= n_radial;
     const int theta_index = source % n_theta;
