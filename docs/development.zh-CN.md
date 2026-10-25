@@ -31,16 +31,33 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 | 目录 | 职责 |
 | --- | --- |
 | `src/coil_eval` | Python API、结果、配置和原生接口 |
+| `src/coil_eval/_two_stage` | 闭合区域几何、采样和两阶段原生求值编排 |
+| `src/coil_eval/_autograd` | 局部磁场、追踪、拟合及下游反传算子 |
+| `src/coil_eval/simsopt` | 源记录、初始值、标准求解与参考 QS |
 | `native/src/field` | 线圈离散、磁场、追踪和 psi 拟合 |
 | `native/src/pipeline` | 磁轴、目标磁面、磁通、alpha、QS 和近邻求值 |
 | `native/include` | 共享类型与模块接口 |
+| `native/src/autograd` | 可选 Tensor 接口的 CUDA 算子 |
 | `tests` | API、数值 oracle 和源码结构测试 |
 | `examples` | 求值与自定义目标示例 |
 
 实现文件独立编译；头文件声明接口、共享类型和小型内联函数。
 磁场状态由 `field/state.cpp` 管理，求值会话状态由 `pipeline/session_state.cu` 管理。
 采用新增配置项和方法保持兼容；更新 CHANGELOG 和中英文文档。
-版本标签为 `v` 加包版本号，预发布版本使用 `0.3.0a1` 等 Python 版本形式。
+版本标签为 `v` 加包版本号，预发布版本使用 `0.4.0a1` 等 Python 版本形式。
 旧标签保留用于复现安装。
 
 可选包 `src/coil_eval/_autograd` 按磁场、追踪、前端拟合和下游指标划分算子，`native/src/autograd` 提供 CUDA 核。`src/coil_eval/torch.py` 提供公开 Tensor API。安装 PyTorch 可运行数学算子测试。测试已安装的 wheel 时设置 `COIL_EVAL_TEST_INSTALLED=1`。
+
+## 数值修改
+
+保留 `single_stage` 默认行为的兼容性。通过 `EvaluationConfig` 增加拟合或采样选项，
+保持单位和参数顺序。修改 Fourier 参数处理时，同时验证 4 阶与更高阶输入。
+
+两阶段采样器提供坐标、采样选择和最小二乘行权重；原生拟合与局部反传算子应使用一致的
+记录。先用有针对性的 CPU 参考测试检查几何与导数，再用 GPU 检查数值、各指标梯度方向
+与范数变化。验证组合目标时，分别检查坐标参数块与电流参数块。
+
+Simsopt 测试分别检查初始磁面几何、标准 LS/Newton 的接受状态与参考 f_C。
+序列化时保留源与初始值的类型标记。性能改动需要测量单次调用和独立批量场景，
+并随结果说明拟合、采样与精度设置。

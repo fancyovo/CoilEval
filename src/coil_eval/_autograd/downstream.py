@@ -42,6 +42,9 @@ class DownstreamConfig:
     target_quality_temperature: float = .0025
     target_quality_weight: float = 10000.
     stokes_flux: bool = True
+    alpha_radial_weighting: str = 'histogram'
+    alpha_weight_sigma: float = .05
+    alpha_count_floor: float = 32.
 
     @classmethod
     def from_mapping(cls, source: Mapping):
@@ -63,6 +66,60 @@ def polynomial(coefficients: Tensor, x: Tensor, *, constant=False):
     for c in coefficients.flip(-1).unbind(-1):
         result = result * x + c
     return result if constant else result * x
+
+
+def iota_profile_extrema(coefficients: Tensor, volume_rho_min):
+    """Native profile extrema on 257 uniformly spaced u=rho² samples.
+
+    The C++ evaluator samples u_min..1 at indices 0..256; it does not search
+    polynomial stationary points. The first minimum/maximum wins a tie, also
+    matching constant and lower-degree profiles. Coefficients stay live while
+    the selected sample is the local discrete branch. Leading batch dimensions
+    and independent per-query lower radii are supported.
+    """
+    if coefficients.ndim<1 or coefficients.shape[-1]<1:
+        raise ValueError('iota polynomial needs at least its constant coefficient')
+    coefficient=coefficients.double()
+    lower=torch.as_tensor(volume_rho_min,device=coefficient.device,dtype=torch.float64).detach()
+    shape=torch.broadcast_shapes(coefficient.shape[:-1],lower.shape)
+    coefficient=coefficient.expand(*shape,coefficient.shape[-1])
+    lower=lower.expand(shape)
+    u_min=lower.square()
+    fraction=torch.arange(257,device=coefficient.device,dtype=torch.float64)/256.
+    u=u_min[...,None]+(1-u_min[...,None])*fraction
+    values=torch.zeros_like(u);power=torch.ones_like(u)
+    # Native host arithmetic promotes each fitted FP32 coefficient to FP64
+    # and accumulates ascending powers, rather than evaluating with Horner.
+    for term in coefficient.unbind(-1):
+        values=values+term[...,None]*power
+        power=power*u
+    # dim-wise min/max route the gradient through the first selected index;
+    # torch.amin/amax would instead average the gradient among equal extrema.
+    return dict(iota_min=values.min(dim=-1).values,iota_max=values.max(dim=-1).values)
+
+
+def outer_qs_rms(residual: Tensor,weight: Tensor,rho: Tensor,
+                 config: DownstreamConfig,*,volume_rho_min=None):
+    """Native final radial-bin RMS, preserving every selected point weight.
+
+    Membership compares native FP32 rho against an FP32 threshold computed
+    from the configured lower rho. It is a fixed local branch; residual and
+    volume weights remain live. Empty/zero-residual outer sets have zero VJP,
+    matching the native adjoint's zero-denominator/zero-RMS handling.
+    """
+    if config.radial_bin_count<1:
+        raise ValueError('QS radial bin count must be positive')
+    lower=config.volume_rho_min if volume_rho_min is None else volume_rho_min
+    lower=torch.as_tensor(lower,device=residual.device,dtype=torch.float64).detach()
+    threshold=(lower+(1-lower)*(config.radial_bin_count-1)/config.radial_bin_count).float()
+    selected=rho.detach().float()>=threshold[...,None]
+    outer_weight=torch.where(selected,weight,torch.zeros_like(weight))
+    denominator=outer_weight.sum(-1)
+    numerator=(outer_weight*residual.square()).sum(-1)
+    mean=numerator/torch.where(denominator>0,denominator,torch.ones_like(denominator))
+    positive=(denominator>0)&(mean.detach()>0)
+    safe_mean=torch.where(positive,mean,torch.ones_like(mean))
+    return torch.where(positive,safe_mean.sqrt(),torch.zeros_like(mean))
 
 
 def flux_calibration(geometry, level: Tensor, field: Callable,
@@ -244,30 +301,50 @@ class _AlphaDesign(torch.autograd.Function):
         return (*grads, None, None, None, None, None)
 
 
-def frozen_pcgls(A: Tensor, b: Tensor, cache: Mapping, ridge: float, iterations=4):
+def frozen_pcgls(A: Tensor, b: Tensor, cache: Mapping, ridge: float, iterations=4,
+                 *, live_column_scale=False):
     """Reverse the actual fixed-step native recurrence; no converged-solve substitution."""
     upper = cache['upper'].to(device=A.device, dtype=A.dtype).detach()
     x = cache['scaled_solution'].to(device=A.device, dtype=A.dtype).detach()
+    penalty=(torch.linalg.vector_norm(A,dim=0,dtype=torch.float64).clamp_min(1e-20).to(A.dtype).square()
+             if live_column_scale else 1.)
     def tri(v, transposed=False):
         return torch.linalg.solve_triangular(upper.T if transposed else upper,
                    v[:, None], upper=not transposed).squeeze(-1)
     residual = b - A @ x
-    normal = tri(A.T @ residual - ridge * x, True)
+    normal = tri(A.T @ residual - ridge * penalty * x, True)
     direction = normal
     gamma = normal.square().sum()
     for iteration in range(iterations):
         transformed = tri(direction)
         image = A @ transformed
-        delta = image.square().sum() + ridge * transformed.square().sum()
+        ridge_norm=((penalty*transformed.square()).sum() if live_column_scale else transformed.square().sum())
+        delta = image.square().sum() + ridge * ridge_norm
         step = gamma / delta.clamp_min(1e-30)
         x = x + step * transformed
         residual = residual - step * image
         if iteration + 1 < iterations:
-            normal = tri(A.T @ residual - ridge * x, True)
+            normal = tri(A.T @ residual - ridge * penalty * x, True)
             new_gamma = normal.square().sum()
             direction = normal + new_gamma / gamma.clamp_min(1e-30) * direction
             gamma = new_gamma
     return x, residual
+
+
+def smooth_alpha_weights(rho: Tensor, field_norm2: Tensor, config: DownstreamConfig):
+    """Live Gaussian radial density balance; independent leading batch axes."""
+    c=config
+    if c.radial_bin_count<1 or c.alpha_weight_sigma<=0 or c.alpha_count_floor<=0:
+        raise ValueError('smooth alpha density needs positive bins, sigma and count floor')
+    centers=(torch.arange(c.radial_bin_count,device=rho.device,dtype=torch.float64)+.5)/c.radial_bin_count
+    distance=(rho.double()[...,None]-centers)/c.alpha_weight_sigma
+    kernels=torch.exp(-.5*distance.square())
+    counts=kernels.sum(-2)
+    balance=(kernels/(counts[...,None,:]+c.alpha_count_floor)).sum(-1)
+    raw=(balance.sqrt()/field_norm2.clamp_min(1e-30).sqrt().double()).to(rho.dtype)
+    # Native normalizes the cast FP32 weights, with a final FP32 square root.
+    normalization=(rho.shape[-1]/raw.double().square().sum(-1,keepdim=True)).to(raw.dtype).sqrt()
+    return raw*normalization,counts
 
 
 def alpha_fit(points: Mapping, B: Tensor, cache: Mapping, config: DownstreamConfig):
@@ -284,10 +361,14 @@ def alpha_fit(points: Mapping, B: Tensor, cache: Mapping, config: DownstreamConf
     normal_B = normal_coeff[:, None] * gs
     tangent = field - normal_B
     bt, bp = (tangent * gt).sum(-1), (tangent * gp).sum(-1)
-    bins = (rho.detach() * c.radial_bin_count).to(torch.long).clamp(0, c.radial_bin_count - 1)
-    counts = torch.bincount(bins, minlength=c.radial_bin_count)
-    weight = counts[bins].clamp_min(1).to(B.dtype).rsqrt() / field_norm2.clamp_min(1e-30).sqrt()
-    weight = weight * (nf / weight.double().square().sum()).sqrt().to(weight.dtype)
+    if c.alpha_radial_weighting=='smooth':
+        weight,counts=smooth_alpha_weights(rho,field_norm2,c)
+    elif c.alpha_radial_weighting=='histogram':
+        bins = (rho.detach() * c.radial_bin_count).to(torch.long).clamp(0, c.radial_bin_count - 1)
+        counts = torch.bincount(bins, minlength=c.radial_bin_count)
+        weight = counts[bins].clamp_min(1).to(B.dtype).rsqrt() / field_norm2.clamp_min(1e-30).sqrt()
+        weight = weight * (nf / weight.double().square().sum()).sqrt().to(weight.dtype)
+    else:raise ValueError('alpha_radial_weighting must be histogram or smooth')
     mode_lists = clebsch_modes(c.alpha_radial_order, c.alpha_poloidal_order, c.alpha_toroidal_order)
     metadata = tuple(torch.as_tensor(v, device=B.device, dtype=B.dtype) for v in mode_lists)
     mode_count = len(mode_lists[0])
@@ -297,9 +378,11 @@ def alpha_fit(points: Mapping, B: Tensor, cache: Mapping, config: DownstreamConf
     A = _AlphaDesign.apply(rho, theta, phi, bt, bp, weight, scale, metadata,
                           c.nfp, c.iota_degree, c.alpha_chunk_columns)
     rhs = -weight * bt
-    solution, residual = frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations)
+    solution, residual = frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations,
+        live_column_scale=c.alpha_radial_weighting=='smooth')
     iota = solution[mode_count:] / scale[mode_count:]
     return dict(iota_coefficients=iota, iota_boundary=iota.sum(),
+                **iota_profile_extrema(iota,c.volume_rho_min),
                 normal_B_relative_l2=(normal_B.double().square().sum() / field.double().square().sum()).sqrt(),
                 relative_l2=residual.double().norm() / rhs.double().norm(),
                 bin_counts=counts.detach(), alpha_column_count=scale.numel())
@@ -333,7 +416,9 @@ def qs_metric(points: Mapping, B: Tensor, gradB: Tensor, iota: Tensor, G: Tensor
     weight = points['volume_weight'].to(B.dtype).double()
     rms = ((weight * residual.square()).sum() / weight.sum()).sqrt()
     norm = max(math.hypot(config.target_M, config.target_N), 1.)
-    return dict(raw_qs=rms / norm, qs_global_error=rms, qs_vacuum_G=G,
+    outer=outer_qs_rms(residual,weight,points['rho'],config)
+    return dict(raw_qs=rms / norm, raw_qs_outer=outer/norm,
+                qs_global_error=rms, qs_edge_error=outer, qs_vacuum_G=G,
                 qs_loss=torch.log(rms / norm + 1e-8))
 
 

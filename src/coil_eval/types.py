@@ -135,10 +135,11 @@ class LocalMetrics:
     current_abs_max: float
     coil_curvature_p95: float | None = None
     high_mode_fraction: float | None = None
+    psi_fit_rms: float | None = None
 
     def __post_init__(self):
         for name, value in asdict(self).items():
-            if value is None and name not in {"coil_curvature_p95", "high_mode_fraction"}:
+            if value is None and name not in {"coil_curvature_p95", "high_mode_fraction", "psi_fit_rms"}:
                 raise ValueError(f"metric {name} is required")
             if value is not None:
                 if not np.isfinite(value):

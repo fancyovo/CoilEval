@@ -38,8 +38,35 @@ _METRIC_FIELDS = {
     "coil_gap_min": "coil_min_intercoil_distance", "coil_radius_min": "coil_min_axis_distance",
     "current_abs_max": "coil_current_abs_max_a", "coil_curvature_p95": "coil_curvature_p95",
     "high_mode_fraction": "coil_high_mode_energy_fraction",
+    "psi_fit_rms": "psi_train_rms",
 }
-_OPTIONAL = {"coil_curvature_p95", "high_mode_fraction"}
+_OPTIONAL = {"coil_curvature_p95", "high_mode_fraction", "psi_fit_rms"}
+
+
+def _decode_result(raw, config, *, mode="independent", context=None):
+    """Convert a native record without creating or advancing a session."""
+    status = str(raw.get("status", "internal_error"))
+    d = {k: v for k, v in raw.get("diagnostics", {}).items()
+         if not k.startswith("score") and k not in {"abi_version", "struct_size", "status", "target_volume_cache_id"}}
+    for k in list(d):
+        if "verified" in k or "strict" in k or "stable" in k:
+            del d[k]
+    metrics = None
+    if status == "ok":
+        try:
+            metrics = LocalMetrics(**{name: d.get(key) if name in _OPTIONAL else d[key]
+                                      for name, key in _METRIC_FIELDS.items()})
+        except (KeyError, TypeError, ValueError) as exc:
+            status = "invalid_metrics"
+            d["metric_error"] = str(exc)
+    d.update({"configuration": config.to_dict(), "trace_periods": 1, "full_physical_evaluation": "not_run",
+              "geometry_model": "formal" if mode == "independent" else "center_linearized"})
+    if metrics is not None:
+        d["quality_threshold_pass"] = metrics.relative_normal_drift_p95 <= 0.01
+    timing = {"native": raw.get("timing", {})}
+    if "local_timing" in raw:
+        timing["shared_local_batch"] = raw["local_timing"]
+    return EvaluationResult(status, metrics, d, timing, mode, context)
 
 
 @dataclass(frozen=True)
@@ -94,29 +121,7 @@ class Evaluator:
             raise
 
     def _result(self, raw, *, mode="independent", context=None):
-        status = str(raw.get("status", "internal_error"))
-        # Legacy aggregate scores and ABI verification flags are private backend data.
-        d = {k: v for k, v in raw.get("diagnostics", {}).items()
-             if not k.startswith("score") and k not in {"abi_version", "struct_size", "status", "target_volume_cache_id"}}
-        for k in list(d):
-            if "verified" in k or "strict" in k or "stable" in k:
-                del d[k]
-        metrics = None
-        if status == "ok":
-            try:
-                metrics = LocalMetrics(**{name: d.get(key) if name in _OPTIONAL else d[key]
-                                          for name, key in _METRIC_FIELDS.items()})
-            except (KeyError, TypeError, ValueError) as exc:
-                status = "invalid_metrics"
-                d["metric_error"] = str(exc)
-        d.update({"configuration": self.config.to_dict(), "trace_periods": 1, "full_physical_evaluation": "not_run",
-                  "geometry_model": "formal" if mode == "independent" else "center_linearized"})
-        if metrics is not None:
-            d["quality_threshold_pass"] = metrics.relative_normal_drift_p95 <= 0.01
-        timing = {"native": raw.get("timing", {})}
-        if "local_timing" in raw:
-            timing["shared_local_batch"] = raw["local_timing"]
-        return EvaluationResult(status, metrics, d, timing, mode, context)
+        return _decode_result(raw, self.config, mode=mode, context=context)
 
     def evaluate(self, coils: CoilSet) -> EvaluationResult:
         self._check_session()

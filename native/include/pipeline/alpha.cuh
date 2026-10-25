@@ -5,6 +5,13 @@
 
 namespace coil_eval::pipeline {
 
+struct AlphaRadialWeightingOptions {
+    int mode = 0;  // 0: compatible hard histogram, 1: smooth density balance.
+    double sigma = 0.05;
+    double count_floor = 32.0;
+};
+extern thread_local AlphaRadialWeightingOptions g_alpha_radial_weighting;
+
 struct ClebschModesNative {
     std::vector<int> l;
     std::vector<int> m;
@@ -22,6 +29,10 @@ struct AlphaFitNative {
     int mode_count = 0;
     int fit_count = 0;
     int qr_rows = 0;
+    int radial_weighting_mode = 0;
+    double radial_weight_sigma = 0.05;
+    double radial_count_floor = 32.0;
+    std::vector<double> radial_soft_counts;
     double residual_norm = 0.0;
     double rhs_norm = 0.0;
     double weight_norm2 = 0.0;

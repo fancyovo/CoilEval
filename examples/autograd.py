@@ -9,13 +9,16 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--library',help='Optional path to a custom native backend')
     parser.add_argument('--batch',action='store_true')
+    parser.add_argument('--coils',type=Path,default=Path(__file__).with_name('coils.json'))
+    parser.add_argument('--two-stage',action='store_true')
     args=parser.parse_args()
-    coils=CoilSet.read_json(Path(__file__).with_name('coils.json'))
+    coils=CoilSet.read_json(args.coils)
     x=pack_coils(coils)
-    config=EvaluationConfig(target_volume=.05,fast=True,flux_method='stokes')
+    config=EvaluationConfig(target_volume=.05,fast=True,flux_method='stokes',
+                            psi_fit='two_stage' if args.two_stage else 'single_stage')
     with TensorEvaluator(args.library,config=config) as ev:
         if args.batch:
-            other=x.clone();other[:,27]*=1.1
+            other=x.clone();other[:,-1]*=1.1
             result=ev.evaluate_batch(torch.stack((x,other)))
         else:
             result=ev.evaluate(x)

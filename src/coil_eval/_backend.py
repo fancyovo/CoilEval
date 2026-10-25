@@ -84,6 +84,9 @@ class NativeBackend:
         self._active_batch: BatchCoilFieldGpu | None = None
 
     def evaluate(self, coils: Any, config: Any) -> dict[str, Any]:
+        if config.psi_fit == "two_stage":
+            from ._two_stage.native import TwoStageNative
+            return TwoStageNative(self.library,self.device_id).evaluate(coils,config)[0]
         arrays = _coil_arrays(coils)
         options = dict(config.native_options())
         options["segments_per_coil"] = int(config.segments_per_coil)
@@ -114,6 +117,22 @@ class NativeBackend:
         candidates = list(candidates)
         if not candidates:
             return []
+        if config.psi_fit == "two_stage":
+            from ._two_stage.native import TwoStageNative
+            if (config.psi_nearby_method=="local" and config.fast and config.flux_method=="stokes"
+                    and tuple(config.helicity)==(1,4) and coils.nfp==4 and coils.n_base_coils==4):
+                try:
+                    import torch
+                except ImportError:
+                    torch=None
+                if torch is not None and torch.version.cuda is not None:
+                    from ._two_stage.local import nearby
+                    return nearby(self,coils,candidates,center_raw,config)
+            driver=TwoStageNative(self.library,self.device_id)
+            axis=_center_axis(center_raw)
+            # Formal independent reconstruction is the initial correctness
+            # oracle. Optimized local neighborhoods are measured separately.
+            return [driver.evaluate(candidate,config,axis_hint=axis)[0] for candidate in candidates]
         if self._active_batch is not None:
             raise RuntimeError("native neighborhood calls must not overlap")
         total_started = perf_counter()

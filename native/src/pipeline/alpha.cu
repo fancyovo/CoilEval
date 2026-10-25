@@ -130,6 +130,113 @@ __global__ void alpha_prepare_kernel(
     atomic_add_double(diagnostics + 2, static_cast<double>(field_norm2));
 }
 
+// Fixed-shape FP64 partial reductions avoid histogram edges and atomic-order noise.
+__global__ void alpha_soft_count_partials_kernel(
+    const float* rho,int point_count,int fit_count,int radial_bins,double sigma,
+    int partial_count,double* partials
+) {
+    extern __shared__ double sums[];
+    const int index=blockIdx.x*blockDim.x+threadIdx.x;
+    const int bin=blockIdx.y;
+    double value=0.;
+    if (index<fit_count) {
+        const int point=min(point_count-1,static_cast<int>(
+            (static_cast<long long>(index)*point_count)/fit_count));
+        const double distance=(static_cast<double>(rho[point])-(bin+0.5)/radial_bins)/sigma;
+        value=exp(-0.5*distance*distance);
+    }
+    sums[threadIdx.x]=value;__syncthreads();
+    for (int stride=blockDim.x/2;stride>0;stride>>=1) {
+        if (threadIdx.x<stride) sums[threadIdx.x]+=sums[threadIdx.x+stride];
+        __syncthreads();
+    }
+    if (threadIdx.x==0) partials[static_cast<size_t>(bin)*partial_count+blockIdx.x]=sums[0];
+}
+
+__global__ void alpha_soft_count_reduce_kernel(
+    const double* partials,int partial_count,double* counts
+) {
+    extern __shared__ double sums[];
+    double value=0.;
+    for (int index=threadIdx.x;index<partial_count;index+=blockDim.x)
+        value+=partials[static_cast<size_t>(blockIdx.x)*partial_count+index];
+    sums[threadIdx.x]=value;__syncthreads();
+    for (int stride=blockDim.x/2;stride>0;stride>>=1) {
+        if (threadIdx.x<stride) sums[threadIdx.x]+=sums[threadIdx.x+stride];
+        __syncthreads();
+    }
+    if (threadIdx.x==0) counts[blockIdx.x]=sums[0];
+}
+
+__global__ void alpha_prepare_smooth_kernel(
+    const float* __restrict__ B,
+    const float* __restrict__ grad_s,
+    const float* __restrict__ grad_theta,
+    const float* __restrict__ grad_phi,
+    const float* __restrict__ source_rho,
+    const float* __restrict__ source_theta,
+    const float* __restrict__ source_phi,
+    int point_count,
+    int fit_count,
+    int radial_bins,
+    const double* __restrict__ soft_counts,
+    double sigma,
+    double count_floor,
+    float* __restrict__ b_theta,
+    float* __restrict__ b_phi,
+    float* __restrict__ weights,
+    float* __restrict__ rho,
+    float* __restrict__ theta,
+    float* __restrict__ phi,
+    double* __restrict__ diagnostics
+) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= fit_count) return;
+    const int point = min(
+        point_count - 1,
+        static_cast<int>((static_cast<long long>(index) * point_count) / fit_count)
+    );
+    float grad_norm2 = 0.0f;
+    float field_dot_grad = 0.0f;
+    float field_norm2 = 0.0f;
+    for (int component = 0; component < 3; ++component) {
+        const float field = B[3 * point + component];
+        const float gradient = grad_s[3 * point + component];
+        grad_norm2 += gradient * gradient;
+        field_dot_grad += field * gradient;
+        field_norm2 += field * field;
+    }
+    const float normal_coefficient = field_dot_grad / fmaxf(grad_norm2, 1.0e-30f);
+    float along_theta = 0.0f;
+    float along_phi = 0.0f;
+    float normal_norm2 = 0.0f;
+    for (int component = 0; component < 3; ++component) {
+        const float normal = normal_coefficient * grad_s[3 * point + component];
+        const float tangent = B[3 * point + component] - normal;
+        along_theta += tangent * grad_theta[3 * point + component];
+        along_phi += tangent * grad_phi[3 * point + component];
+        normal_norm2 += normal * normal;
+    }
+    const float radial = source_rho[point];
+    const float field_norm = sqrtf(fmaxf(field_norm2, 1.0e-30f));
+    double balance=0.;
+    for (int radial_bin=0;radial_bin<radial_bins;++radial_bin) {
+        const double center=(radial_bin+0.5)/radial_bins;
+        const double distance=(static_cast<double>(radial)-center)/sigma;
+        balance+=exp(-0.5*distance*distance)/(soft_counts[radial_bin]+count_floor);
+    }
+    const float weight=static_cast<float>(sqrt(balance)/static_cast<double>(field_norm));
+    b_theta[index] = along_theta;
+    b_phi[index] = along_phi;
+    weights[index] = weight;
+    rho[index] = radial;
+    theta[index] = source_theta[point];
+    phi[index] = source_phi[point];
+    atomic_add_double(diagnostics, static_cast<double>(weight) * weight);
+    atomic_add_double(diagnostics + 1, static_cast<double>(normal_norm2));
+    atomic_add_double(diagnostics + 2, static_cast<double>(field_norm2));
+}
+
 __global__ void normalize_alpha_weights_kernel(
     float* __restrict__ weights,
     int count,
@@ -247,6 +354,13 @@ bool fit_alpha_native(
     SgpuScoreResult& result
 ) {
     const auto assembly_started = Clock::now();
+    const auto weighting=g_alpha_radial_weighting;
+    const bool smooth=weighting.mode==1;
+    fit.radial_weighting_mode=weighting.mode;
+    fit.radial_weight_sigma=weighting.sigma;
+    fit.radial_count_floor=weighting.count_floor;
+    fit.radial_soft_counts.clear();
+
     const int fit_count = std::min(config.alpha_fit_point_count, points.count);
     const ClebschModesNative modes = build_clebsch_modes_native(
         config.alpha_radial_order,
@@ -279,6 +393,27 @@ bool fit_alpha_native(
     cudaMemset(d_bin_counts.data(), 0, d_bin_counts.size() * sizeof(int));
     cudaMemset(d_diagnostics.data(), 0, d_diagnostics.size() * sizeof(double));
     constexpr int threads = 256;
+    DeviceBuffer<double> d_soft_counts, d_soft_partials;
+    if (smooth) {
+        const int partial_count=(fit_count+threads-1)/threads;
+        if (!d_soft_counts.allocate(config.radial_bin_count) ||
+            !d_soft_partials.allocate(static_cast<size_t>(config.radial_bin_count)*partial_count)) {
+            fail_result(&result,"alpha smooth density allocation failed"); return false;
+        }
+        alpha_soft_count_partials_kernel<<<dim3(partial_count,config.radial_bin_count),threads,threads*sizeof(double)>>>(
+            points.rho.data(),points.count,fit_count,config.radial_bin_count,weighting.sigma,
+            partial_count,d_soft_partials.data());
+        alpha_soft_count_reduce_kernel<<<config.radial_bin_count,threads,threads*sizeof(double)>>>(
+            d_soft_partials.data(),partial_count,d_soft_counts.data());
+        alpha_prepare_smooth_kernel<<<(fit_count+threads-1)/threads,threads>>>(
+            d_B,points.grad_s.data(),points.grad_theta.data(),points.grad_phi.data(),
+            points.rho.data(),points.theta.data(),points.phi.data(),points.count,fit_count,
+            config.radial_bin_count,d_soft_counts.data(),weighting.sigma,weighting.count_floor,
+            d_b_theta.data(),d_b_phi.data(),d_weights.data(),d_rho.data(),d_theta.data(),d_phi.data(),d_diagnostics.data());
+        fit.radial_soft_counts.resize(config.radial_bin_count);
+        if (!cuda_stage_ok(cudaMemcpy(fit.radial_soft_counts.data(),d_soft_counts.data(),
+                config.radial_bin_count*sizeof(double),cudaMemcpyDeviceToHost),result,"alpha soft counts")) return false;
+    } else {
     alpha_radial_histogram_kernel<<<(fit_count + threads - 1) / threads, threads>>>(
         points.rho.data(), points.count, fit_count, config.radial_bin_count, d_bin_counts.data()
     );
@@ -288,6 +423,7 @@ bool fit_alpha_native(
         config.radial_bin_count, d_bin_counts.data(), d_b_theta.data(), d_b_phi.data(),
         d_weights.data(), d_rho.data(), d_theta.data(), d_phi.data(), d_diagnostics.data()
     );
+    }
     std::array<double, 3> diagnostics{};
     if (!cuda_stage_ok(cudaMemcpy(diagnostics.data(), d_diagnostics.data(), sizeof(diagnostics), cudaMemcpyDeviceToHost), result, "alpha diagnostics") ||
         !cuda_stage_ok(cudaMemset(d_matrix.data(), 0, d_matrix.size() * sizeof(float)), result, "alpha matrix clear")) {

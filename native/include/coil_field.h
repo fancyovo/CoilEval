@@ -806,6 +806,37 @@ int sgpu_fit_psi_fullgpu(
     int stats_len
 );
 
+// Positive data-row weights with mean one; RMS uses sum(w*r*r)/n_points.
+int sgpu_fit_psi_fullgpu_weighted(
+    void* handle,
+    const double* R_host,
+    const double* Z_host,
+    const double* phi_host,
+    int n_points,
+    const double* row_weights_host,
+    const double* axis_R_host,
+    const double* axis_Z_host,
+    const double* axis_R_phi_host,
+    const double* axis_Z_phi_host,
+    int n_axis,
+    const int* mode_a_host,
+    const int* mode_b_host,
+    const int* mode_m_host,
+    const int* mode_kind_host,
+    int n_coeff,
+    int nfp,
+    double a,
+    int poly_degree,
+    int m_tor,
+    double ridge,
+    int solver_mode,
+    int precision_mode,
+    double* coeff_host,
+    double* train_rms_out,
+    double* stats_out,
+    int stats_len
+);
+
 int sgpu_surface_points_from_level(
     const double* coeff_host,
     const int* mode_a_host,

@@ -7,7 +7,7 @@
 Create or activate a Python 3.10+ environment, then install the release wheel:
 
 ```sh
-python -m pip install ./coil_eval-0.3.0a3-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 Pip installs a matched, version-pinned CUDA 12.8 runtime set as dependencies.
@@ -44,6 +44,17 @@ python examples/autograd.py --batch
 The examples live in the source checkout. `coil_eval.torch` is optional;
 ordinary `coil_eval` imports use NumPy. A newer PyTorch release can also be
 used when its CUDA build supports the host driver and GPU.
+
+## Simsopt
+
+For the optional surface workflow, install the wheel with its `simsopt` extra:
+
+```sh
+python -m pip install "./coil_eval-0.4.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+```
+
+This installs Simsopt and SciPy. The [Simsopt guide](simsopt.md) shows GPU
+initialization and CPU-only surface solves.
 
 ## Build from source
 

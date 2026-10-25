@@ -148,6 +148,7 @@ class FrontTests(unittest.TestCase):
             def __init__(self,A): self.A,self.rhs=A,rhs
             def apply(self,c): return self.A@c
             def transpose(self,r): return self.A.T@r
+            def column_norms(self): return self.A.square().sum(0).sqrt()
         def value(t):
             result,_ = four_step_pcgls(Operator(A0+t*direction),c0,scale,upper)
             return result.square().sum()

@@ -55,6 +55,7 @@ add_library(coil_eval_native SHARED
     src/pipeline/target_volume.cu
     src/pipeline/session_state.cu
     src/pipeline/reverse_capture.cu
+    src/pipeline/two_stage.cu
     src/pipeline/api.cu
     src/pipeline/legacy_abi.cu
 )

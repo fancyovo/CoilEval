@@ -6,7 +6,7 @@ import math
 import torch
 
 from .front import (PsiGeometry,monomials,periodic_hermite,_trig,
-                               _coefficient_matrix,predict_target_level)
+                               _coefficient_matrix,predict_target_level,_tensor_product_column_norms,_frozen_fit_tensor)
 
 
 def differentiable_batch_axis(field,captured_starts,*,nfp=4,trace_steps=240,
@@ -107,25 +107,33 @@ class BatchTensorProductPsiOperator:
         C=self.PR.T@(cr*rows)@self.T+self.PZ.T@(cz*rows)@self.T+self.P.T@(cp*rows)@self.Tp
         return C.flatten(1)[:,1:]
 
+    def column_norms(self):
+        return _tensor_product_column_norms(self.features,self.PR,self.PZ,self.P,self.T,self.Tp)
 
-def batch_four_step_pcgls(operator,coefficients,scales,uppers,*,ridge=1e-6,iterations=4):
+
+def batch_four_step_pcgls(operator,coefficients,scales,uppers,*,ridge=1e-6,iterations=4,
+                           live_column_scale=False):
     dtype,device=operator.rhs.dtype,operator.rhs.device
-    c0,scale,upper=[torch.as_tensor(v,device=device,dtype=dtype).detach() for v in (coefficients,scales,uppers)]
+    c0,scale,upper=[_frozen_fit_tensor(v,device=device,dtype=dtype) for v in (coefficients,scales,uppers)]
     if c0.shape!=scale.shape or upper.shape!=(*c0.shape,c0.shape[-1]):
         raise ValueError('every query requires independent c0/scale[C] and upper[C,C]')
     if not bool((scale>0).all()):raise ValueError('positive psi normalization scales required')
     sqrt_ridge=torch.as_tensor(ridge,device=device,dtype=dtype).expand(c0.shape[0]).sqrt()
+    live_scale=operator.column_norms() if live_column_scale else scale
+    ratio=live_scale/scale
+    operator.column_scales=live_scale.detach()
+    operator.column_scale_ratio=ratio.detach()
     def triangular(v,transpose=False):
         return torch.linalg.solve_triangular(upper.transpose(-1,-2) if transpose else upper,
                                              v[...,None],upper=not transpose)[...,0]
     z=c0*scale
     residual=operator.rhs-operator.apply(z/scale)
-    rr=-sqrt_ridge[:,None]*z
-    def normal(r,rr):return triangular(operator.transpose(r)/scale+sqrt_ridge[:,None]*rr,True)
+    rr=-sqrt_ridge[:,None]*ratio*z
+    def normal(r,rr):return triangular(operator.transpose(r)/scale+sqrt_ridge[:,None]*ratio*rr,True)
     n=normal(residual,rr);direction=n;gamma=n.square().sum(-1)
     for iteration in range(iterations):
         transformed=triangular(direction)
-        image=operator.apply(transformed/scale);ri=sqrt_ridge[:,None]*transformed
+        image=operator.apply(transformed/scale);ri=sqrt_ridge[:,None]*ratio*transformed
         delta=image.square().sum((-2,-1))+ri.square().sum(-1)
         alpha=gamma/delta.clamp_min(1e-30)
         z=z+alpha[:,None]*transformed
@@ -158,7 +166,7 @@ def build_batch_front(field,centers,*,config_overrides=None,dtype=torch.float32,
         raise ValueError('one independent center snapshot required for every field query')
     cfgs=[{**c.get('config',{}),**(config_overrides or {})} for c in centers]
     defaults=dict(axis_trace_steps=240,axis_sample_count=240,psi_poly_degree=10,psi_m_tor=12,
-        psi_n_r=48,psi_n_z=48,psi_n_phi=48,surface_max_radius_scale=1.,surface_newton_iters=20,surface_newton_tolerance=1e-12)
+        psi_n_r=48,psi_n_z=48,psi_n_phi=48,psi_live_column_scale=False,surface_max_radius_scale=1.,surface_newton_iters=20,surface_newton_tolerance=1e-12)
     common={}
     for name,default in defaults.items():
         values=[cfg.get(name,default) for cfg in cfgs]
@@ -174,7 +182,9 @@ def build_batch_front(field,centers,*,config_overrides=None,dtype=torch.float32,
         radial_grid=int(common['psi_n_r']),vertical_grid=int(common['psi_n_z']),phi_grid=int(common['psi_n_phi']),
         rho_min=[float(c.get('psi_rho_min',.002)) for c in cfgs],dtype=dtype)
     coefficients,rms=batch_four_step_pcgls(op,stack('psi_coefficients'),stack('psi_scale'),stack('psi_upper'),
-        ridge=[float(c.get('psi_ridge',1e-6)) for c in cfgs],iterations=4)
+        ridge=[float(c.get('psi_ridge',1e-6)) for c in cfgs],iterations=4,
+        live_column_scale=bool(common['psi_live_column_scale']))
+    diagnostics['psi_column_scale_relative_max']=(op.column_scale_ratio-1).abs().amax(-1).detach()
     geometries=[PsiGeometry(axes[i],coefficients[i],nfp,radii[i],int(common['psi_poly_degree']),int(common['psi_m_tor']),
         maximum_radius_scale=float(common['surface_max_radius_scale']),root_iterations=int(common['surface_newton_iters']),
         root_tolerance=float(common['surface_newton_tolerance'])) for i in range(len(centers))]

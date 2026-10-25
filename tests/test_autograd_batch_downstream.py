@@ -114,12 +114,12 @@ class BatchDownstreamTests(unittest.TestCase):
             one = field.one(i)
             expected.append(downstream(front.geometry(i), front.levels[i], {k:v[i] for k,v in cache.items()},
                                        one, one.trace, one.potential, configs[i], return_arrays=True))
-        keys = ('raw_qs', 'iota_boundary', 'quality_penalty', 'target_quality_error',
+        keys = ('raw_qs', 'raw_qs_outer', 'iota_boundary', 'iota_min', 'iota_max', 'quality_penalty', 'target_quality_error',
                 'surface_volume', 'flux_edge', 'major_radius', 'flux_coefficients')
         for key in keys:
             torch.testing.assert_close(actual[key], torch.stack([e[key] for e in expected]),
                                        atol=2e-10, rtol=2e-10)
-        for key in ('raw_qs', 'iota_boundary', 'quality_penalty', 'surface_volume', 'flux_edge'):
+        for key in ('raw_qs', 'raw_qs_outer', 'iota_boundary', 'iota_min', 'iota_max', 'quality_penalty', 'surface_volume', 'flux_edge'):
             ga = torch.autograd.grad(actual[key].sum(), values, retain_graph=True)[0]
             ge = torch.autograd.grad(sum(e[key] for e in expected), values, retain_graph=True)[0]
             torch.testing.assert_close(ga, ge, atol=1e-8, rtol=1e-8)

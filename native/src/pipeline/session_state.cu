@@ -23,6 +23,8 @@ thread_local int g_active_gradient_group = 0;
 
 thread_local AlphaWarmPreconditionerCache g_alpha_warm_preconditioner;
 
+thread_local AlphaRadialWeightingOptions g_alpha_radial_weighting;
+
 thread_local std::vector<float> g_captured_iota_profile;
 
 thread_local double g_boundary_iota = std::numeric_limits<double>::quiet_NaN();

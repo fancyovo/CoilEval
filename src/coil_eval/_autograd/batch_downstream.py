@@ -10,7 +10,7 @@ import torch
 from torch.nn import functional as F
 
 from .downstream import (DownstreamConfig, _arange, _xyz,
-    clebsch_modes, volume_points)
+    clebsch_modes, iota_profile_extrema, outer_qs_rms, volume_points,smooth_alpha_weights)
 
 
 def _configs(configs, count):
@@ -149,9 +149,11 @@ class _BatchAlphaDesign(torch.autograd.Function):
         return (*gradients, None, None, None, None, None)
 
 
-def batch_frozen_pcgls(A, b, cache, ridge, iterations=4):
+def batch_frozen_pcgls(A, b, cache, ridge, iterations=4, *, live_column_scale=False):
     upper = cache['upper'].to(A).detach()
     x = cache['scaled_solution'].to(A).detach()
+    penalty=(torch.linalg.vector_norm(A,dim=1,dtype=torch.float64).clamp_min(1e-20).to(A.dtype).square()
+             if live_column_scale else 1.)
     def tri(v, transposed=False):
         return torch.linalg.solve_triangular(upper.transpose(-1, -2) if transposed else upper,
                     v[..., None], upper=not transposed).squeeze(-1)
@@ -160,25 +162,27 @@ def batch_frozen_pcgls(A, b, cache, ridge, iterations=4):
     def transpose(v):
         return torch.bmm(A.transpose(1, 2), v[..., None]).squeeze(-1)
     residual = b - apply(x)
-    normal = tri(transpose(residual) - ridge * x, True)
+    normal = tri(transpose(residual) - ridge * penalty * x, True)
     direction = normal
     gamma = normal.square().sum(-1, keepdim=True)
     for k in range(iterations):
         transformed = tri(direction)
         image = apply(transformed)
-        delta = image.square().sum(-1, keepdim=True) + ridge * transformed.square().sum(-1, keepdim=True)
+        ridge_norm=((penalty*transformed.square()).sum(-1,keepdim=True) if live_column_scale else
+                    transformed.square().sum(-1,keepdim=True))
+        delta = image.square().sum(-1, keepdim=True) + ridge * ridge_norm
         step = gamma / delta.clamp_min(1e-30)
         x = x + step * transformed
         residual = residual - step * image
         if k + 1 < iterations:
-            normal = tri(transpose(residual) - ridge * x, True)
+            normal = tri(transpose(residual) - ridge * penalty * x, True)
             new_gamma = normal.square().sum(-1, keepdim=True)
             direction = normal + new_gamma / gamma.clamp_min(1e-30) * direction
             gamma = new_gamma
     return x, residual
 
 
-def batch_alpha_fit(points, B, cache, config):
+def batch_alpha_fit(points, B, cache, config, *, volume_rho_min=None):
     c = config
     nq, n = points['rho'].shape
     nf = min(c.alpha_fit_point_count, n)
@@ -191,11 +195,15 @@ def batch_alpha_fit(points, B, cache, config):
     normal_B = normal[..., None] * gs
     tangent = field - normal_B
     bt, bp = (tangent * gt).sum(-1), (tangent * gp).sum(-1)
-    bins = (rho.detach() * c.radial_bin_count).long().clamp(0, c.radial_bin_count - 1)
-    counts = torch.zeros((nq, c.radial_bin_count), device=B.device, dtype=torch.long)
-    counts.scatter_add_(1, bins, torch.ones_like(bins))
-    weight = counts.gather(1, bins).clamp_min(1).to(B.dtype).rsqrt() / field_norm2.clamp_min(1e-30).sqrt()
-    weight = weight * (nf / weight.double().square().sum(-1, keepdim=True)).sqrt().to(B.dtype)
+    if c.alpha_radial_weighting=='smooth':
+        weight,counts=smooth_alpha_weights(rho,field_norm2,c)
+    elif c.alpha_radial_weighting=='histogram':
+        bins = (rho.detach() * c.radial_bin_count).long().clamp(0, c.radial_bin_count - 1)
+        counts = torch.zeros((nq, c.radial_bin_count), device=B.device, dtype=torch.long)
+        counts.scatter_add_(1, bins, torch.ones_like(bins))
+        weight = counts.gather(1, bins).clamp_min(1).to(B.dtype).rsqrt() / field_norm2.clamp_min(1e-30).sqrt()
+        weight = weight * (nf / weight.double().square().sum(-1, keepdim=True)).sqrt().to(B.dtype)
+    else:raise ValueError('alpha_radial_weighting must be histogram or smooth')
     modes = clebsch_modes(c.alpha_radial_order, c.alpha_poloidal_order, c.alpha_toroidal_order)
     metadata = tuple(torch.as_tensor(v, device=B.device, dtype=B.dtype) for v in modes)
     mode_count = len(modes[0])
@@ -205,9 +213,11 @@ def batch_alpha_fit(points, B, cache, config):
     A = _BatchAlphaDesign.apply(rho, theta, phi, bt, bp, weight, scale, metadata,
                                c.nfp, c.iota_degree, c.alpha_chunk_columns)
     rhs = -weight * bt
-    solution, residual = batch_frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations)
+    solution, residual = batch_frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations,
+        live_column_scale=c.alpha_radial_weighting=='smooth')
     iota = solution[:, mode_count:] / scale[:, mode_count:]
     return dict(iota_coefficients=iota, iota_boundary=iota.sum(-1),
+        **iota_profile_extrema(iota,c.volume_rho_min if volume_rho_min is None else volume_rho_min),
         normal_B_relative_l2=(normal_B.double().square().sum((-1, -2))
                               / field.double().square().sum((-1, -2))).sqrt(),
         relative_l2=torch.linalg.vector_norm(residual.double(), dim=-1)
@@ -256,7 +266,7 @@ def batch_surface_quality(geometries, levels, field, configs, *, return_arrays=F
     return result
 
 
-def batch_qs_metric(points, B, gradB, iota, G, config):
+def batch_qs_metric(points, B, gradB, iota, G, config, *, volume_rho_min=None):
     """Full volume reductions over points, independently for every query."""
     magnitude = B.square().sum(-1).clamp_min(1e-30).sqrt()
     grad_magnitude = torch.einsum('bnic,bni->bnc', gradB, B) / magnitude[..., None]
@@ -272,7 +282,9 @@ def batch_qs_metric(points, B, gradB, iota, G, config):
     weight = points['volume_weight'].to(B.dtype).double()
     rms = ((weight * residual.square()).sum(-1) / weight.sum(-1)).sqrt()
     norm = max(math.hypot(config.target_M, config.target_N), 1.)
-    return dict(raw_qs=rms/norm, qs_global_error=rms, qs_vacuum_G=G,
+    outer=outer_qs_rms(residual,weight,points['rho'],config,volume_rho_min=volume_rho_min)
+    return dict(raw_qs=rms/norm, raw_qs_outer=outer/norm,
+                qs_global_error=rms, qs_edge_error=outer, qs_vacuum_G=G,
                 qs_loss=torch.log(rms/norm+1e-8))
 
 
@@ -306,8 +318,10 @@ def batch_downstream(front, alpha_caches, field, configs, *, return_arrays=False
     B, gradB = B_all[:, :nv], grad_all[:, :nv]
     G = (B_all[:, nv:].double() * torch.stack(axis_tangents).double()).sum(-1).mean(-1).abs()
     G = G * flux['edge_flux'].detach().sign()
-    alpha = batch_alpha_fit(points, B, cache, c)
-    qs = batch_qs_metric(points, B, gradB, alpha['iota_coefficients'], G, c)
+    lower_radii=[config.volume_rho_min for config in configs]
+    alpha = batch_alpha_fit(points, B, cache, c, volume_rho_min=lower_radii)
+    qs = batch_qs_metric(points, B, gradB, alpha['iota_coefficients'], G, c,
+                         volume_rho_min=lower_radii)
     quality = batch_surface_quality(geometries, levels, field, configs, return_arrays=return_arrays)
     result = {**qs, **quality, **alpha, 'surface_volume': flux['surface_volume'],
               'surface_level': levels, 'flux_edge': flux['edge_flux'],

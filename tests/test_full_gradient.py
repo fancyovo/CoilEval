@@ -89,6 +89,31 @@ def test_invalid_center_stops_before_building_any_gradient_endpoints():
     assert captured.value.results[0].status == "no_surface"
 
 
+def test_scalar_psi_fit_loss_uses_live_endpoint_diagnostic_values():
+    coils = make_coils()
+    backend = FakeBackend(coils)
+    original_raw = backend.raw
+    scales = backend.oracle.scales
+    weights = np.linspace(.3, 1.1, coils.parameter_count)
+    def residual(value):
+        normalized = value.parameter_vector()/scales
+        return .014 + .001*np.dot(weights, normalized**2)
+    def raw(value, config):
+        result = original_raw(value, config)
+        result["diagnostics"]["psi_train_rms"] = residual(value)
+        return result
+    backend.raw = raw
+    with Evaluator(config=EvaluationConfig(.03, psi_fit="two_stage"), backend=backend) as evaluator:
+        result = evaluator.loss_and_grad(coils, lambda metrics: metrics.psi_fit_rms**2,
+                                        scales=scales, h=1e-4)
+    expected = 2*residual(coils)*.002*weights*(coils.parameter_vector()/scales)/scales
+    np.testing.assert_allclose(result.gradient, expected, rtol=3e-7, atol=1e-13)
+    assert result.center.metrics.psi_fit_rms == pytest.approx(residual(coils))
+    for endpoint in result.endpoints:
+        assert endpoint.metrics.psi_fit_rms == endpoint.diagnostics["psi_train_rms"]
+    assert any(endpoint.metrics.psi_fit_rms != result.center.metrics.psi_fit_rms for endpoint in result.endpoints)
+
+
 @pytest.mark.parametrize("kwargs", [
     {"h": 0}, {"h": np.nan}, {"scales": 0}, {"scales": -1},
     {"scales": np.full(20, np.inf)}, {"scales": np.ones(19)},

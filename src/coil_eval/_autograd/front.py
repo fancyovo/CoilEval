@@ -41,6 +41,42 @@ def _coefficient_matrix(coefficients, degree, mtor, fixed_quadratic=0.):
         *coefficients.shape[:-1], len(monomials(degree)), 2 * mtor + 1)
 
 
+def _tensor_product_column_norms(features, PR, PZ, P, T, Tp):
+    """Live data-column norms without the full row-by-mode matrix.
+
+    Accumulate the expanded quadratic form in FP64 to avoid cancellation of
+    radial/vertical contributions, then use the operator's solve precision.
+    Leading batch dimensions broadcast through the factored GEMMs.
+    """
+    cr,cz,cp=[value.double() for value in features]
+    pr,pz,p,t,tp=[value.double() for value in (PR,PZ,P,T,Tp)]
+    u2=pr.square().mT@cr.square()+pz.square().mT@cz.square()+2*(pr*pz).mT@(cr*cz)
+    uw=(pr*p).mT@(cr*cp)+(pz*p).mT@(cz*cp)
+    w2=p.square().mT@cp.square()
+    square=u2@t.square()+2*uw@(t*tp)+w2@tp.square()
+    return square.flatten(-2)[...,1:].clamp_min(1e-30).sqrt().to(features[0].dtype)
+
+
+def _section_column_norms(features, PR, PZ, P, T, Tp):
+    """Section-factorized norms, retaining weighted and moving-point terms."""
+    cr,cz,cp=[value.double() for value in features]
+    pr,pz,p,t,tp=[value.double() for value in (PR,PZ,P,T,Tp)]
+    # The O(rows*monomials) factors already bound operator memory. Direct
+    # squaring here also avoids cancellation within cr*PR+cz*PZ.
+    u=cr[...,None]*pr+cz[...,None]*pz
+    w=cp[...,None]*p
+    u2=u.square().sum(-2);uw=(u*w).sum(-2);w2=w.square().sum(-2)
+    square=u2.mT@t.square()+2*uw.mT@(t*tp)+w2.mT@tp.square()
+    return square.flatten(-2)[...,1:].clamp_min(1e-30).sqrt().to(features[0].dtype)
+
+
+def _frozen_fit_tensor(value, *, device, dtype):
+    # Captured NumPy factors can be read-only; copy them instead of exposing
+    # their storage through as_tensor. Existing device tensors need no copy.
+    if isinstance(value,torch.Tensor):return value.to(device=device,dtype=dtype).detach()
+    return torch.tensor(value,device=device,dtype=dtype).detach()
+
+
 def periodic_hermite(phi, values, derivatives, nfp):
     """Periodic native Hermite interpolation, including derivative of interpolant."""
     phi = torch.as_tensor(phi, device=values.device, dtype=values.dtype)
@@ -266,30 +302,43 @@ class TensorProductPsiOperator:
         C = self.PR.T@(cr*rows)@self.T + self.PZ.T@(cz*rows)@self.T + self.P.T@(cp*rows)@self.Tp
         return C.reshape(-1)[1:]
 
+    def column_norms(self):
+        return _tensor_product_column_norms(self.features,self.PR,self.PZ,self.P,self.T,self.Tp)
+
 
 def four_step_pcgls(operator, center_coefficients, center_scale, center_upper,
-                    *, ridge=1e-6, iterations=4):
-    """Differentiate executed native-style iterations; center factors detached."""
+                    *, ridge=1e-6, iterations=4, live_column_scale=False):
+    """Keep center coordinates/preconditioner fixed and differentiate live ridge.
+
+    Formal native QR normalizes each endpoint with D=column_norms(A), so its physical
+    penalty is ridge*||D*c||². In center coordinates z=D0*c the ridge rows are
+    sqrt(ridge)*(D/D0)*z. ``live_column_scale=False`` retains the historical
+    frozen-ridge nearby continuation, which remains the single-stage default.
+    """
     dtype, device = operator.rhs.dtype, operator.rhs.device
-    c0, scale, upper = [torch.as_tensor(v, device=device, dtype=dtype).detach()
+    c0, scale, upper = [_frozen_fit_tensor(v, device=device, dtype=dtype)
                         for v in (center_coefficients, center_scale, center_upper)]
     if not bool((scale > 0).all()):
         raise ValueError('psi center normalization must be positive')
     sqrt_ridge = math.sqrt(ridge)
+    live_scale=operator.column_norms() if live_column_scale else scale
+    ratio=live_scale/scale
+    operator.column_scales=live_scale.detach()
+    operator.column_scale_ratio=ratio.detach()
     def triangular(v, transpose=False):
         matrix = upper.T if transpose else upper
         return torch.linalg.solve_triangular(matrix, v[:,None], upper=not transpose)[:,0]
     z = c0*scale
     residual = operator.rhs-operator.apply(z/scale)
-    ridge_residual = -sqrt_ridge*z
+    ridge_residual = -sqrt_ridge*ratio*z
     def normal(r, rr):
-        return triangular(operator.transpose(r)/scale+sqrt_ridge*rr, transpose=True)
+        return triangular(operator.transpose(r)/scale+sqrt_ridge*ratio*rr, transpose=True)
     n = normal(residual, ridge_residual)
     direction, gamma = n, (n*n).sum()
     for iteration in range(iterations):
         transformed = triangular(direction)
         image = operator.apply(transformed/scale)
-        ridge_image = sqrt_ridge*transformed
+        ridge_image = sqrt_ridge*ratio*transformed
         delta = (image*image).sum()+(ridge_image*ridge_image).sum()
         alpha = gamma/delta.clamp_min(1e-30)
         z = z+alpha*transformed
@@ -341,7 +390,9 @@ def build_front(field, trace, center: Mapping, *, config=None, dtype=torch.float
         radial_grid=int(cfg.get('psi_n_r',48)), vertical_grid=int(cfg.get('psi_n_z',48)),
         phi_grid=int(cfg.get('psi_n_phi',48)), rho_min=float(cfg.get('psi_rho_min',.002)), dtype=dtype)
     coefficients, rms = four_step_pcgls(op, center['psi_coefficients'], center['psi_scale'],
-        center['psi_upper'], ridge=float(cfg.get('psi_ridge',1e-6)), iterations=4)
+        center['psi_upper'], ridge=float(cfg.get('psi_ridge',1e-6)), iterations=4,
+        live_column_scale=bool(cfg.get('psi_live_column_scale',False)))
+    diagnostics['psi_column_scale_relative_max']=(op.column_scale_ratio-1).abs().max().detach()
     geometry = PsiGeometry(axis, coefficients, nfp, a, degree, mtor,
         maximum_radius_scale=float(cfg.get('surface_max_radius_scale',1.)),
         root_iterations=int(cfg.get('surface_newton_iters',20)),

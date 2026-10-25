@@ -2,6 +2,7 @@
 from __future__ import annotations
 import ctypes
 import math
+from operator import index
 from pathlib import Path
 import torch
 from torch.utils.checkpoint import checkpoint
@@ -89,9 +90,19 @@ class _Potential(torch.autograd.Function):
 
 def coil_segments(tokens, nfp=4, count=256):
     """Native midpoint Fourier quadrature, currents in amperes, all symmetries."""
+    if tokens.ndim!=2 or tokens.shape[0]<1:
+        raise ValueError('tokens require nonempty [coil,3*ncoeff+1] shape')
+    if isinstance(count,bool) or isinstance(nfp,bool):
+        raise ValueError('positive integer nfp and segment count required')
+    try:
+        count,nfp=index(count),index(nfp)
+    except TypeError as error:
+        raise ValueError('positive integer nfp and segment count required') from error
+    if count<1 or nfp<1:
+        raise ValueError('positive integer nfp and segment count required')
     nc,width=tokens.shape
     coeff=(width-1)//3
-    if width != 3*coeff+1 or coeff%2 != 1:
+    if coeff<1 or width != 3*coeff+1 or coeff%2 != 1:
         raise ValueError('tokens must contain three odd Fourier coefficient blocks and current')
     order=(coeff-1)//2
     t=(torch.arange(count,device=tokens.device,dtype=tokens.dtype)+.5)/count

@@ -34,9 +34,13 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 | Directory | Responsibility |
 | --- | --- |
 | `src/coil_eval` | Public Python API, records, configuration and native binding |
+| `src/coil_eval/_two_stage` | Closed-domain geometry, sampling and native two-stage orchestration |
+| `src/coil_eval/_autograd` | Local field, tracing, fitting and downstream reverse operators |
+| `src/coil_eval/simsopt` | Source records, initialization, standard solves and reference QS |
 | `native/src/field` | Coil discretization, field evaluation, tracing and psi fitting |
 | `native/src/pipeline` | Axis, target surface, flux, alpha, QS and local evaluation |
 | `native/include` | Shared records and module interfaces |
+| `native/src/autograd` | CUDA primitives for the optional Tensor API |
 | `tests` | API, numerical oracle and source layout tests |
 | `examples` | Runnable evaluation and custom objective examples |
 
@@ -47,6 +51,23 @@ evaluation session state is owned by `pipeline/session_state.cu`.
 Use additive configuration and public methods for compatible changes. Record
 new behavior in CHANGELOG.md and update both documentation languages. Release
 tags use `v` followed by the package version. A prerelease uses a Python version
-such as `0.3.0a1`. Earlier tags remain available for reproducible installations.
+such as `0.4.0a1`. Earlier tags remain available for reproducible installations.
 
 The optional `src/coil_eval/_autograd` package groups field, trace, front and downstream operators; `native/src/autograd` contains their CUDA primitives. `src/coil_eval/torch.py` owns the public Tensor API. Install PyTorch to run the mathematical operator tests. Set `COIL_EVAL_TEST_INSTALLED=1` when running the suite against an installed wheel.
+
+## Numerical changes
+
+Keep `single_stage` as the compatible default. Add new fitting or sampling
+choices through `EvaluationConfig`, and preserve units and parameter order.
+Test both order-4 and higher-order inputs when changing Fourier handling.
+
+Two-stage samplers return coordinates, sampling choices and any least-squares
+row weights. Keep the native fit and the local reverse operator consistent with
+those records. Use focused CPU reference tests for geometry and derivatives,
+then GPU tests for values, per-metric gradient directions and norm changes.
+Check coordinate and current blocks separately when validating composed losses.
+
+Simsopt tests separate initializer geometry, standard LS/Newton acceptance and
+reference f_C. Preserve the source/initializer type markers when serializing
+surfaces. Measure single calls and independent batches for performance changes;
+state the selected fitting, sampling and precision settings with results.

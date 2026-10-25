@@ -75,6 +75,11 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
     reverse_scalar(arrays, "alpha_fit_count", alpha.fit_count);
     reverse_scalar(arrays, "alpha_column_count", nc);
     reverse_scalar(arrays, "alpha_qr_rows", alpha.qr_rows);
+    reverse_scalar(arrays, "alpha_radial_weighting_mode", alpha.radial_weighting_mode);
+    reverse_scalar(arrays, "alpha_weight_sigma", alpha.radial_weight_sigma);
+    reverse_scalar(arrays, "alpha_count_floor", alpha.radial_count_floor);
+    if (!alpha.radial_soft_counts.empty())
+        reverse_add(arrays, "alpha_radial_soft_counts", alpha.radial_soft_counts);
     reverse_scalar(arrays, "alpha_residual_norm", alpha.residual_norm);
     reverse_scalar(arrays, "alpha_rhs_norm", alpha.rhs_norm);
     std::vector<double> alpha_upper(static_cast<size_t>(nc) * nc, 0.0);

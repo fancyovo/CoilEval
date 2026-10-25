@@ -1,4 +1,4 @@
-"""Explicit evaluator settings; numerical representation is frozen in v1.0."""
+"""Explicit evaluator settings with compatible opt-in numerical paths."""
 from dataclasses import asdict, dataclass
 import math
 
@@ -14,8 +14,31 @@ class EvaluationConfig:
     segments_per_coil: int = 256
     fast: bool = False
     flux_method: str = "area"
+    psi_fit: str = "single_stage"
+    psi_refit_points: int = 82368
+    psi_nearby_method: str = "local"
+    psi_fd_batch_size: int = 8
+    psi_refit_sampling: str = "cartesian"
+    alpha_radial_weighting: str = "histogram"
+    alpha_weight_sigma: float = 0.05
+    alpha_count_floor: float = 32.0
 
     def __post_init__(self):
+        if self.psi_fit not in {"single_stage", "two_stage"}:
+            raise ValueError("psi_fit must be single_stage or two_stage")
+        if self.psi_nearby_method not in {"local", "formal"}:
+            raise ValueError("psi_nearby_method must be local or formal")
+        if self.psi_refit_sampling not in {"cartesian", "polar_quadrature"}:
+            raise ValueError("psi_refit_sampling must be cartesian or polar_quadrature")
+        if self.alpha_radial_weighting not in {"histogram", "smooth"}:
+            raise ValueError("alpha_radial_weighting must be histogram or smooth")
+        if self.alpha_radial_weighting == "smooth" and self.psi_fit != "two_stage":
+            raise ValueError("smooth alpha radial weighting requires psi_fit='two_stage'")
+        for name in ("alpha_weight_sigma", "alpha_count_floor"):
+            value=float(getattr(self,name))
+            if not math.isfinite(value) or value<=0:
+                raise ValueError(f"{name} must be finite and positive")
+            object.__setattr__(self,name,value)
         if self.flux_method not in {"area", "stokes"}:
             raise ValueError("flux_method must be area or stokes")
         if self.flux_method == "stokes" and not self.fast:
@@ -27,7 +50,7 @@ class EvaluationConfig:
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive")
             object.__setattr__(self, name, value)
-        for name in ("psi_iterations", "alpha_iterations", "segments_per_coil"):
+        for name in ("psi_iterations", "alpha_iterations", "segments_per_coil", "psi_refit_points", "psi_fd_batch_size"):
             value = getattr(self, name)
             if isinstance(value, bool) or int(value) != value or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")

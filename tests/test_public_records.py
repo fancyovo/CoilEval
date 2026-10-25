@@ -74,6 +74,7 @@ def test_only_local_physical_metrics_are_loss_visible_and_diagnostics_are_frozen
                  "coil_gap_min", "coil_radius_min", "current_abs_max", "high_mode_fraction"):
         assert getattr(result.metrics, name) == pytest.approx(expected[name])
     assert result.metrics.coil_curvature_p95 == 4.3
+    assert result.metrics.psi_fit_rms == .014
     metric_names = {field.name for field in fields(LocalMetrics)}
     assert not metric_names.intersection({"score", "alpha_relative_l2", "psi_train_rms",
                                           "surface_volume", "target_quality_penalty"})
@@ -136,6 +137,7 @@ def test_optional_metrics_can_be_absent():
         value = original_raw(c, config)
         del value["diagnostics"]["coil_curvature_p95"]
         del value["diagnostics"]["coil_high_mode_energy_fraction"]
+        del value["diagnostics"]["psi_train_rms"]
         return value
 
     backend.raw = raw
@@ -143,3 +145,35 @@ def test_optional_metrics_can_be_absent():
     assert result.valid
     assert result.metrics.coil_curvature_p95 is None
     assert result.metrics.high_mode_fraction is None
+    assert result.metrics.psi_fit_rms is None
+
+
+def test_legacy_json_and_positional_metrics_accept_missing_psi_fit_rms():
+    coils = make_coils()
+    evaluator = Evaluator(config=EvaluationConfig(.03), backend=FakeBackend(coils))
+    original = evaluator.evaluate(coils)
+    legacy = original.to_dict()
+    del legacy["metrics"]["psi_fit_rms"]
+    restored = EvaluationResult.from_dict(json.loads(json.dumps(legacy)))
+    assert restored.valid and restored.metrics.psi_fit_rms is None
+    assert restored.metrics.qs_volume == original.metrics.qs_volume
+    roundtrip = EvaluationResult.from_dict(json.loads(json.dumps(restored.to_dict())))
+    assert roundtrip.metrics == restored.metrics
+    old_names = [item.name for item in fields(LocalMetrics) if item.name != "psi_fit_rms"]
+    positional = LocalMetrics(*(getattr(original.metrics, name) for name in old_names))
+    assert positional.psi_fit_rms is None
+    assert positional.high_mode_fraction == original.metrics.high_mode_fraction
+
+
+@pytest.mark.parametrize("invalid", [np.nan, np.inf])
+def test_optional_psi_fit_rms_rejects_present_nonfinite_values(invalid):
+    coils = make_coils()
+    backend = FakeBackend(coils)
+    original_raw = backend.raw
+    def raw(value, config):
+        result = original_raw(value, config)
+        result["diagnostics"]["psi_train_rms"] = invalid
+        return result
+    backend.raw = raw
+    result = Evaluator(config=EvaluationConfig(.03), backend=backend).evaluate(coils)
+    assert not result.valid and result.status == "invalid_metrics"

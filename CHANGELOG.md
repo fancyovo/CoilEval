@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0a1
+
+- Added opt-in two-stage psi fitting with Cartesian domain sampling and experimental weighted polar quadrature.
+- Added two-stage local reverse and finite-difference gradient paths, including batched local endpoints.
+- Exposed optional `psi_fit_rms` in scalar metrics for psi training-equation residual objectives, in T/m.
+- Added optional experimental smooth radial-density weights for two-stage alpha fitting.
+- Extended physical parameter tensors to higher Fourier orders, including order 16.
+- Added shared multi-volume source capture, a callable GPU coil field, alpha+nu initialization and standard Simsopt LS/Newton integration.
+- Added native-normalized surface f_C RMS diagnostics and volume aggregation helpers.
+- Added examples for two-stage evaluation and separate GPU preparation/CPU-only process pools, with bilingual API documentation.
+
 ## 0.3.0a3
 
 - Pinned CUDA runtime dependencies to a validated CUDA 12.8 set, fixing cuSPARSE and nvJitLink symbol mismatches during installation from package indexes.

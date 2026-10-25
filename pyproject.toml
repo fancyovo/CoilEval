@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "coil-eval"
-version = "0.3.0a3"
+version = "0.4.0a1"
 description = "GPU evaluation of stellarator coils and local gradients"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,6 +21,7 @@ classifiers = ["Programming Language :: Python :: 3", "Topic :: Scientific/Engin
 
 [project.optional-dependencies]
 torch = ["torch>=2.5"]
+simsopt = ["simsopt", "scipy"]
 test = ["pytest>=7", "build", "wheel"]
 
 [tool.scikit-build]

@@ -114,6 +114,20 @@ bool maybe_write_psi_qr_snapshot(
     return true;
 }
 
+// Matrix storage is point-major here (the transposed column-major system).
+// Weight the data rows before column norms, regularization and every solver.
+template <typename T>
+__global__ void weight_psi_rows_kernel(T* matrix, T* rhs, const double* weights,
+                                      int rows, int columns) {
+    const size_t index=static_cast<size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+    if (index<static_cast<size_t>(rows)*columns) {
+        const size_t row=index/columns;
+        const T factor=sqrt(static_cast<T>(weights[row]));
+        matrix[index]*=factor;
+        if (index%columns==0) rhs[row]*=factor;
+    }
+}
+
 __global__ void convert_double_to_float_kernel(const double* src, float* dst, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) dst[i] = static_cast<float>(src[i]);
@@ -422,12 +436,13 @@ int sgpu_normal_eq_f32(
     return 0;
 }
 
-int sgpu_fit_psi_fullgpu(
+static int fit_psi_fullgpu_impl(
     void* handle,
     const double* R_host,
     const double* Z_host,
     const double* phi_host,
     int n_points,
+    const double* row_weights_host,
     const double* axis_R_host,
     const double* axis_Z_host,
     const double* axis_R_phi_host,
@@ -486,12 +501,25 @@ int sgpu_fit_psi_fullgpu(
         set_error("experimental warm psi solve requires fp32");
         return 1;
     }
+    if (row_weights_host) {
+        double total_weight=0.;
+        for (int row=0;row<n_points;++row) {
+            if (!std::isfinite(row_weights_host[row]) || row_weights_host[row]<=0.) {
+                set_error("psi row weights must be finite and strictly positive"); return 1;
+            }
+            total_weight+=row_weights_host[row];
+        }
+        if (!std::isfinite(total_weight) || std::abs(total_weight/n_points-1.)>1e-6) {
+            set_error("psi row weights must have mean one"); return 1;
+        }
+    }
     if (cuda_check(cudaSetDevice(f->device_id), "cudaSetDevice")) return 1;
 
     GpuFitStats stats;
     auto t_total = clock::now();
 
     double *d_R = nullptr, *d_Z = nullptr, *d_phi = nullptr;
+    double* d_row_weights = nullptr;
     double *d_axis_R = nullptr, *d_axis_Z = nullptr, *d_axis_R_phi = nullptr, *d_axis_Z_phi = nullptr;
     int *d_mode_a = nullptr, *d_mode_b = nullptr, *d_mode_m = nullptr, *d_mode_kind = nullptr;
     double *d_scale = nullptr, *d_info_rhs = nullptr, *d_ata_d = nullptr, *d_atb_d = nullptr;
@@ -516,6 +544,7 @@ int sgpu_fit_psi_fullgpu(
     auto cleanup = [&]() {
         SGPU_NVTX_RANGE("psi.fullgpu.cleanup");
         cudaFree(d_R); cudaFree(d_Z); cudaFree(d_phi);
+        if (d_row_weights) cudaFree(d_row_weights);
         cudaFree(d_axis_R); cudaFree(d_axis_Z); cudaFree(d_axis_R_phi); cudaFree(d_axis_Z_phi);
         cudaFree(d_mode_a); cudaFree(d_mode_b); cudaFree(d_mode_m); cudaFree(d_mode_kind);
         cudaFree(d_scale); cudaFree(d_info_rhs); cudaFree(d_ata_d); cudaFree(d_atb_d); cudaFree(d_info); cudaFree(d_ipiv);
@@ -569,6 +598,11 @@ int sgpu_fit_psi_fullgpu(
             return 1;
         }
     }
+    if (row_weights_host &&
+        (cuda_check(cudaMalloc(reinterpret_cast<void**>(&d_row_weights),point_bytes),"fit row weights") ||
+         cuda_check(cudaMemcpy(d_row_weights,row_weights_host,point_bytes,cudaMemcpyHostToDevice),"fit copy row weights"))) {
+        cleanup(); return 1;
+    }
     stats.copy_in_s = std::chrono::duration<double>(clock::now() - t).count();
 
     double rhs_norm2 = 0.0;
@@ -595,6 +629,8 @@ int sgpu_fit_psi_fullgpu(
             d_R, d_Z, d_phi, d_axis_R, d_axis_Z, d_axis_R_phi, d_axis_Z_phi, n_axis,
             d_mode_a, d_mode_b, d_mode_m, d_mode_kind, n_coeff, nfp, a, poly_degree, m_tor, d_mat_d, d_rhs_d
         );
+        if (d_row_weights) weight_psi_rows_kernel<<<(mat_elems+threads-1)/threads,threads>>>(
+            d_mat_d,d_rhs_d,d_row_weights,n_points,n_coeff);
         if (cuda_check(cudaGetLastError(), "fit psi_fill_matrix f64") ||
             cublas_check(cublasDdot(f->blas, n_points, d_rhs_d, 1, d_rhs_d, 1, &rhs_norm2), "fit rhs_norm2 d64") ||
             cuda_check(cudaDeviceSynchronize(), "fit assemble sync f64")) {
@@ -626,6 +662,8 @@ int sgpu_fit_psi_fullgpu(
             d_R_f, d_Z_f, d_phi_f, d_axis_R_f, d_axis_Z_f, d_axis_R_phi_f, d_axis_Z_phi_f, n_axis,
             d_mode_a, d_mode_b, d_mode_m, d_mode_kind, n_coeff, nfp, static_cast<float>(a), poly_degree, m_tor, d_mat_f, d_rhs_f
         );
+        if (d_row_weights) weight_psi_rows_kernel<<<(mat_elems+threads-1)/threads,threads>>>(
+            d_mat_f,d_rhs_f,d_row_weights,n_points,n_coeff);
         float rhs_norm2_f = 0.0f;
         if (cuda_check(cudaGetLastError(), "fit psi_fill_matrix f32") ||
             cublas_check(cublasSdot(f->blas, n_points, d_rhs_f, 1, d_rhs_f, 1, &rhs_norm2_f), "fit rhs_norm2 s32") ||
@@ -1219,6 +1257,78 @@ int sgpu_fit_psi_fullgpu(
     cleanup();
     set_error("");
     return 0;
+}
+
+int sgpu_fit_psi_fullgpu(
+    void* handle,
+    const double* R_host,
+    const double* Z_host,
+    const double* phi_host,
+    int n_points,
+    const double* axis_R_host,
+    const double* axis_Z_host,
+    const double* axis_R_phi_host,
+    const double* axis_Z_phi_host,
+    int n_axis,
+    const int* mode_a_host,
+    const int* mode_b_host,
+    const int* mode_m_host,
+    const int* mode_kind_host,
+    int n_coeff,
+    int nfp,
+    double a,
+    int poly_degree,
+    int m_tor,
+    double ridge,
+    int solver_mode,
+    int precision_mode,
+    double* coeff_host,
+    double* train_rms_out,
+    double* stats_out,
+    int stats_len
+) {
+    return fit_psi_fullgpu_impl(handle,R_host,Z_host,phi_host,n_points,nullptr,
+        axis_R_host,axis_Z_host,axis_R_phi_host,axis_Z_phi_host,n_axis,
+        mode_a_host,mode_b_host,mode_m_host,mode_kind_host,n_coeff,nfp,a,
+        poly_degree,m_tor,ridge,solver_mode,precision_mode,
+        coeff_host,train_rms_out,stats_out,stats_len);
+}
+
+int sgpu_fit_psi_fullgpu_weighted(
+    void* handle,
+    const double* R_host,
+    const double* Z_host,
+    const double* phi_host,
+    int n_points,
+    const double* row_weights_host,
+    const double* axis_R_host,
+    const double* axis_Z_host,
+    const double* axis_R_phi_host,
+    const double* axis_Z_phi_host,
+    int n_axis,
+    const int* mode_a_host,
+    const int* mode_b_host,
+    const int* mode_m_host,
+    const int* mode_kind_host,
+    int n_coeff,
+    int nfp,
+    double a,
+    int poly_degree,
+    int m_tor,
+    double ridge,
+    int solver_mode,
+    int precision_mode,
+    double* coeff_host,
+    double* train_rms_out,
+    double* stats_out,
+    int stats_len
+) {
+    if (!row_weights_host) { set_error("weighted psi fit requires row weights"); return 1; }
+    return fit_psi_fullgpu_impl(handle,R_host,Z_host,phi_host,n_points,row_weights_host,
+        axis_R_host,axis_Z_host,axis_R_phi_host,axis_Z_phi_host,n_axis,
+        mode_a_host,mode_b_host,mode_m_host,mode_kind_host,n_coeff,nfp,a,
+        poly_degree,m_tor,ridge,solver_mode,precision_mode,
+        coeff_host,train_rms_out,stats_out,stats_len);
 }
 
 } // extern "C"

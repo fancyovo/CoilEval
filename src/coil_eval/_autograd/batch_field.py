@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+from operator import index
 import torch
 
 
@@ -127,8 +128,16 @@ def coil_segments_batch(tokens,nfp=4,count=256):
     """Vectorized native quadrature with a leading independent-query dimension."""
     if tokens.ndim!=3 or tokens.shape[0]<=0 or tokens.shape[1]<=0:
         raise ValueError('tokens require [query,coil,3*ncoeff+1]')
+    if isinstance(count,bool) or isinstance(nfp,bool):
+        raise ValueError('positive integer nfp and segment count required')
+    try:
+        count,nfp=index(count),index(nfp)
+    except TypeError as error:
+        raise ValueError('positive integer nfp and segment count required') from error
+    if count<1 or nfp<1:
+        raise ValueError('positive integer nfp and segment count required')
     width=tokens.shape[-1];coeff=(width-1)//3
-    if width!=3*coeff+1 or coeff%2!=1:
+    if coeff<1 or width!=3*coeff+1 or coeff%2!=1:
         raise ValueError('three odd Fourier coefficient blocks and current required')
     order=(coeff-1)//2
     t=(torch.arange(count,device=tokens.device,dtype=tokens.dtype)+.5)/count

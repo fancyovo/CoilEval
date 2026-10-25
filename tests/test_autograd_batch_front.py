@@ -57,10 +57,12 @@ class BatchFrontTests(unittest.TestCase):
             def __init__(self,A):self.A,self.rhs,self.valid_rows=A,rhs[...,None],torch.full((B,),N)
             def apply(self,c):return (self.A@c[...,None])
             def transpose(self,r):return (self.A.transpose(-1,-2)@r)[...,0]
+            def column_norms(self):return self.A.square().sum(1).sqrt()
         class Single:
             def __init__(self,A,b):self.A,self.rhs=A,b
             def apply(self,c):return self.A@c
             def transpose(self,r):return self.A.T@r
+            def column_norms(self):return self.A.square().sum(0).sqrt()
         coefficients,rms=batch_four_step_pcgls(Batch(A0+t[:,None,None]*delta),c0,scale,upper)
         actual_grad,=torch.autograd.grad(coefficients.square().sum(),t)
         tr=t.detach().requires_grad_()
