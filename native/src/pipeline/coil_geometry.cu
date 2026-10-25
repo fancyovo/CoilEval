@@ -1,6 +1,7 @@
 // Sampled physical coil geometry and its analytical coefficient derivatives.
 #include "pipeline/types.cuh"
 #include "pipeline/coil_geometry.cuh"
+#include "pipeline/coil_distance.cuh"
 #include "pipeline/common.cuh"
 
 namespace coil_eval::pipeline {
@@ -128,18 +129,8 @@ CoilMetrics compute_coil_metrics(
     for (size_t i = 0; i < full_points.size(); ++i) {
         const Vec3d& p = full_points[i].point;
         metrics.min_axis_distance = std::min(metrics.min_axis_distance, std::hypot(p.x, p.y));
-        for (size_t j = i + 1; j < full_points.size(); ++j) {
-            if (full_points[i].label == full_points[j].label) continue;
-            const Vec3d& q = full_points[j].point;
-            const double dx = p.x - q.x;
-            const double dy = p.y - q.y;
-            const double dz = p.z - q.z;
-            metrics.min_intercoil_distance = std::min(
-                metrics.min_intercoil_distance,
-                std::sqrt(dx * dx + dy * dy + dz * dz)
-            );
-        }
     }
+    metrics.min_intercoil_distance = geometry_detail::closest_distinct_label_pair(full_points).distance;
     double total_mode_energy = 0.0;
     double high_mode_energy = 0.0;
     const int high_start = std::max(1, static_cast<int>(std::floor(0.6 * order)));
@@ -293,6 +284,7 @@ bool compute_coil_component_gradient_impl(
     const int sample_count = n_base_coils * samples;
     std::vector<GeometrySample> geometry(sample_count);
     std::vector<double> curvatures(sample_count);
+    std::vector<double> metric_curvatures(sample_count);
     std::vector<double> lengths(n_base_coils, 0.0);
     for (int coil = 0; coil < n_base_coils; ++coil) {
         for (int sample_index = 0; sample_index < samples; ++sample_index) {
@@ -308,6 +300,14 @@ bool compute_coil_component_gradient_impl(
             const int flat = coil * samples + sample_index;
             geometry[flat] = item;
             curvatures[flat] = item.curvature;
+            // Values and active curvature derivatives historically use these
+            // two denominator evaluation orders. Preserve both roundings.
+            const double speed2 = dx * dx + dy * dy + dz * dz;
+            const double cx = dy * ddz - dz * ddy;
+            const double cy = dz * ddx - dx * ddz;
+            const double cz = dx * ddy - dy * ddx;
+            metric_curvatures[flat] = std::sqrt(cx * cx + cy * cy + cz * cz) /
+                std::max(speed2 * std::sqrt(speed2), 1.0e-30);
             lengths[coil] += speed / samples;
         }
     }
@@ -349,10 +349,7 @@ bool compute_coil_component_gradient_impl(
             }
         }
     }
-    size_t spacing_left = 0;
-    size_t spacing_right = 0;
     size_t radius_point = 0;
-    double minimum_spacing = std::numeric_limits<double>::infinity();
     double minimum_radius = std::numeric_limits<double>::infinity();
     for (size_t left = 0; left < full_points.size(); ++left) {
         const Vec3d point = full_points[left].point;
@@ -361,21 +358,18 @@ bool compute_coil_component_gradient_impl(
             minimum_radius = radius;
             radius_point = left;
         }
-        for (size_t right = left + 1; right < full_points.size(); ++right) {
-            if (full_points[left].label == full_points[right].label) continue;
-            const double distance = vec_norm(vec_sub(point, full_points[right].point));
-            if (distance < minimum_spacing) {
-                minimum_spacing = distance;
-                spacing_left = left;
-                spacing_right = right;
-            }
-        }
     }
-
-    const CoilMetrics metrics = compute_coil_metrics(
-        coeffs_x, coeffs_y, coeffs_z, currents_a, n_base_coils, n_coeff, nfp
-    );
-    output.value = 100.0 * coil_component(metrics);
+    const auto spacing = geometry_detail::closest_distinct_label_pair(full_points);
+    const double minimum_spacing = spacing.distance;
+    CoilMetrics metrics;
+    metrics.length_mean = std::accumulate(lengths.begin(), lengths.end(), 0.0) /
+                          std::max(n_base_coils, 1);
+    metrics.curvature_p95 = percentile(metric_curvatures, 0.95);
+    metrics.curvature_max = *std::max_element(metric_curvatures.begin(), metric_curvatures.end());
+    metrics.min_intercoil_distance = minimum_spacing;
+    metrics.min_axis_distance = minimum_radius;
+    for (int coil = 0; coil < n_base_coils; ++coil)
+        metrics.current_abs_max = std::max(metrics.current_abs_max, std::abs(currents_a[coil]));
     output.x.assign(parameter_count, 0.0);
     output.y.assign(parameter_count, 0.0);
     output.z.assign(parameter_count, 0.0);
@@ -412,20 +406,18 @@ bool compute_coil_component_gradient_impl(
                             vec_dot(item.first, d_first) /
                             (speed * samples * n_base_coils);
                     }
-                    const double d_curvature = curvature_directional_derivative(
-                        item, d_first, d_second
-                    );
-                    d_p95[coordinate][parameter] += percentile_weights[flat] * d_curvature;
-                    if (flat == maximum_curvature_index) {
-                        d_max[coordinate][parameter] = d_curvature;
+                    if (percentile_weights[flat] != 0.0 || flat == maximum_curvature_index) {
+                        const double d_curvature = curvature_directional_derivative(item, d_first, d_second);
+                        d_p95[coordinate][parameter] += percentile_weights[flat] * d_curvature;
+                        if (flat == maximum_curvature_index) d_max[coordinate][parameter] = d_curvature;
                     }
                 }
             }
         }
     }
 
-    const FullGeometryPoint& spacing_a = full_points[spacing_left];
-    const FullGeometryPoint& spacing_b = full_points[spacing_right];
+    const FullGeometryPoint& spacing_a = full_points[spacing.left];
+    const FullGeometryPoint& spacing_b = full_points[spacing.right];
     const Vec3d spacing_delta = vec_sub(spacing_a.point, spacing_b.point);
     const FullGeometryPoint& radial = full_points[radius_point];
     for (int coil = 0; coil < n_base_coils; ++coil) {
@@ -488,6 +480,8 @@ bool compute_coil_component_gradient_impl(
             }
         }
     }
+    metrics.high_mode_fraction = total_energy > 0.0 ? high_energy / total_energy : 0.0;
+    output.value = 100.0 * coil_component(metrics);
     if (total_energy > 1.0e-30) {
         for (int coordinate = 0; coordinate < 3; ++coordinate) {
             for (int coil = 0; coil < n_base_coils; ++coil) {
