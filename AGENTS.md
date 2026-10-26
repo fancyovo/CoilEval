@@ -22,5 +22,11 @@ Read README.md, docs/api.md and CHANGELOG.md before changing public behavior.
 - Pin NVIDIA runtime distributions as a validated set. Individual component
   version numbers do not identify the CUDA Toolkit release; validate dependency
   resolution against the package index as well as the offline build wheelhouse.
+- Future versions use `major.minor.patch` without an `a` suffix. New features
+  increment the second (minor) component and reset patch to zero. Every released
+  bug fix, including a small or obvious correction, increments the third (patch)
+  component. Do not reuse a version for changed implementation.
+- Preserve historical version numbers, release artifacts and tags, including
+  existing `a` versions. This policy does not renumber earlier releases.
 - Follow ascending release versions. Maintain CHANGELOG.md and immutable tags.
   Publishing requires the repository owner's approval.

@@ -48,12 +48,25 @@ Native implementation files compile independently. Headers carry interfaces,
 shared types and small inline helpers. Field state is owned by `field/state.cpp`;
 evaluation session state is owned by `pipeline/session_state.cu`.
 
-Use additive configuration and public methods for compatible changes. Record
-new behavior in CHANGELOG.md and update both documentation languages. Release
-tags use `v` followed by the package version. A prerelease uses a Python version
-such as `0.5.0a1`. Earlier tags remain available for reproducible installations.
-
 The optional `src/coil_eval/_autograd` package groups field, trace, front and downstream operators; `native/src/autograd` contains their CUDA primitives. `src/coil_eval/torch.py` owns the public Tensor API. Install PyTorch to run the mathematical operator tests. Set `COIL_EVAL_TEST_INSTALLED=1` when running the suite against an installed wheel.
+
+Use additive configuration and public methods for compatible changes. Record
+new behavior in CHANGELOG.md and update both documentation languages.
+
+## Version numbering for future releases
+
+Use `major.minor.patch` without an `a` suffix:
+
+- New features increment the second (minor) component and reset patch to zero,
+  for example `0.5.1` to `0.6.0`.
+- Bug fixes increment the third (patch) component, including small patches and
+  obvious corrections, for example `0.5.1` to `0.5.2`.
+
+When releasing the next change after `0.5.0a1`, a fix uses `0.5.1` and a new
+feature uses `0.6.0`. These examples describe future numbering, not existing
+releases. Keep historical version numbers, artifacts and tags unchanged,
+including `0.5.0a1` and earlier `a` versions. Release tags use `v` followed by
+the package version; retain earlier tags for reproducible installations.
 
 ## Numerical changes
 

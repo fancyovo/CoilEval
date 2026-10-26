@@ -43,11 +43,22 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 
 实现文件独立编译；头文件声明接口、共享类型和小型内联函数。
 磁场状态由 `field/state.cpp` 管理，求值会话状态由 `pipeline/session_state.cu` 管理。
-采用新增配置项和方法保持兼容；更新 CHANGELOG 和中英文文档。
-版本标签为 `v` 加包版本号，预发布版本使用 `0.5.0a1` 等 Python 版本形式。
-旧标签保留用于复现安装。
 
 可选包 `src/coil_eval/_autograd` 按磁场、追踪、前端拟合和下游指标划分算子，`native/src/autograd` 提供 CUDA 核。`src/coil_eval/torch.py` 提供公开 Tensor API。安装 PyTorch 可运行数学算子测试。测试已安装的 wheel 时设置 `COIL_EVAL_TEST_INSTALLED=1`。
+
+采用新增配置项和方法保持兼容；更新 CHANGELOG 和中英文文档。
+
+## 后续版本的编号规则
+
+后续版本使用 `主版本.次版本.修订版本`（`major.minor.patch`），不再添加 `a` 后缀：
+
+- 新增功能时增加第二位 minor，并将第三位重置为零，例如 `0.5.1` → `0.6.0`。
+- 修复问题时增加第三位 patch；小补丁和明显错误的修复也按此规则编号，例如 `0.5.1` → `0.5.2`。
+
+在 `0.5.0a1` 之后发布下一项改动时，修复使用 `0.5.1`，新增功能使用 `0.6.0`。
+这些例子说明后续编号方式，不表示已经发布相应版本。
+历史版本号、发行产物和标签保持原样，包括 `0.5.0a1` 及更早带 `a` 的版本。
+版本标签为 `v` 加包版本号，旧标签保留用于复现安装。
 
 ## 数值修改
 
