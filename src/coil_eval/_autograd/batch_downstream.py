@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from .column_norms import column_norms
 from .triangular import independent_triangular_solve
 
-from .downstream import (DownstreamConfig, _arange, _xyz,
+from .downstream import (DownstreamConfig, _arange, _xyz, _alpha_radial_values,
     clebsch_modes, iota_profile_extrema, outer_qs_rms, volume_points,smooth_alpha_weights)
 
 
@@ -102,15 +102,13 @@ def batch_flux_calibration(geometries, levels, field, configs):
 
 
 def _batch_design_chunk(rho, theta, phi, bt, bp, weight, scale, metadata,
-                        nfp, start, end, iota_degree):
+                        nfp, start, end, iota_degree, radial_basis='zernike'):
     m, n, kind, radial_coeff = metadata
     mode_count = m.numel()
     stop = min(end, mode_count)
     blocks = []
     if start < stop:
-        radial = torch.zeros((*rho.shape, stop - start), device=rho.device, dtype=rho.dtype)
-        for power in range(radial_coeff.shape[1] - 1, -1, -1):
-            radial = radial * rho[..., None] + radial_coeff[start:stop, power]
+        radial = _alpha_radial_values(rho, radial_coeff[start:stop], radial_basis)
         phase = theta[..., None] * m[start:stop] - phi[..., None] * n[start:stop] * nfp
         derivative = torch.where(kind[start:stop] == 0, -phase.sin(), phase.cos())
         tangent = bt[..., None] * m[start:stop] - bp[..., None] * n[start:stop] * nfp
@@ -124,18 +122,20 @@ def _batch_design_chunk(rho, theta, phi, bt, bp, weight, scale, metadata,
 class _BatchAlphaDesign(torch.autograd.Function):
     """Bounded-column feature recomputation, with every moving feature VJP."""
     @staticmethod
-    def forward(ctx, rho, theta, phi, bt, bp, weight, scale, metadata, nfp, iota_degree, chunk):
+    def forward(ctx, rho, theta, phi, bt, bp, weight, scale, metadata, nfp, iota_degree, chunk,
+                radial_basis='zernike'):
         # Bound recomputation temporaries as the batch grows. Retaining the
         # graph for component VJPs keeps the full fit state alive concurrently.
         chunk = min(chunk, max(1, (1 << 22) // max(1, rho.numel())))
         ctx.save_for_backward(rho, theta, phi, bt, bp, weight, scale)
         ctx.mode_data, ctx.nfp, ctx.iota_degree, ctx.chunk = metadata, nfp, iota_degree, chunk
+        ctx.radial_basis = radial_basis
         columns = metadata[0].numel() + iota_degree + 1
         matrix = torch.empty((*rho.shape, columns), device=rho.device, dtype=rho.dtype)
         for lo in range(0, columns, chunk):
             hi = min(lo + chunk, columns)
             matrix[..., lo:hi] = _batch_design_chunk(rho, theta, phi, bt, bp, weight,
-                scale, metadata, nfp, lo, hi, iota_degree)
+                scale, metadata, nfp, lo, hi, iota_degree, radial_basis)
         return matrix
 
     @staticmethod
@@ -147,12 +147,12 @@ class _BatchAlphaDesign(torch.autograd.Function):
             for lo in range(0, adjoint.shape[-1], ctx.chunk):
                 hi = min(lo + ctx.chunk, adjoint.shape[-1])
                 matrix = _batch_design_chunk(*features, source[6], ctx.mode_data,
-                    ctx.nfp, lo, hi, ctx.iota_degree)
+                    ctx.nfp, lo, hi, ctx.iota_degree, ctx.radial_basis)
                 values = torch.autograd.grad(matrix, features, adjoint[..., lo:hi], allow_unused=True)
                 for j, value in enumerate(values):
                     if value is not None:
                         gradients[j] += value
-        return (*gradients, None, None, None, None, None)
+        return (*gradients, *(None for _ in range(len(ctx.needs_input_grad) - 6)))
 
 
 def batch_frozen_pcgls(A, b, cache, ridge, iterations=4, *, live_column_scale=False):
@@ -218,7 +218,7 @@ def batch_alpha_fit(points, B, cache, config, *, volume_rho_min=None):
     if scale.shape != (nq, mode_count + c.iota_degree + 1):
         raise ValueError('alpha cache shape does not match batch and complete basis')
     A = _BatchAlphaDesign.apply(rho, theta, phi, bt, bp, weight, scale, metadata,
-                               c.nfp, c.iota_degree, c.alpha_chunk_columns)
+                               c.nfp, c.iota_degree, c.alpha_chunk_columns, c.alpha_radial_basis)
     rhs = -weight * bt
     solution, residual = batch_frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations,
         live_column_scale=c.alpha_radial_weighting=='smooth')
@@ -361,5 +361,4 @@ def batch_downstream(front, alpha_caches, field, configs, *, return_arrays=False
     if return_arrays:
         result.update(points=points, B=B, gradB=gradB, flux_sections=flux['sections'])
     return result
-
 

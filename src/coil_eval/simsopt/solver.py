@@ -58,7 +58,7 @@ def _oriented_target_volume(initial_signed_volume,requested_volume):
     return float(np.copysign(requested,initial))
 
 
-def validate_surface(surface,field,*,iota,G,axis_samples=None):
+def validate_surface(surface,field,*,iota,G,axis_samples=None,check_self_intersection=True):
     xyz=np.asarray(surface.gamma());gp=np.asarray(surface.gammadash1());gt=np.asarray(surface.gammadash2())
     B=_field_values(field,xyz);magnitude=np.linalg.norm(B,axis=-1)
     normal=np.cross(gp,gt);normal_norm=np.linalg.norm(normal,axis=-1)
@@ -73,11 +73,19 @@ def validate_surface(surface,field,*,iota,G,axis_samples=None):
     if axis_samples is not None and finite:
         from .topology import angular_covering
         topology=angular_covering(xyz,axis_samples,surface.nfp)
+    intersection={'checked':False,'confirmed_self_intersection':False,
+                  'status':'not_checked','reason':'deferred_to_final_validation_grid'}
+    if check_self_intersection:
+        if finite and np.min(normal_norm)>1e-12:
+            from .intersections import detect_self_intersection
+            intersection=detect_self_intersection(surface)
+        else:
+            intersection['reason']='surface_nonfinite_or_degenerate'
     return {'finite':finite,'relative_l2':float(np.linalg.norm(weighted)/(max(abs(G),1e-300)*np.sqrt(magnitude.size))),
             'normal_B_sine_p95':float(np.percentile(sine,95)),
             'normal_min':float(np.min(normal_norm)),'toroidal_winding_min':float(np.min(winding)),
             'signed_volume_m3':float(surface.volume()),'point_count':magnitude.size,
-            'angular_covering':topology}
+            'angular_covering':topology,'self_intersection':intersection}
 
 
 class StandardSimsoptSolver:
@@ -110,22 +118,26 @@ class StandardSimsoptSolver:
         residual_norm=float(np.linalg.norm(boozer_surface_residual(final,iota,G,field,derivatives=0)[0]))
         converged=bool(newton.get('success',False)) or residual_norm<=cfg.max_newton_residual_norm
         grids=[];stage=time.perf_counter()
-        for size in sorted(set((exact,*cfg.validation_grids))):
+        grid_sizes=sorted(set((exact,*cfg.validation_grids)))
+        for size in grid_sizes:
             offset=(0.,0.) if size==exact else (.371,.371)
             dense=surface_from_dofs(dofs,nfp=seed.nfp,order=seed.order,nphi=size,
                                     stellsym=seed.stellsym,offset=offset)
             grids.append(dict(size=size,offset=offset[0],**validate_surface(dense,
                 validation_field if validation_field is not None else field,iota=iota,G=G,
-                axis_samples=getattr(seed,'source_axis_samples',None))))
+                axis_samples=getattr(seed,'source_axis_samples',None),
+                check_self_intersection=(size==grid_sizes[-1]))))
         dense=grids[-1]
         hard={'newton_converged':converged,'finite':dense['finite'],
               'toroidal_winding':dense['toroidal_winding_min']>0,
-              'normal_nonzero':dense['normal_min']>1e-12,'nonzero_volume':abs(dense['signed_volume_m3'])>0}
+              'normal_nonzero':dense['normal_min']>1e-12,'nonzero_volume':abs(dense['signed_volume_m3'])>0,
+              'no_detected_self_intersection':not dense['self_intersection']['confirmed_self_intersection']}
         if getattr(seed,'source_axis_samples',None) is not None:
             hard['single_angular_covering']=all(row['angular_covering'].get('valid_convention',False)
                                                for row in grids)
         strict={'dense_relative_l2':dense['relative_l2']<=cfg.max_final_relative_l2,
-                'dense_normal_field_p95':dense['normal_B_sine_p95']<=cfg.max_final_normal_p95}
+                'dense_normal_field_p95':dense['normal_B_sine_p95']<=cfg.max_final_normal_p95,
+                'self_intersection_audit_resolved':dense['self_intersection']['status']=='not_detected_in_sampled_sections'}
         accepted=all(hard.values())
         quality='strict_pass' if accepted and all(strict.values()) else 'accepted_with_quality_warning' if accepted else 'rejected'
         diagnostics={'least_squares':{'success':bool(ls.get('success',False)),

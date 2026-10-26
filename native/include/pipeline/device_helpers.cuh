@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pipeline/types.cuh"
+#include "pipeline/alpha_radial_basis.cuh"
 
 // Small templates and device-inline numerical primitives shared by kernels.
 namespace coil_eval::pipeline {
@@ -127,8 +128,10 @@ __device__ inline void evaluate_psi_device(
 __device__ inline float evaluate_radial_polynomial(
     const float* coefficients,
     int degree,
-    float rho
+    float rho,
+    int radial_basis = 0
 ) {
+    if (radial_basis==1) return flux_legendre_radial_value(coefficients,degree,rho);
     float result = coefficients[degree];
     for (int power = degree - 1; power >= 0; --power) result = result * rho + coefficients[power];
     return result;

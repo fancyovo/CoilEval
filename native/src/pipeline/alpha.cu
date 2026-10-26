@@ -269,6 +269,7 @@ __global__ void assemble_alpha_design_kernel(
     const float* __restrict__ radial_coefficients,
     int mode_count,
     int radial_order,
+    int radial_basis,
     int iota_degree,
     int nfp,
     const float* __restrict__ rho,
@@ -288,7 +289,7 @@ __global__ void assemble_alpha_design_kernel(
         const int kind = mode_kind[column];
         const float* radial_coeff = radial_coefficients + static_cast<size_t>(column) * (radial_order + 1);
         for (int row = threadIdx.x; row < row_count; row += blockDim.x) {
-            const float radial = evaluate_radial_polynomial(radial_coeff, radial_order, rho[row]);
+            const float radial = evaluate_radial_polynomial(radial_coeff, radial_order, rho[row], radial_basis);
             const float argument = m * theta[row] - n * nfp * phi[row];
             float sine, cosine;
             sincosf(argument, &sine, &cosine);
@@ -443,7 +444,7 @@ bool fit_alpha_native(
     );
     assemble_alpha_design_kernel<<<column_count, threads>>>(
         d_mode_m.data(), d_mode_n.data(), d_mode_kind.data(), d_radial_coefficients.data(),
-        mode_count, config.alpha_radial_order, config.iota_degree, nfp,
+        mode_count, config.alpha_radial_order, modes.radial_basis, config.iota_degree, nfp,
         d_rho.data(), d_theta.data(), d_phi.data(), d_b_theta.data(), d_b_phi.data(),
         d_weights.data(), fit_count, qr_rows, d_matrix.data()
     );

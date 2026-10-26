@@ -454,6 +454,7 @@ __global__ void local_batch_assemble_alpha_tile_kernel(
     const float* __restrict__ radial_coefficients,
     int mode_count,
     int radial_order,
+    int radial_basis,
     int iota_degree,
     int nfp,
     const float* __restrict__ rho,
@@ -484,7 +485,7 @@ __global__ void local_batch_assemble_alpha_tile_kernel(
             radial_coefficients + static_cast<size_t>(column) * (radial_order + 1);
         for (int row = threadIdx.x; row < fit_count; row += blockDim.x) {
             const size_t index = query_offset + row;
-            const float radial = evaluate_radial_polynomial(radial_coeff, radial_order, rho[index]);
+            const float radial = evaluate_radial_polynomial(radial_coeff, radial_order, rho[index], radial_basis);
             const float argument = m * theta[index] - n * nfp * phi[index];
             float sine, cosine;
             sincosf(argument, &sine, &cosine);

@@ -5,7 +5,7 @@ from functools import lru_cache
 import math
 import time
 import numpy as np
-from .._alpha_basis import radial_polynomial
+from .._alpha_basis import radial_value
 
 
 @lru_cache(maxsize=16)
@@ -16,7 +16,7 @@ def build_modes(radial_order, poloidal_order, toroidal_order):
 
 
 def radial(rho,l,m,basis='zernike'):
-    return sum(c*np.asarray(rho)**power for power,c in radial_polynomial(int(l),int(m),basis))
+    return radial_value(np.asarray(rho),int(l),int(m),basis)
 
 
 @dataclass
@@ -120,7 +120,7 @@ def fit_alpha(coordinates,B,*,nfp,orders=(12,12,16),iota_degree=0,device='cuda',
     for j,(l,m,n,kind) in enumerate(mode):
         key=int(l),int(m)
         if key not in radial_cache:
-            radial_cache[key]=sum(c*rho**p for p,c in radial_polynomial(*key,radial_basis))
+            radial_cache[key]=radial_value(rho,*key,radial_basis)
         key=int(m),int(n)
         if key not in phase_cache:
             phase=m*theta-n*nfp*phi;phase_cache[key]=(torch.cos(phase),torch.sin(phase))

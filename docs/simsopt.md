@@ -166,9 +166,26 @@ period; the cylindrical toroidal angle must have the corresponding degrees
 zero and one. `hard_downstream_checks['single_angular_covering']` records this
 acceptance check, and each grid's `angular_covering` records the measured
 degrees. Select `SolverConfig(validation_grids=(97,129))` for finer checks.
-Legacy seeds without axis samples retain their existing geometry checks and
+Legacy seeds without axis samples skip the axis-relative covering check and
 record `source_axis_unavailable`. Dense residual quality is reported separately
 as `strict_pass` or `accepted_with_quality_warning` for accepted surfaces.
+
+The unreleased solver also checks eight true geometric-toroidal sections with
+256 poloidal samples for self-intersection. Polygon crossings nominate pairs
+of parameters; a root on the original Fourier surface must confirm their
+Cartesian coincidence within `1e-9` m before
+`hard_downstream_checks['no_detected_self_intersection']` rejects the surface.
+The search runs once on the final geometry and does not require source-axis
+samples. The final validation grid's `self_intersection` record includes the
+witness, sampling scope and elapsed time.
+
+`not_detected_in_sampled_sections` records a finite search, not a global
+embedding certificate. A nonmonotone geometric-toroidal map or unresolved
+candidate remains inconclusive: the surface retains a quality warning through
+`strict_quality_checks['self_intersection_audit_resolved']`, without a new hard
+rejection solely for that inconclusive result. Non-star-shaped poloidal sections
+are not themselves self-intersections. Earlier saved acceptance records keep
+their original meaning and are not retroactively rewritten.
 
 ## Reference QS quantities
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Evaluate flux-Legendre alpha modes with a stable three-term recurrence in native, tensor and Simsopt initialization paths, reducing cancellation at higher radial orders without changing the finite basis.
+
+- Reject a Simsopt surface when a geometric-section candidate is confirmed as a self-intersection on the original Fourier surface. Inconclusive searches retain an explicit quality warning; a negative sampled search is not a global embedding certificate.
 - Check target-surface radial capacity on at least the psi fitting toroidal grid before accepting a target volume. Flux integration and local volume derivatives retain their configured quadrature. This sampled guard can reject surfaces previously accepted on the sparse flux grid.
 - Collapse toroidal polynomial coefficients once per section to reduce repeated work in the capacity guard.
 

@@ -161,3 +161,5 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 
 中心或端点不可用时抛出 `InvalidEvaluationError`，其 `.results` 包含可用结果。
 失效或跨会话中心抛出 `CenterContextError`；原生调用失败抛出 `EvaluationError`。
+
+原生求值、Tensor 反向与 Simsopt 初始化中的 flux-Legendre 径向函数均采用 Legendre 三项递推，避免 FP32 展开单项式的消减误差。该修复不增加有限基空间，也不消除 alpha/psi 拟合误差。切换原生库或基函数实现时，应重新生成 source capture。

@@ -109,6 +109,7 @@ __global__ void alpha_row_adjoint_kernel(
     const float* __restrict__ radial_coefficients,
     int mode_count,
     int radial_order,
+    int radial_basis,
     int iota_degree,
     int nfp,
     const float* __restrict__ rho,

@@ -146,8 +146,21 @@ BiotSavart 磁场。`StandardSimsoptSolver(config=SolverConfig(...))` 先进行�
 `hard_downstream_checks['single_angular_covering']` 记录这项接受检查，
 各网格的 `angular_covering` 记录实测绕数。
 可用 `SolverConfig(validation_grids=(97,129))` 加密检查。
-缺少磁轴采样的早期初始值保留原有几何检查，并记录 `source_axis_unavailable`。
+缺少磁轴采样的早期初始值跳过相对磁轴的覆盖检查，并记录 `source_axis_unavailable`。
 通过接受检查的磁面另以 `strict_pass` 或 `accepted_with_quality_warning` 报告稠密残差质量。
+
+未发布版本还会在八个真实几何环向截面上各取 256 个极向点检查自交。
+折线交点仅提供两组候选参数；必须回到原始 Fourier 曲面求根，确认两点的
+Cartesian 坐标在 `1e-9` m 内重合，才使硬检查
+`hard_downstream_checks['no_detected_self_intersection']` 拒绝该曲面。
+搜索只在最终几何上执行一次，不依赖源磁轴样本。最后一个验证网格的
+`self_intersection` 记录包含自交证据、采样范围及耗时。
+
+`not_detected_in_sampled_sections` 仅表示有限采样中未发现自交，不能证明全局嵌入。
+几何环向映射非单调或候选求根未解决时，结果明确保留为 inconclusive，
+通过 `strict_quality_checks['self_intersection_audit_resolved']` 保留质量警告；
+不会仅因这项检查结论未定而新增硬拒绝。极向截面非星形本身不等于自交。
+早期保存的接受记录保留原始含义，不追溯改写。
 
 ## 参考 QS 指标
 

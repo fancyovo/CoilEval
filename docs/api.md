@@ -187,3 +187,5 @@ The [Tensor API](torch.md) provides local reverse gradients for PyTorch losses.
 An unusable center or endpoint raises `InvalidEvaluationError`; `.results`
 contains available results. An expired or cross-session center raises
 `CenterContextError`. Native failures raise `EvaluationError`.
+
+Flux-Legendre radial values use a three-term Legendre recurrence in the native, tensor and Simsopt initialization paths. This avoids cancellation from an expanded FP32 monomial polynomial; it does not increase the finite basis or remove alpha/psi fitting error. Regenerate source captures when changing the native library or basis implementation.

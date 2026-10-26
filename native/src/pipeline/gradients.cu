@@ -982,7 +982,7 @@ bool compute_alpha_iota_g3_gradient(
         d_multiplier.data(), d_matrix_multiplier.data(), alpha.scaled_solution.data(),
         d_adj_solution.data(), alpha.scales.data(), d_dot_adjoint_matrix.data(),
         d_mode_m.data(), d_mode_n.data(), d_mode_kind.data(), d_radial_coefficients.data(),
-        alpha.mode_count, config.alpha_radial_order, config.iota_degree, nfp,
+        alpha.mode_count, config.alpha_radial_order, alpha.modes.radial_basis, config.iota_degree, nfp,
         alpha.rho.data(), alpha.theta.data(), alpha.phi.data(), alpha.b_theta.data(),
         alpha.b_phi.data(), alpha.weights.data(), d_adj_weight.data(),
         d_adj_b_theta.data(), d_adj_b_phi.data()

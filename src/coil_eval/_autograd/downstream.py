@@ -281,15 +281,38 @@ def clebsch_modes(radial_order, poloidal_order, toroidal_order, radial_basis='ze
     return tuple(ms), tuple(ns), tuple(kinds), tuple(tuple(r) for r in radial)
 
 
-def _design_chunk(rho, theta, phi, bt, bp, weight, scale, metadata, nfp, start, end, iota_degree):
+def _alpha_radial_values(rho, coefficients, radial_basis='zernike'):
+    """Evaluate all columns with the same stable basis as the native kernels."""
+    radial = torch.zeros((*rho.shape, coefficients.shape[0]), device=rho.device, dtype=rho.dtype)
+    if radial_basis == 'zernike':
+        for power in range(coefficients.shape[1] - 1, -1, -1):
+            radial = radial * rho[..., None] + coefficients[:, power]
+        return radial
+    if radial_basis != 'flux_legendre':
+        raise ValueError('unknown alpha radial basis')
+    # Saved/native metadata keeps monomial coefficients for compatibility.
+    # Their last nonzero even power identifies the Legendre order exactly.
+    powers = torch.arange(coefficients.shape[1], device=rho.device)
+    orders = ((coefficients != 0) * powers).amax(-1) // 2
+    previous = rho[..., None] * 0 + 1
+    radial = torch.where(orders == 0, previous, radial)
+    x = 2 * rho[..., None] * rho[..., None] - 1
+    current = x
+    radial = torch.where(orders == 1, current, radial)
+    for j in range(2, coefficients.shape[1] // 2 + 1):
+        previous, current = current, ((2*j-1)*x*current - (j-1)*previous) / j
+        radial = torch.where(orders == j, current, radial)
+    return radial
+
+
+def _design_chunk(rho, theta, phi, bt, bp, weight, scale, metadata, nfp, start, end, iota_degree,
+                  radial_basis='zernike'):
     m, n, kind, radial_coeff = metadata
     mode_count = m.numel()
     stop = min(end, mode_count)
     blocks = []
     if start < stop:
-        radial = torch.zeros((rho.numel(), stop - start), device=rho.device, dtype=rho.dtype)
-        for power in range(radial_coeff.shape[1] - 1, -1, -1):
-            radial = radial * rho[:, None] + radial_coeff[start:stop, power]
+        radial = _alpha_radial_values(rho, radial_coeff[start:stop], radial_basis)
         phase = theta[:, None] * m[start:stop] - phi[:, None] * n[start:stop] * nfp
         trig_derivative = torch.where(kind[start:stop] == 0, -phase.sin(), phase.cos())
         # d_phi basis = -n*nfp/m * d_theta when m != 0, with no division at m=0.
@@ -309,15 +332,17 @@ class _AlphaDesign(torch.autograd.Function):
     with a small O(N*chunk) extra. All six point-feature cotangents are returned.
     """
     @staticmethod
-    def forward(ctx, rho, theta, phi, bt, bp, weights, scale, metadata, nfp, iota_degree, chunk):
+    def forward(ctx, rho, theta, phi, bt, bp, weights, scale, metadata, nfp, iota_degree, chunk,
+                radial_basis='zernike'):
         ctx.save_for_backward(rho, theta, phi, bt, bp, weights, scale)
         ctx.mode_data, ctx.nfp, ctx.iota_degree, ctx.chunk = metadata, nfp, iota_degree, chunk
+        ctx.radial_basis = radial_basis
         cols = metadata[0].numel() + iota_degree + 1
         output = torch.empty((rho.numel(), cols), device=rho.device, dtype=rho.dtype)
         for lo in range(0, cols, chunk):
             hi = min(lo + chunk, cols)
             output[:, lo:hi] = _design_chunk(rho, theta, phi, bt, bp, weights, scale,
-                                           metadata, nfp, lo, hi, iota_degree)
+                                                  metadata, nfp, lo, hi, iota_degree, radial_basis)
         return output
 
     @staticmethod
@@ -330,12 +355,13 @@ class _AlphaDesign(torch.autograd.Function):
         with torch.enable_grad():
             for lo in range(0, cols, ctx.chunk):
                 hi = min(lo + ctx.chunk, cols)
-                matrix = _design_chunk(*features, scale, ctx.mode_data, ctx.nfp, lo, hi, ctx.iota_degree)
+                matrix = _design_chunk(*features, scale, ctx.mode_data, ctx.nfp, lo, hi, ctx.iota_degree,
+                                       ctx.radial_basis)
                 values = torch.autograd.grad(matrix, features, adj_matrix[:, lo:hi], allow_unused=True)
                 for i, value in enumerate(values):
                     if value is not None:
                         grads[i] += value
-        return (*grads, None, None, None, None, None)
+        return (*grads, *(None for _ in range(len(ctx.needs_input_grad) - 6)))
 
 
 def frozen_pcgls(A: Tensor, b: Tensor, cache: Mapping, ridge: float, iterations=4,
@@ -414,7 +440,7 @@ def alpha_fit(points: Mapping, B: Tensor, cache: Mapping, config: DownstreamConf
     if scale.shape != (mode_count + c.iota_degree + 1,):
         raise ValueError(f'alpha cache has {scale.shape}, expected {mode_count + c.iota_degree + 1} columns')
     A = _AlphaDesign.apply(rho, theta, phi, bt, bp, weight, scale, metadata,
-                          c.nfp, c.iota_degree, c.alpha_chunk_columns)
+                          c.nfp, c.iota_degree, c.alpha_chunk_columns, c.alpha_radial_basis)
     rhs = -weight * bt
     solution, residual = frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations,
         live_column_scale=c.alpha_radial_weighting=='smooth')
@@ -524,6 +550,5 @@ def downstream(geometry, level: Tensor, alpha_cache: Mapping, field: Callable,
     if return_arrays:
         result.update(points=points, B=B, gradB=gradB, flux_sections=flux['sections'])
     return result
-
 
 

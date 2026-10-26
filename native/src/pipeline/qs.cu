@@ -384,6 +384,7 @@ __global__ void alpha_row_adjoint_kernel(
     const float* __restrict__ radial_coefficients,
     int mode_count,
     int radial_order,
+    int radial_basis,
     int iota_degree,
     int nfp,
     const float* __restrict__ rho,
@@ -421,7 +422,7 @@ __global__ void alpha_row_adjoint_kernel(
             const float radial = evaluate_radial_polynomial(
                 radial_coefficients + static_cast<size_t>(column) * (radial_order + 1),
                 radial_order,
-                rho[row]
+                rho[row], radial_basis
             );
             float sine, cosine;
             sincosf(m * theta[row] - n * nfp * phi[row], &sine, &cosine);

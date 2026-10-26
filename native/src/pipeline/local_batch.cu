@@ -759,7 +759,7 @@ bool score_local_batch_impl(
         local_batch_assemble_alpha_tile_kernel<<<alpha_grid, threads>>>(
             d_alpha_m.data(), d_alpha_n.data(), d_alpha_kind.data(),
             d_alpha_radial.data(), mode_count, config.alpha_radial_order,
-            config.iota_degree, nfp, d_alpha_rho.data(), d_alpha_theta.data(),
+            alpha_modes.radial_basis, config.iota_degree, nfp, d_alpha_rho.data(), d_alpha_theta.data(),
             d_alpha_phi.data(), d_b_theta.data(), d_b_phi.data(),
             d_alpha_weights.data(), fit_count, query_begin, tile,
             d_center_scale.data(), d_matrix.data()

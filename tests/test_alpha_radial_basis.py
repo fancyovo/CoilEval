@@ -105,12 +105,12 @@ def test_single_and_batch_design_vjps_include_all_six_moving_features(basis):
     features[0]=features[0].sigmoid()*.8+.1;features[5]=features[5].exp()
     features=[v.requires_grad_() for v in features]
     scale=torch.ones(2,count,dtype=dtype)
-    answer=_BatchAlphaDesign.apply(*features,scale,metadata,4,3,11)
+    answer=_BatchAlphaDesign.apply(*features,scale,metadata,4,3,11,basis)
     upstream=torch.randn(answer.shape,generator=generator,dtype=dtype)
     batch_grad=torch.autograd.grad((answer*upstream).sum(),features)
     for query in range(2):
         single=[v[query].detach().requires_grad_() for v in features]
-        value=_AlphaDesign.apply(*single,scale[query],metadata,4,3,11)
+        value=_AlphaDesign.apply(*single,scale[query],metadata,4,3,11,basis)
         torch.testing.assert_close(value,answer[query],rtol=0,atol=0)
         grads=torch.autograd.grad((value*upstream[query]).sum(),single)
         for k,grad in enumerate(grads):
@@ -120,7 +120,7 @@ def test_single_and_batch_design_vjps_include_all_six_moving_features(basis):
             perturbed=[v.detach() for v in single]
             def objective(sign):
                 moved=perturbed.copy();moved[k]=moved[k]+sign*h*direction
-                return (_design_chunk(*moved,scale[query],metadata,4,0,count,3)*upstream[query]).sum()
+                return (_design_chunk(*moved,scale[query],metadata,4,0,count,3,basis)*upstream[query]).sum()
             fd=(objective(1)-objective(-1))/(2*h)
             torch.testing.assert_close((grad*direction).sum(),fd,rtol=2e-7,atol=2e-7)
 
@@ -131,3 +131,61 @@ def test_flux_basis_has_identical_column_order_and_count():
     old=clebsch_modes(12,12,12);new=clebsch_modes(12,12,12,'flux_legendre')
     assert old[:3]==new[:3] and len(new[0])==2268
     assert all(len(row)==13 for row in new[3])
+
+
+def test_native_legendre_recurrence_avoids_float32_monomial_cancellation(tmp_path):
+    compiler=shutil.which('clang++') or shutil.which('g++')
+    if compiler is None:pytest.skip('host C++17 compiler unavailable')
+    package=Path(__file__).resolve().parents[1]
+    cpp=tmp_path/'stable_basis.cpp';exe=tmp_path/('stable_basis.exe' if __import__('os').name=='nt' else 'stable_basis')
+    cpp.write_text('''#include "pipeline/alpha_radial_basis.cuh"
+#include <cmath>
+#include <iostream>
+#include <iomanip>
+int main() { std::cout << std::setprecision(17);
+  for(int k: {0,1,6,8,10,12}) for(int m: {0,3}) {
+    const int degree=2*k+m;
+    auto c=coil_eval::pipeline::flux_legendre_radial_coefficients(degree,m,degree+1);
+    for(int i=0;i<=10000;++i) {
+      const float r=static_cast<float>(i/10000.0);
+      float old=c[degree];
+      for(int j=degree-1;j>=0;--j) old=std::fma(old,r,c[j]);
+      std::cout << k << ' ' << r << ' ' << old << ' '
+        << coil_eval::pipeline::flux_legendre_radial_value(c.data(),degree,r) << '\\n';
+    }
+  }
+}
+''',encoding='utf-8')
+    build=subprocess.run([compiler,'-O2','-std=c++17','-I'+str(package/'native/include'),str(cpp),'-o',str(exe)],capture_output=True,text=True)
+    assert build.returncode==0,build.stdout+build.stderr
+    run=subprocess.run([str(exe)],capture_output=True,text=True);assert run.returncode==0,run.stderr
+    import io
+    values=np.loadtxt(io.StringIO(run.stdout))
+    for k in (0,1,6,8,10,12):
+        rows=values[values[:,0]==k]
+        expected=np.polynomial.legendre.Legendre.basis(k)(2*rows[:,1]**2-1)
+        np.testing.assert_allclose(rows[:,3],expected,rtol=0,atol=2e-5)
+        if k>=6:
+            assert np.max(np.abs(rows[:,2]-expected))>1e-4
+            assert np.max(np.abs(rows[:,3]-expected))<np.max(np.abs(rows[:,2]-expected))/50
+
+
+def test_legendre_tensor_values_and_radial_derivatives_match_independent_reference():
+    torch=pytest.importorskip('torch')
+    from coil_eval._autograd.downstream import _alpha_radial_values
+    orders=(0,1,6,8,10,12)
+    coefficients=np.zeros((len(orders),25))
+    for row,k in enumerate(orders):
+        for power,value in radial_polynomial(2*k,0,'flux_legendre'):
+            coefficients[row,power]=value
+    rho=np.array([0.,.001,.5,.97,.99334,.99806,1.],dtype=np.float32)
+    expected=np.stack([np.polynomial.legendre.Legendre.basis(k)(2*rho.astype(float)**2-1)
+                       for k in orders],axis=-1)
+    values=_alpha_radial_values(torch.from_numpy(rho),torch.tensor(coefficients,dtype=torch.float32),'flux_legendre')
+    np.testing.assert_allclose(values.numpy(),expected,rtol=0,atol=2e-5)
+    r=torch.tensor(rho.astype(float),requires_grad=True)
+    values=_alpha_radial_values(r,torch.tensor(coefficients),'flux_legendre')
+    for column,k in enumerate(orders):
+        derivative=torch.autograd.grad(values[:,column].sum(),r,retain_graph=True)[0]
+        expected_derivative=np.polynomial.legendre.Legendre.basis(k).deriv()(2*rho.astype(float)**2-1)*4*rho
+        np.testing.assert_allclose(derivative.numpy(),expected_derivative,rtol=2e-12,atol=2e-12)
