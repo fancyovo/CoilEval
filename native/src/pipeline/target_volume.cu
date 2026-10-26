@@ -21,19 +21,13 @@ bool target_geometry(const AxisData& axis,const PsiData& psi,int nfp,
         double R,Z,dR,dZ;
         periodic_hermite_host(phi,axis.R,axis.R_phi,nfp,R,dR);
         periodic_hermite_host(phi,axis.Z,axis.Z_phi,nfp,Z,dZ);
-        std::vector<double> trig(psi.coeffs.size());
-        for(size_t k=0;k<trig.size();++k){
-            const double arg=psi.modes.m[k]*nfp*phi;
-            trig[k]=psi.modes.kind[k]?std::sin(arg):std::cos(arg);
-        }
+        const auto section=sgpu_target::collapse_section(psi.coeffs.data(),
+            psi.modes.a.data(),psi.modes.b.data(),psi.modes.m.data(),
+            psi.modes.kind.data(),psi.coeffs.size(),nfp*phi);
         for(int it=0;it<config.flux_theta_count;++it){
             sgpu_target::Ray ray;ray.R=R;ray.Z=Z;ray.phi=phi;ray.theta=TWOPI*it/config.flux_theta_count;
             const double c=std::cos(ray.theta),s=std::sin(ray.theta);
-            std::array<double,25> cp{},sp{};cp[0]=sp[0]=1;
-            for(int j=1;j<=g.degree;++j){cp[j]=cp[j-1]*c;sp[j]=sp[j-1]*s;}
-            ray.p[2]=c*c;
-            for(size_t k=0;k<psi.coeffs.size();++k)
-                ray.p[psi.modes.a[k]+psi.modes.b[k]]+=psi.coeffs[k]*cp[psi.modes.a[k]]*sp[psi.modes.b[k]]*trig[k];
+            ray.p=sgpu_target::radial_polynomial(section,g.degree,c,s);
             double lo=0,hi=config.surface_max_radius_scale;
             if(c<0)hi=std::min(hi,.999*R/(-c*g.a));
             if(!(ray.p[2]>1e-12)||!std::isfinite(ray.p[2]))return false;
@@ -56,6 +50,21 @@ bool screen_target_volume_native(void* field,const AxisData& axis,const PsiData&
     g_target_volume_cache=TargetVolumeCache{};
     sgpu_target::Geometry g;
     if(!target_geometry(axis,psi,nfp,config,g)){std::snprintf(result.error_message,sizeof(result.error_message),"no certified star-shaped nested psi branch on geometry grid");return true;}
+    // Flux quadrature may use fewer toroidal sections than the fitted psi
+    // representation. Certifying only those sections can miss a radial fold
+    // between them. Keep the volume quadrature/adjoint unchanged, but limit
+    // its admissible level using the psi fitting grid and at least two samples
+    // per toroidal mode. This remains a sampled, not global, certificate.
+    const int guard_phi=std::max(config.psi_n_phi,2*config.psi_m_tor+1);
+    if(guard_phi>config.flux_phi_count){
+        SgpuScoreConfig guard_config=config;
+        guard_config.flux_phi_count=guard_phi;
+        sgpu_target::Geometry guard;
+        if(!target_geometry(axis,psi,nfp,guard_config,guard)){
+            std::snprintf(result.error_message,sizeof(result.error_message),"no nested psi branch on toroidal capacity guard grid");return true;
+        }
+        g.maximum_level=std::min(g.maximum_level,guard.maximum_level);
+    }
     double maximum,dummy;
     if(!sgpu_target::measure(g,g.maximum_level,maximum,dummy))return true;
     result.target_volume_maximum=maximum;

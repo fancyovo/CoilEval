@@ -53,6 +53,10 @@ config = EvaluationConfig(
 Two-stage evaluation first fits psi in the initial domain, constructs an
 axis-connected closed training domain, and fits psi again in that domain.
 The target-volume surface and QS metrics use the second fit.
+The target-volume capacity guard checks at least the psi fitting toroidal grid
+and two samples per retained toroidal mode. Flux quadrature remains separately
+configured. This is a sampled radial-branch check; an accepted result does not
+certify a global magnetic surface or physical accuracy.
 `psi_refit_sampling='polar_quadrature'` selects optional weighted polar
 quadrature, an experimental numerical option in this development release.
 Both samplers retain complete sampling structures, so the actual row count can

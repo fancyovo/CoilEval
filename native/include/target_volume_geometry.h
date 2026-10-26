@@ -7,6 +7,29 @@
 #include <limits>
 namespace sgpu_target {
 using Polynomial = std::array<double,25>;
+using SectionCoefficients = std::array<Polynomial,25>;
+// Collapse the toroidal series once per section. The subsequent ray expansion
+// then visits each Cartesian monomial once, independently of toroidal order.
+inline SectionCoefficients collapse_section(const double* coefficients,
+    const int* mode_a,const int* mode_b,const int* mode_m,const int* mode_kind,
+    std::size_t count,double nfp_phi) {
+    SectionCoefficients section{};
+    for(std::size_t k=0;k<count;++k) {
+        const double arg=mode_m[k]*nfp_phi;
+        const double trig=mode_kind[k]?std::sin(arg):std::cos(arg);
+        section[mode_a[k]][mode_b[k]]+=coefficients[k]*trig;
+    }
+    return section;
+}
+inline Polynomial radial_polynomial(const SectionCoefficients& section,
+                                    int degree,double c,double s) {
+    Polynomial cp{},sp{},p{};cp[0]=sp[0]=1;
+    for(int j=1;j<=degree;++j){cp[j]=cp[j-1]*c;sp[j]=sp[j-1]*s;}
+    p[2]=c*c;
+    for(int a=0;a<=degree;++a)for(int b=0;b<=degree-a;++b)
+        p[a+b]+=section[a][b]*cp[a]*sp[b];
+    return p;
+}
 inline double value(const Polynomial& p,int degree,double u) {
     double v=p[degree]; for(int j=degree-1;j>=0;--j) v=v*u+p[j]; return v;
 }

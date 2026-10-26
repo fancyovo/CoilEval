@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Check target-surface radial capacity on at least the psi fitting toroidal grid before accepting a target volume. Flux integration and local volume derivatives retain their configured quadrature. This sampled guard can reject surfaces previously accepted on the sparse flux grid.
+- Collapse toroidal polynomial coefficients once per section to reduce repeated work in the capacity guard.
+
 ## 0.5.0a1
 
 - Accelerated coil geometry metrics while retaining them in complete value-and-gradient evaluation.
