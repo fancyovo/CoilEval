@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (unreleased)
 
 - Evaluate flux-Legendre alpha modes with a stable three-term recurrence in native, tensor and Simsopt initialization paths, reducing cancellation at higher radial orders without changing the finite basis.
 

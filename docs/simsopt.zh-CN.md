@@ -1,5 +1,8 @@
 # Simsopt 接口
 
+源码版本 0.5.1 尚未发布。下面的 0.5.0a1 wheel 示例不包含容量保护、
+自交检查和 flux-Legendre 修复；使用这些修复请构建更新后的源码。
+
 [English](simsopt.md)
 
 `coil_eval.simsopt` 提供 source-psi 与 alpha 拟合记录、alpha+nu 磁面初始值、

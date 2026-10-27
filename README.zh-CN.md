@@ -5,13 +5,14 @@
 CoilEval 使用 NVIDIA GPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-0.5.0a1 开发版新增磁通多项式 alpha 基函数，加速线圈几何指标，并在张量批量求值中共享准备工作。
-Simsopt 工作流保留源磁轴并检查磁面的角度覆盖。已有调用保留单阶段默认设置，
+源码包版本为 0.5.1（尚未发布），包含目标体积容量保护、Simsopt 参考面自交拒绝
+和稳定 flux-Legendre 递推修复。已有调用保留单阶段默认设置，
 可通过 `EvaluationConfig` 显式选择数值路径。改动见[版本记录](docs/changelog.zh-CN.md)。
 
 ## 安装
 
-使用 Python 3.10+ 安装 Linux x86-64 安装包：
+下例使用 Python 3.10+ 安装历史 0.5.0a1 wheel，不包含 0.5.1 修复。
+0.5.1 发行 wheel 尚未发布；使用更新后的代码请按安装文档从源码构建。
 
 ```sh
 python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl

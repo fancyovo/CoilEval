@@ -13,6 +13,10 @@
 | 0.4.0a1 | Two-stage psi, higher Fourier orders and Simsopt integration | `psi_fit='two_stage'`; `coil_eval.simsopt` |
 | 0.5.0a1 | Flux-polynomial alpha, shared tensor preparation and surface covering checks | `alpha_radial_basis='flux_legendre'`; batch and Simsopt APIs |
 
+The source version is 0.5.1 (unreleased), adding target-volume capacity guards,
+confirmed-reference self-intersection rejection and stable flux-Legendre evaluation.
+The historical 0.5.0a1 binaries do not contain these fixes.
+
 The default NumPy behavior stays compatible across these versions. New numerical
 paths are selected explicitly. Use an exact version and save the configuration
 alongside results when repeating an evaluation.

@@ -7,15 +7,17 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The 0.5.0a1 development release adds a flux-polynomial alpha basis, faster
-geometry metrics and shared preparation for tensor batches. The Simsopt workflow
-preserves the source magnetic axis and checks surface angular covering. Existing
+The source package is 0.5.1 (unreleased). It fixes target-volume capacity
+checks, rejects confirmed self-intersecting Simsopt references, and evaluates
+flux-Legendre modes with a stable recurrence. Existing
 calls retain the single-stage defaults; select numerical options explicitly with
 `EvaluationConfig`. See the [release history](CHANGELOG.md) for changes.
 
 ## Installation
 
-Install the Linux x86-64 wheel with Python 3.10+:
+The example below installs the historical 0.5.0a1 wheel with Python 3.10+;
+it does not include the 0.5.1 fixes. A 0.5.1 release wheel has not been published.
+Use the source-build instructions for the updated code.
 
 ```sh
 python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl

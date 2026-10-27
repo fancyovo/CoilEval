@@ -1,5 +1,9 @@
 # Installation
 
+Source version 0.5.1 is unreleased. Wheel commands below refer to historical
+0.5.0a1 artifacts, which do not include the capacity, self-intersection and
+flux-Legendre fixes. Build from source to use those fixes.
+
 [简体中文](installation.zh-CN.md)
 
 ## Binary wheel

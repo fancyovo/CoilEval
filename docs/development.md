@@ -62,10 +62,13 @@ Use `major.minor.patch` without an `a` suffix:
 - Bug fixes increment the third (patch) component, including small patches and
   obvious corrections, for example `0.5.1` to `0.5.2`.
 
-When releasing the next change after `0.5.0a1`, a fix uses `0.5.1` and a new
-feature uses `0.6.0`. These examples describe future numbering, not existing
-releases. Keep historical version numbers, artifacts and tags unchanged,
-including `0.5.0a1` and earlier `a` versions. Release tags use `v` followed by
+The source package is `0.5.1` for the capacity, self-intersection and
+flux-Legendre fixes; its changelog entry remains unreleased until publication.
+Update package metadata and CHANGELOG when delivering implementation changes,
+even before tagging or building release binaries. Documentation-only changes
+and diagnostic reports do not require a package bump. The next fix uses
+`0.5.2`; a new feature uses `0.6.0`. Keep historical version numbers, artifacts
+and tags unchanged, including `0.5.0a1` and earlier `a` versions. Release tags use `v` followed by
 the package version; retain earlier tags for reproducible installations.
 
 ## Numerical changes

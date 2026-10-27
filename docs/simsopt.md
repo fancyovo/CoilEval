@@ -1,5 +1,9 @@
 # Simsopt integration
 
+Source version 0.5.1 is unreleased. The 0.5.0a1 wheel examples below do not
+include the capacity, self-intersection and flux-Legendre fixes; build the
+updated source to use them.
+
 [简体中文](simsopt.zh-CN.md)
 
 `coil_eval.simsopt` provides source-psi and alpha records, alpha+nu surface

@@ -23,9 +23,12 @@ Read README.md, docs/api.md and CHANGELOG.md before changing public behavior.
   version numbers do not identify the CUDA Toolkit release; validate dependency
   resolution against the package index as well as the offline build wheelhouse.
 - Future versions use `major.minor.patch` without an `a` suffix. New features
-  increment the second (minor) component and reset patch to zero. Every released
+  increment the second (minor) component and reset patch to zero. Every delivered
   bug fix, including a small or obvious correction, increments the third (patch)
-  component. Do not reuse a version for changed implementation.
+  component. Update source package metadata and CHANGELOG with the change, even
+  before a tag or binary release. Documentation-only and diagnostic-report
+  changes do not require a package bump. Do not reuse a version for changed
+  implementation.
 - Preserve historical version numbers, release artifacts and tags, including
   existing `a` versions. This policy does not renumber earlier releases.
 - Follow ascending release versions. Maintain CHANGELOG.md and immutable tags.
