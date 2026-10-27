@@ -12,10 +12,12 @@
 | 0.3.0a3 | Validated CUDA runtime dependency set | Install the updated wheel |
 | 0.4.0a1 | Two-stage psi, higher Fourier orders and Simsopt integration | `psi_fit='two_stage'`; `coil_eval.simsopt` |
 | 0.5.0a1 | Flux-polynomial alpha, shared tensor preparation and surface covering checks | `alpha_radial_basis='flux_legendre'`; batch and Simsopt APIs |
+| 0.5.1 | Capacity guards, reference intersections and stable basis evaluation | Included in later versions |
+| 0.6.0 | Surface f_B, optional f_T, reverse gradients and accuracy presets | `coil_eval.qs`; `TensorEvaluator(surface_qs=...)` |
 
-The source version is 0.5.1 (unreleased), adding target-volume capacity guards,
-confirmed-reference self-intersection rejection and stable flux-Legendre evaluation.
-The historical 0.5.0a1 binaries do not contain these fixes.
+The source version is 0.6.0 (unreleased), adding target-surface f_B, optional f_T,
+their local reverse gradients and accuracy presets. It includes the 0.5.1
+capacity, reference-surface and flux-Legendre fixes.
 
 The default NumPy behavior stays compatible across these versions. New numerical
 paths are selected explicitly. Use an exact version and save the configuration

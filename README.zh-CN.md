@@ -5,17 +5,17 @@
 CoilEval 使用 NVIDIA GPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-源码包版本为 0.5.1（尚未发布），包含目标体积容量保护、Simsopt 参考面自交拒绝
-和稳定 flux-Legendre 递推修复。已有调用保留单阶段默认设置，
-可通过 `EvaluationConfig` 显式选择数值路径。改动见[版本记录](docs/changelog.zh-CN.md)。
+源码包版本为 0.6.0（尚未发布），新增可选的目标磁面 f_B、f_T、局部反传梯度和精度档位。
+通过 `coil_eval.qs` 或 `TensorEvaluator` 的可选 `surface_qs` 配置使用这些指标。
+已有 `Evaluator` 和 Tensor 调用保留原配置的求值路径。
+详见[磁面 QS 指南](docs/qs.zh-CN.md)和[版本记录](docs/changelog.zh-CN.md)。
 
 ## 安装
 
-下例使用 Python 3.10+ 安装历史 0.5.0a1 wheel，不包含 0.5.1 修复。
-0.5.1 发行 wheel 尚未发布；使用更新后的代码请按安装文档从源码构建。
+在 Python 3.10+ 环境中安装随附的 0.6.0 预编译 wheel：
 
 ```sh
-python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 安装包包含 GPU 后端，pip 会安装 NumPy 和 CUDA 12.8 运行库。
@@ -38,7 +38,7 @@ with Evaluator(config=config) as evaluator:
         print(result.status)
 ```
 
-完整命令示例：
+源码压缩包包含示例脚本和输入。在解压后的项目目录运行：
 
 ```sh
 python examples/evaluate.py
@@ -49,6 +49,8 @@ python examples/two_stage.py
 配置 CUDA 版 PyTorch 后，可运行 `python examples/autograd.py` 完成求值和一次目标反传。
 `TensorEvaluator.evaluate_batch` 接收独立参数张量；`capture_sources` 在同一几何的多个目标体积之间
 共享两阶段拟合。
+运行 `python examples/qs_metrics.py --gradient --metric f_B` 可计算目标磁面的傅里叶指标及梯度；
+选择 `--metric f_T` 则计算三重积指标。
 
 `psi_fit="two_stage"` 在闭合训练区域重新拟合 psi。
 可选的 PyTorch 接口提供局部反传梯度和独立批量求值，支持 16 阶线圈。
@@ -77,6 +79,7 @@ QS 指标采用残差 RMS 定义：`qs_volume` 对所选体积求平均，`qs_ou
 - [安装与 GPU 兼容性](docs/installation.zh-CN.md)
 - [API 与参数约定](docs/api.zh-CN.md)
 - [PyTorch 梯度和批量求值](docs/torch.zh-CN.md)
+- [目标磁面的 f_B 与 f_T](docs/qs.zh-CN.md)
 - [Simsopt 磁面与参考 QS](docs/simsopt.zh-CN.md)
 - [版本选择](docs/versions.zh-CN.md)
 - [示例](examples/README.zh-CN.md)

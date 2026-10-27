@@ -1,7 +1,6 @@
 # Simsopt 接口
 
-源码版本 0.5.1 尚未发布。下面的 0.5.0a1 wheel 示例不包含容量保护、
-自交检查和 flux-Legendre 修复；使用这些修复请构建更新后的源码。
+版本 0.6.0 尚未发布。以下示例使用随附的预编译 wheel。
 
 [English](simsopt.md)
 
@@ -12,7 +11,7 @@ CUDA 准备阶段还使用可选的 PyTorch 依赖。相应依赖会在运行具
 使用本地安装包安装磁面相关依赖：
 
 ```sh
-python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 `simsopt` 可选依赖组包含 Simsopt 与 SciPy。
@@ -198,3 +197,5 @@ python examples/simsopt_async.py solve --directory output/case1 --workers 4
 每个 CPU 进程使用一个 BLAS/OpenMP 线程并隐藏 CUDA 设备。
 `--workers` 应与作业分配的 CPU 核数匹配。两阶段都保留各目标的成功或失败状态，
 输入输出路径可通过命令行参数指定。
+
+可选指标与精度档位见[目标磁面的 f_B 和 f_T](qs.zh-CN.md)。

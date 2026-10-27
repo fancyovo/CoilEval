@@ -223,7 +223,8 @@ def batch_alpha_fit(points, B, cache, config, *, volume_rho_min=None):
     solution, residual = batch_frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations,
         live_column_scale=c.alpha_radial_weighting=='smooth')
     iota = solution[:, mode_count:] / scale[:, mode_count:]
-    return dict(iota_coefficients=iota, iota_boundary=iota.sum(-1),
+    return dict(alpha_coefficients=solution[:, :mode_count] / scale[:, :mode_count],
+                iota_coefficients=iota, iota_boundary=iota.sum(-1),
         **iota_profile_extrema(iota,c.volume_rho_min if volume_rho_min is None else volume_rho_min),
         normal_B_relative_l2=(normal_B.double().square().sum((-1, -2))
                               / field.double().square().sum((-1, -2))).sqrt(),

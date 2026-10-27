@@ -54,13 +54,15 @@ class TensorEvaluation:
     metrics: TensorMetrics
     diagnostics: dict
     timings: dict
+    surface_qs: object | None = None
 
 
 class TensorEvaluator:
     """Single or independent-batch local response, with optional PyTorch autograd."""
 
     def __init__(self, library=None, field_library=None, *, config: EvaluationConfig,
-                 device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True):
+                 device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
+                 surface_qs=None):
         self._validate_config(config)
         if field_dtype not in (torch.float32, torch.float64):
             raise ValueError('field_dtype must be torch.float32 or torch.float64')
@@ -69,6 +71,10 @@ class TensorEvaluator:
         self.dtype = field_dtype
         self.batch_axis = bool(batch_axis)
         self.share_geometry = bool(share_geometry)
+        from .qs import SurfaceQSConfig
+        if surface_qs is not None and not isinstance(surface_qs,SurfaceQSConfig):
+            raise TypeError('surface_qs must be SurfaceQSConfig or None')
+        self.surface_qs = surface_qs
         from ._native_loader import resolve_library
         library = resolve_library(library)
         self.library_path = str(library)
@@ -292,7 +298,52 @@ class TensorEvaluator:
                          for s in snapshots],
                      'flux_integration':physics['flux_validation'],
                      'capture':capture_metadata}
-        return TensorEvaluation(x,metrics,diagnostics,timings)
+        qs_result=None
+        if getattr(self,'surface_qs',None) is not None:
+            from dataclasses import asdict
+            from ._autograd.boozer import sample_boozer_surface
+            from .qs_metrics import boozer_spectrum_metrics,boozer_qs_metrics_field
+            from .qs import SurfaceQSResult
+            def evaluate_qs_surfaces():
+                # Spectral second derivatives amplify FP32 sampling noise.
+                # Build these field quadratures in FP64 while preserving the
+                # configured precision of the existing score and its gradient.
+                qp,qw=(coil_segments_batch(x.double(),nfp=4,count=256) if batch
+                       else coil_segments(x.double(),nfp=4,count=256))
+                records=[]
+                for i,cfg in enumerate(configs):
+                    geometry=front.geometry(i) if batch else front.geometry
+                    level=front.levels[i] if batch else front.level
+                    phys={k:v[i] if batch and isinstance(v,torch.Tensor) else v
+                          for k,v in physics.items()}
+                    phys['major_radius']=geometry.axis_samples[:,0].double().mean()
+                    sample_field=SegmentField(qp[i] if batch else qp,
+                        qw[i] if batch else qw,self.field_library)
+                    sample=sample_boozer_surface(geometry,level,phys,sample_field,
+                        downstream_configs[i],**self.surface_qs.sampler_options(),
+                        field_derivatives=self.surface_qs.compute_f_T)
+                    values=(boozer_qs_metrics_field(sample['B'],sample['dBdx'],
+                        sample['x_theta'],sample['x_phi'],nfp=4,helicity=cfg.helicity,
+                        iota=sample['iota'],G=sample['G'],major_radius=sample['major_radius'])
+                        if self.surface_qs.compute_f_T else boozer_spectrum_metrics(
+                            sample['B_magnitude'],nfp=4,helicity=cfg.helicity))
+                    clean_diagnostics={k:(v.detach().cpu().item() if v.numel()==1
+                        else v.detach().cpu().tolist()) if isinstance(v,torch.Tensor) else v
+                        for k,v in sample['diagnostics'].items()}
+                    records.append((values,dict(clean_diagnostics,
+                        major_radius_m=float(sample['major_radius'].detach()),
+                        iota_surface=float(sample['iota'].detach()),G_rad=float(sample['G'].detach()),
+                        spectral_tail_fraction=float(values['spectral_tail_fraction'].detach()))))
+                return records
+            records=stage('boozer_surface_qs',evaluate_qs_surfaces)
+            qs_result=SurfaceQSResult(
+                torch.stack([v['f_B'] for v,d in records]) if batch else records[0][0]['f_B'],
+                (torch.stack([v['f_T'] for v,d in records]) if batch else records[0][0]['f_T'])
+                    if self.surface_qs.compute_f_T else None,
+                {'configuration':asdict(self.surface_qs),'surfaces':[d for v,d in records],
+                 'region':'target_surface','f_B_average':'uniform_boozer_angle_energy',
+                 'f_T_average':'flux_shell_rms','f_T_normalization':'R_axis_mean^2 * T / B^4'})
+        return TensorEvaluation(x,metrics,diagnostics,timings,qs_result)
 
     def close(self):
         if threading.get_ident()!=self._thread:

@@ -1,7 +1,7 @@
 # 安装
 
-源码版本 0.5.1 尚未发布。下列 wheel 命令指向历史 0.5.0a1 产物，
-不包含容量保护、自交检查和 flux-Legendre 修复；使用这些修复请从源码构建。
+版本 0.6.0 尚未发布。以下命令安装随附的预编译 wheel。
+配套源码压缩包包含示例和开发文件。
 
 [English](installation.md)
 
@@ -10,7 +10,7 @@
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 pip 会安装固定版本、配套验证过的 CUDA 12.8 运行库依赖。
@@ -40,7 +40,7 @@ python examples/autograd.py
 python examples/autograd.py --batch
 ```
 
-示例位于源码仓库。`coil_eval.torch` 是可选接口，普通 `coil_eval` 导入使用 NumPy。
+示例包含在源码压缩包和仓库中。`coil_eval.torch` 是可选接口，普通 `coil_eval` 导入使用 NumPy。
 较新的 PyTorch 版本也可以使用，前提是其 CUDA 构建支持宿主机驱动和 GPU。
 
 ## Simsopt
@@ -48,7 +48,7 @@ python examples/autograd.py --batch
 磁面工作流可通过安装包的 `simsopt` 可选依赖组安装：
 
 ```sh
-python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 该依赖组安装 Simsopt 与 SciPy。

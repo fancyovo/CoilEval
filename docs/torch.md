@@ -141,3 +141,5 @@ The interface supports first derivatives. Compare meaningful component
 gradients and geometry/current parameter blocks when checking a new objective;
 an aggregate loss can conceal a component discrepancy. The NumPy `Evaluator`
 provides centered finite differences for scalar callbacks; see [the API](api.md).
+
+See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.

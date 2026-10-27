@@ -62,7 +62,7 @@ Use `major.minor.patch` without an `a` suffix:
 - Bug fixes increment the third (patch) component, including small patches and
   obvious corrections, for example `0.5.1` to `0.5.2`.
 
-The source package is `0.5.1` for the capacity, self-intersection and
+The source package is `0.6.0`, including surface QS features and the capacity, self-intersection and
 flux-Legendre fixes; its changelog entry remains unreleased until publication.
 Update package metadata and CHANGELOG when delivering implementation changes,
 even before tagging or building release binaries. Documentation-only changes

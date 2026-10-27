@@ -12,9 +12,11 @@
 | 0.3.0a3 | 已验证的 CUDA 运行库配套版本 | 安装更新后的 wheel |
 | 0.4.0a1 | 两阶段 psi、高阶 Fourier 张量与 Simsopt 接口 | `psi_fit='two_stage'`；`coil_eval.simsopt` |
 | 0.5.0a1 | 磁通多项式 alpha、共享张量准备和磁面覆盖检查 | `alpha_radial_basis='flux_legendre'`；批量与 Simsopt 接口 |
+| 0.5.1 | 容量保护、自交检查和稳定基函数 | 已包含在后续版本中 |
+| 0.6.0 | 目标磁面 f_B、可选 f_T、反传梯度与精度档位 | `coil_eval.qs`；`TensorEvaluator(surface_qs=...)` |
 
-源码版本为 0.5.1（尚未发布），包含目标体积容量保护、参考面自交拒绝和
-稳定 flux-Legendre 求值修复。历史 0.5.0a1 二进制不包含这些修复。
+源码版本为 0.6.0（尚未发布），新增目标磁面 f_B、可选 f_T、对应的局部反传梯度和精度档位，
+并包含 0.5.1 的容量保护、参考面检查和 flux-Legendre 修复。
 
 这些版本保持 NumPy 接口的默认行为兼容，通过显式选项使用新的数值路径。
 复现时固定准确版本，并随结果保存配置。

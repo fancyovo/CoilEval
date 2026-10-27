@@ -8,6 +8,11 @@ Use `--help` for options.
 
 [autograd.py](autograd.py) evaluates a PyTorch objective and its gradient. Add `--batch` for independent geometries. Install the `torch` extra to run it.
 
+[qs_metrics.py](qs_metrics.py) evaluates target-surface f_B. Use `--gradient`
+for a local parameter gradient, `--metric f_T` to include the triple-product
+metric, and `--accuracy high|balanced|fast` to select the angular resolution.
+It uses the CUDA-enabled PyTorch setup in the [installation guide](../docs/installation.md).
+
 [two_stage.py](two_stage.py) selects the optional two-stage psi fit. Set
 `--coils`, `--volume`, `--radius` and `--output` to use your own inputs.
 `--sampling polar_quadrature` selects the experimental weighted sampler.

@@ -7,20 +7,18 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.5.1 (unreleased). It fixes target-volume capacity
-checks, rejects confirmed self-intersecting Simsopt references, and evaluates
-flux-Legendre modes with a stable recurrence. Existing
-calls retain the single-stage defaults; select numerical options explicitly with
-`EvaluationConfig`. See the [release history](CHANGELOG.md) for changes.
+The source package is 0.6.0 (unreleased). It adds optional target-surface
+f_B and f_T, local reverse gradients and configurable accuracy settings.
+Use `coil_eval.qs` or the optional `surface_qs` configuration in `TensorEvaluator`.
+Existing `Evaluator` and tensor calls retain their configured evaluation paths.
+See the [surface QS guide](docs/qs.md) and [release history](CHANGELOG.md).
 
 ## Installation
 
-The example below installs the historical 0.5.0a1 wheel with Python 3.10+;
-it does not include the 0.5.1 fixes. A 0.5.1 release wheel has not been published.
-Use the source-build instructions for the updated code.
+Install the supplied 0.6.0 binary wheel in a Python 3.10+ environment:
 
 ```sh
-python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 The wheel includes the GPU backend. Pip installs NumPy and the CUDA 12.8 runtime
@@ -44,7 +42,8 @@ with Evaluator(config=config) as evaluator:
         print(result.status)
 ```
 
-Run a complete example with:
+The source archive includes example scripts and inputs. From its extracted
+project directory, run:
 
 ```sh
 python examples/evaluate.py
@@ -56,6 +55,8 @@ After installing CUDA-enabled PyTorch, run `python examples/autograd.py` for
 evaluation plus one objective gradient. `TensorEvaluator.evaluate_batch`
 accepts independent parameter tensors; `capture_sources` shares two-stage fits
 when preparing one geometry at several target volumes.
+Run `python examples/qs_metrics.py --gradient --metric f_B` for the target-surface
+Fourier metric; choose `--metric f_T` for the triple-product metric.
 
 Use `psi_fit="two_stage"` to refit psi in a closed training domain. The optional
 PyTorch interface computes local reverse gradients and accepts independent
@@ -88,6 +89,7 @@ Those reference helpers use QH helicity `(1,nfp)`.
 - [Installation and GPU compatibility](docs/installation.md)
 - [API and parameter conventions](docs/api.md)
 - [PyTorch gradients and batches](docs/torch.md)
+- [Target-surface f_B and f_T](docs/qs.md)
 - [Simsopt surfaces and reference QS](docs/simsopt.md)
 - [Version selection](docs/versions.md)
 - [Examples](examples/README.md)

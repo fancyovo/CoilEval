@@ -1,8 +1,6 @@
 # Simsopt integration
 
-Source version 0.5.1 is unreleased. The 0.5.0a1 wheel examples below do not
-include the capacity, self-intersection and flux-Legendre fixes; build the
-updated source to use them.
+Version 0.6.0 is unreleased. The example below uses the supplied binary wheel.
 
 [简体中文](simsopt.zh-CN.md)
 
@@ -15,7 +13,7 @@ are imported when their operations run.
 Install the surface dependencies from a local wheel with:
 
 ```sh
-python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 The `simsopt` extra includes Simsopt and SciPy. Set up CUDA-enabled PyTorch
@@ -229,3 +227,5 @@ completed directories while other GPU jobs prepare more geometries. Each CPU
 worker uses one BLAS/OpenMP thread and hides CUDA devices. Set `--workers` to
 the CPU cores assigned to the job. Both phases preserve each target's success
 or failure status and use explicit file paths through their CLI options.
+
+See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.

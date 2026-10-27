@@ -1,17 +1,16 @@
 # Installation
 
-Source version 0.5.1 is unreleased. Wheel commands below refer to historical
-0.5.0a1 artifacts, which do not include the capacity, self-intersection and
-flux-Legendre fixes. Build from source to use those fixes.
+Version 0.6.0 is unreleased. The commands below install the supplied binary wheel.
+The accompanying source archive includes the examples and development files.
 
 [简体中文](installation.zh-CN.md)
 
 ## Binary wheel
 
-Create or activate a Python 3.10+ environment, then install the release wheel:
+Create or activate a Python 3.10+ environment, then install the supplied wheel:
 
 ```sh
-python -m pip install ./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install ./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl
 ```
 
 Pip installs a matched, version-pinned CUDA 12.8 runtime set as dependencies.
@@ -45,7 +44,7 @@ python examples/autograd.py
 python examples/autograd.py --batch
 ```
 
-The examples live in the source checkout. `coil_eval.torch` is optional;
+The examples are included in the source archive and checkout. `coil_eval.torch` is optional;
 ordinary `coil_eval` imports use NumPy. A newer PyTorch release can also be
 used when its CUDA build supports the host driver and GPU.
 
@@ -54,7 +53,7 @@ used when its CUDA build supports the host driver and GPU.
 For the optional surface workflow, install the wheel with its `simsopt` extra:
 
 ```sh
-python -m pip install "./coil_eval-0.5.0a1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 This installs Simsopt and SciPy. The [Simsopt guide](simsopt.md) shows GPU

@@ -445,7 +445,8 @@ def alpha_fit(points: Mapping, B: Tensor, cache: Mapping, config: DownstreamConf
     solution, residual = frozen_pcgls(A, rhs, cache, c.alpha_ridge, c.alpha_iterations,
         live_column_scale=c.alpha_radial_weighting=='smooth')
     iota = solution[mode_count:] / scale[mode_count:]
-    return dict(iota_coefficients=iota, iota_boundary=iota.sum(),
+    return dict(alpha_coefficients=solution[:mode_count] / scale[:mode_count],
+                iota_coefficients=iota, iota_boundary=iota.sum(),
                 **iota_profile_extrema(iota,c.volume_rho_min),
                 normal_B_relative_l2=(normal_B.double().square().sum() / field.double().square().sum()).sqrt(),
                 relative_l2=residual.double().norm() / rhs.double().norm(),

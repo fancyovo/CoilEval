@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 (unreleased)
+
+- Add optional target-surface f_B values, local reverse gradients and independent batches.
+- Refine the requested surface angle and fit vacuum-potential Boozer coordinates, with configurable accuracy presets.
+- Add optional f_T using analytic field derivatives and flux-shell averaging.
+- Reuse native psi/alpha captures for value-only calls and share magnetic-axis preparation across independent queries.
+- Bound Fourier workspaces and accelerate large target-angle fits with mixed-precision preconditioning, FP64 residual checks and a direct-solve fallback.
+- Add independent Simsopt metric references, coordinate diagnostics and bilingual examples.
+
+
 ## 0.5.1 (unreleased)
 
 - Evaluate flux-Legendre alpha modes with a stable three-term recurrence in native, tensor and Simsopt initialization paths, reducing cancellation at higher radial orders without changing the finite basis.

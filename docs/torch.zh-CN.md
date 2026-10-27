@@ -111,3 +111,5 @@ with TensorEvaluator(config=config) as evaluator:
 接口支持一阶导数。验证新目标时，应同时比较有意义的各分量梯度以及几何参数、电流参数
 各块的梯度；只比较总目标可能掩盖分量差异。NumPy `Evaluator` 为标量回调提供中心差分，
 详见 [API](api.zh-CN.md)。
+
+可选指标与精度档位见[目标磁面的 f_B 和 f_T](qs.zh-CN.md)。

@@ -7,6 +7,10 @@
 
 [autograd.py](autograd.py) 计算 PyTorch 目标与梯度，添加 `--batch` 使用独立几何批次。运行前安装 `torch` 可选依赖。
 
+[qs_metrics.py](qs_metrics.py) 计算目标磁面的 f_B。添加 `--gradient` 计算局部参数梯度，
+`--metric f_T` 同时计算三重积指标，`--accuracy high|balanced|fast` 选择角向分辨率。
+CUDA 版 PyTorch 的配置见[安装文档](../docs/installation.zh-CN.md)。
+
 [two_stage.py](two_stage.py) 选择可选的两阶段 psi 拟合。
 使用 `--coils`、`--volume`、`--radius` 和 `--output` 指定输入与输出。
 `--sampling polar_quadrature` 选择实验性的加权采样。
