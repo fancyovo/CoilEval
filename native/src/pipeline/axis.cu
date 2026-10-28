@@ -681,6 +681,9 @@ bool find_axis_native(
     } else {
         axis.candidate_count = static_cast<int>(candidates.size());
     }
+#ifdef COIL_EVAL_CPU_AXIS_FINAL_POLISH
+    if (!cpu_polish_rejected_axis_candidates(field, candidates, domain, nfp, config, timings)) return false;
+#endif
     std::vector<AxisCandidate> elliptic;
     for (const auto& candidate : candidates) {
         if (eligible(candidate, config.axis_tolerance)) elliptic.push_back(candidate);

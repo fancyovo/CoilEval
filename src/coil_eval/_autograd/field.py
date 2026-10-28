@@ -20,6 +20,33 @@ class NativeFieldLibrary:
                 fn.restype = integer
         self.lib.fc_error_string.argtypes = [integer]
         self.lib.fc_error_string.restype = ctypes.c_char_p
+        self.has_radial_root = hasattr(self.lib, 'fc_radial_root_f64')
+        if self.has_radial_root:
+            self.lib.fc_radial_root_f64.argtypes = [pointer]*6+[integer]*3+[ctypes.c_double]*3+[stream]
+            self.lib.fc_radial_root_f64.restype = integer
+
+    def radial_root(self, polynomial, level, radius_scale, maximum_scale, iterations, tolerance):
+        """Optional fused FP64 solve on this library's current CUDA stream."""
+        if (not polynomial.is_cuda or not level.is_cuda or polynomial.dtype != torch.float64 or
+                level.dtype != torch.float64 or polynomial.device != level.device or
+                polynomial.shape[:-1] != level.shape or level.numel() > 2**31-1):
+            raise ValueError('radial_root requires matching CUDA FP64 polynomial rows and levels')
+        p, target = polynomial.contiguous(), level.contiguous()
+        root, powers, derivative = torch.empty_like(target), torch.empty_like(p), torch.empty_like(target)
+        status = torch.empty(target.shape, device=target.device, dtype=torch.int32)
+        with torch.cuda.device(p.device):
+            stream = torch.cuda.current_stream(p.device).cuda_stream
+            code = self.lib.fc_radial_root_f64(
+                *[t.data_ptr() for t in (p, target, root, powers, derivative, status)],
+                target.numel(), p.shape[-1], iterations, radius_scale, maximum_scale, tolerance, stream)
+        if code:
+            raise RuntimeError(f'radial_root: {self.lib.fc_error_string(code).decode()}')
+        result = int(status.max()) if status.numel() else 0
+        if result == 2:
+            raise ValueError('radial root has nonpositive quadratic coefficient')
+        if result:
+            raise ValueError('radial root is unavailable, inaccurate, or singular')
+        return root, powers, derivative
 
     def call(self, name, tensors, ns, np, reference):
         suffix = {torch.float32:'f32', torch.float64:'f64'}[reference.dtype]

@@ -5,8 +5,8 @@
 CoilEval 0.6 adds Fourier (`f_B`) and optional triple-product (`f_T`)
 quasisymmetry metrics on the target-volume surface. They share a differentiable
 alpha+nu coordinate construction, with a target-surface alpha fit and vacuum
-potential-based nu correction. CUDA-enabled PyTorch is required for the coil
-evaluation interface. Simsopt is used separately for reference surfaces.
+potential-based nu correction. The coil evaluation interface uses PyTorch on
+GPU or CPU. Simsopt is used separately for reference surfaces.
 
 ## Evaluate a coil set
 
@@ -30,6 +30,8 @@ with SurfaceQSEvaluator(config=config, surface_qs=SurfaceQSConfig()) as evaluato
 The value interface accepts a `CoilSet` and returns Python scalar metrics with
 diagnostics. Its field calculations use float64. `library`, `field_library`
 and `device_id` select a custom backend or GPU, as in the tensor interface.
+The default device is `'cuda'`. Select `device='cpu'` with optional `threads`
+and `axis_grid` settings for CPU execution; see the [CPU guide](cpu.md).
 The coil interface supports four basic coils with `nfp=4`, helicity `(1,4)`,
 256 coil segments and four psi/alpha local fit iterations. Set `fast=True`
 and `flux_method='stokes'`, following the [tensor parameter conventions](torch.md).
@@ -49,12 +51,13 @@ with SurfaceQSEvaluator(config=config) as evaluator:
     print([result.f_B for result in results])
 ```
 
-Axis preparation is batched across compatible inputs. Identical two-stage
+On GPU, axis preparation is batched across compatible inputs. Identical two-stage
 geometries with settings differing only in volume share their source fit; each
 target surface is then sampled in turn. Constructor options `batch_axis=False`
 and `share_geometry=False` disable those respective optimizations. Each result's
 `diagnostics["batch"]` records its group, execution strategy and amortized wall
 time. Invalid source captures raise `InvalidEvaluationError`, as in scalar use.
+CPU batches capture each query independently and retain the same input order.
 
 Run the example with:
 

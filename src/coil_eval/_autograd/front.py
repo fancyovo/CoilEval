@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import math
 from typing import Callable, Mapping
 
@@ -11,6 +12,51 @@ import torch
 def monomials(degree: int = 10):
     return [(a, total - a) for total in range(2, degree + 1)
             for a in range(total, -1, -1)]
+
+
+@lru_cache(maxsize=32)
+def _monomial_layout(degree, device, dtype):
+    """Small, coefficient-independent indices; never cache a live graph."""
+    modes = monomials(degree)
+    # A value-only call may warm this cache under inference_mode. Cached
+    # constants must still be usable by a later differentiable call.
+    with torch.inference_mode(False):
+        ax = torch.tensor([a for a, _ in modes], device=device, dtype=torch.long)
+        bz = torch.tensor([b for _, b in modes], device=device, dtype=torch.long)
+        previous_x = torch.tensor([max(a-1, 0) for a, _ in modes], device=device, dtype=torch.long)
+        previous_y = torch.tensor([max(b-1, 0) for _, b in modes], device=device, dtype=torch.long)
+        groups = tuple(torch.tensor([j for j, (a, b) in enumerate(modes) if a+b == k],
+                                   device=device, dtype=torch.long) for k in range(2, degree+1))
+        return ax, bz, previous_x, previous_y, ax.to(dtype), bz.to(dtype), groups
+
+
+def _monomial_features(X, Y, degree, scale=None):
+    """Cartesian features and their derivatives using shared integer powers.
+
+    Storage remains rows times monomials, independent of the toroidal order.
+    Scalar powers and arithmetic order match the per-monomial expressions.
+    A tensor scale broadcasts over the point dimensions, before the feature
+    dimension is appended (including independent per-query batch scales).
+    """
+    ax, bz, previous_x, previous_y, nx, ny, _ = _monomial_layout(degree, X.device, X.dtype)
+    px = torch.stack([X**k for k in range(degree+1)], -1)
+    py = torch.stack([Y**k for k in range(degree+1)], -1)
+    x = px.index_select(-1, ax)
+    y = py.index_select(-1, bz)
+    polynomial = x*y
+    derivative_x = (nx*px.index_select(-1, previous_x))*y
+    derivative_y = (ny*x)*py.index_select(-1, previous_y)
+    if scale is not None:
+        denominator = scale[..., None] if isinstance(scale, torch.Tensor) else scale
+        derivative_x = derivative_x/denominator
+        derivative_y = derivative_y/denominator
+    return polynomial, derivative_x, derivative_y
+
+
+@lru_cache(maxsize=32)
+def _ray_denominators(degree, scale, device, dtype):
+    with torch.inference_mode(False):
+        return torch.tensor([scale**(a+b) for a, b in monomials(degree)], device=device, dtype=dtype)
 
 
 def native_modes(degree: int = 10, mtor: int = 12):
@@ -148,7 +194,7 @@ def differentiable_axis(field: Callable, trace: Callable, captured_start, *,
 
 class _RadialRoot(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, polynomial, level, radius_scale, maximum_scale, iterations, tolerance):
+    def forward(ctx, polynomial, level, radius_scale, maximum_scale, iterations, tolerance, library=None):
         # Newton itself need not be taped: its converged simple-root derivative
         # is explicit.  FP64 evaluation also avoids spurious FP32 residual guards.
         p = polynomial.double()
@@ -156,6 +202,15 @@ class _RadialRoot(torch.autograd.Function):
         shape = torch.broadcast_shapes(p.shape[:-1], level64.shape)
         p = p.expand(*shape, p.shape[-1])
         level64 = level64.expand(shape)
+        if (p.is_cuda and getattr(library, 'has_radial_root', False) and
+                3 <= p.shape[-1] <= 33 and
+                isinstance(radius_scale, (int, float)) and isinstance(maximum_scale, (int, float))):
+            r, rp, derivative = library.radial_root(p, level64, radius_scale,
+                                                   maximum_scale, iterations, tolerance)
+            ctx.save_for_backward(rp, derivative)
+            ctx.poly_shape, ctx.level_shape = polynomial.shape, level.shape
+            ctx.poly_dtype, ctx.level_dtype = polynomial.dtype, level.dtype
+            return r.to(polynomial.dtype)
         quadratic = p[..., 2]
         if not bool((quadratic > 0).all()):
             raise ValueError('radial root has nonpositive quadratic coefficient')
@@ -191,18 +246,20 @@ class _RadialRoot(torch.autograd.Function):
         q = adj_r.double()/derivative
         dp = (-q[..., None]*powers).sum_to_size(ctx.poly_shape).to(ctx.poly_dtype)
         dl = q.sum_to_size(ctx.level_shape).to(ctx.level_dtype)
-        return dp, dl, None, None, None, None
+        return dp, dl, *(None for _ in range(len(ctx.needs_input_grad)-2))
 
 
 class PsiGeometry:
     """Full native psi basis on a differentiable Hermite magnetic axis."""
     def __init__(self, axis_samples, coefficients, nfp=4, a=.15, degree=10, mtor=12,
-                 *, maximum_radius_scale=1., root_iterations=20, root_tolerance=1e-12):
+                 *, maximum_radius_scale=1., root_iterations=20, root_tolerance=1e-12,
+                 root_library=None):
         self.axis_samples = axis_samples
         self.coefficients = coefficients
         self.nfp, self.a, self.degree, self.mtor = nfp, a, degree, mtor
         self.maximum_radius_scale = maximum_radius_scale
         self.root_iterations, self.root_tolerance = root_iterations, root_tolerance
+        self.root_library = root_library
         self._matrix = _coefficient_matrix(coefficients, degree, mtor, fixed_quadratic=1.)
         self._monomials = monomials(degree)
 
@@ -215,13 +272,7 @@ class PsiGeometry:
         R, Z, phi = torch.broadcast_tensors(R, Z, torch.as_tensor(phi, device=R.device, dtype=R.dtype))
         axis_R, axis_Z, axis_Rp, axis_Zp = self.axis_eval(phi)
         X, Y = (R-axis_R)/self.a, (Z-axis_Z)/self.a
-        powers_x = torch.stack([X**k for k in range(self.degree+1)], -1)
-        powers_y = torch.stack([Y**k for k in range(self.degree+1)], -1)
-        polynomial = torch.stack([powers_x[..., a]*powers_y[..., b] for a,b in self._monomials], -1)
-        derivative_x = torch.stack([a*powers_x[..., max(a-1, 0)]*powers_y[..., b]/self.a
-                                    for a,b in self._monomials], -1)
-        derivative_y = torch.stack([b*powers_x[..., a]*powers_y[..., max(b-1, 0)]/self.a
-                                    for a,b in self._monomials], -1)
+        polynomial, derivative_x, derivative_y = _monomial_features(X, Y, self.degree, self.a)
         matrix = self._matrix.to(phi.dtype)
         amplitude = _trig(phi, self.mtor, self.nfp) @ matrix.T
         amplitude_phi = _trig(phi, self.mtor, self.nfp, derivative=True) @ matrix.T
@@ -236,17 +287,22 @@ class PsiGeometry:
         theta = torch.as_tensor(theta, device=phi.device, dtype=phi.dtype)
         phi, theta = torch.broadcast_tensors(phi, theta)
         amplitude = _trig(phi, self.mtor, self.nfp) @ self._matrix.T
-        angular = torch.stack([theta.cos()**a * theta.sin()**b / self.a**(a+b)
-                               for a,b in self._monomials], -1)
+        ax, bz, _, _, _, _, groups = _monomial_layout(self.degree, theta.device, theta.dtype)
+        cosine, sine = theta.cos(), theta.sin()
+        cp = torch.stack([cosine**k for k in range(self.degree+1)], -1)
+        sp = torch.stack([sine**k for k in range(self.degree+1)], -1)
+        denominator = (torch.stack([self.a**(a+b) for a, b in self._monomials])
+                       if isinstance(self.a, torch.Tensor) else
+                       _ray_denominators(self.degree, self.a, theta.device, theta.dtype))
+        angular = cp.index_select(-1, ax)*sp.index_select(-1, bz)/denominator
         terms = amplitude*angular
-        return torch.stack([terms[..., [j for j,(a,b) in enumerate(self._monomials) if a+b == k]].sum(-1)
-                            if k >= 2 else torch.zeros_like(phi)
-                            for k in range(self.degree+1)], -1)
+        return torch.stack([torch.zeros_like(phi), torch.zeros_like(phi),
+                            *(terms.index_select(-1, group).sum(-1) for group in groups)], -1)
 
     def solve_rays(self, polynomial, level):
         level = torch.as_tensor(level, device=polynomial.device, dtype=polynomial.dtype)
         return _RadialRoot.apply(polynomial, level, self.a, self.maximum_radius_scale,
-                                 self.root_iterations, self.root_tolerance)
+                                 self.root_iterations, self.root_tolerance, self.root_library)
 
 
 class TensorProductPsiOperator:
@@ -273,9 +329,7 @@ class TensorProductPsiOperator:
                (2*math.pi/(nfp*phi_grid))).to(dtype)
         self.X, self.Y, self.phi = X, Y, phi
         self.monomials = monomials(degree)
-        self.P = torch.stack([X**ax*Y**bz for ax,bz in self.monomials], -1)
-        self.PR = torch.stack([ax*X**max(ax-1,0)*Y**bz/a for ax,bz in self.monomials], -1)
-        self.PZ = torch.stack([bz*X**ax*Y**max(bz-1,0)/a for ax,bz in self.monomials], -1)
+        self.P, self.PR, self.PZ = _monomial_features(X, Y, degree, a)
         self.T = _trig(phi, mtor, nfp)
         self.Tp = _trig(phi, mtor, nfp, derivative=True)
         ax = axis_samples.to(dtype)
@@ -396,6 +450,7 @@ def build_front(field, trace, center: Mapping, *, config=None, dtype=torch.float
     geometry = PsiGeometry(axis, coefficients, nfp, a, degree, mtor,
         maximum_radius_scale=float(cfg.get('surface_max_radius_scale',1.)),
         root_iterations=int(cfg.get('surface_newton_iters',20)),
-        root_tolerance=float(cfg.get('surface_newton_tolerance',1e-12)))
+        root_tolerance=float(cfg.get('surface_newton_tolerance',1e-12)),
+        root_library=getattr(field, 'library', None))
     level = predict_target_level(geometry, center)
     return FrontResult(geometry, level, rms, diagnostics, op)

@@ -2,26 +2,36 @@
 
 [English](README.md)
 
-CoilEval 使用 NVIDIA GPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
+CoilEval 使用 NVIDIA GPU 或 CPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-源码包版本为 0.6.0（尚未发布），新增可选的目标磁面 f_B、f_T、局部反传梯度和精度档位。
-通过 `coil_eval.qs` 或 `TensorEvaluator` 的可选 `surface_qs` 配置使用这些指标。
-已有 `Evaluator` 和 Tensor 调用保留原配置的求值路径。
-详见[磁面 QS 指南](docs/qs.zh-CN.md)和[版本记录](docs/changelog.zh-CN.md)。
+源码包版本为 0.7.0（尚未发布），新增 CPU 求值、局部反传与可配置线程数，
+并加速边界检查和张量特征构造。可选的目标磁面 f_B、f_T 保留精度档位。
+详见 [CPU 指南](docs/cpu.zh-CN.md)、[磁面 QS 指南](docs/qs.zh-CN.md)和
+[版本记录](docs/changelog.zh-CN.md)。
 
 ## 安装
 
-在 Python 3.10+ 环境中安装随附的 0.6.0 预编译 wheel：
+在 Python 3.10+ 环境中安装随附的 0.7.0 预编译 wheel：
 
 ```sh
-python -m pip install ./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
-安装包包含 GPU 后端，pip 会安装 NumPy 和 CUDA 12.8 运行库。
+安装包包含 CPU 和 GPU 后端；`gpu` 依赖组会安装 NumPy 和配套的 CUDA 12.8 运行库。
 需要 glibc 2.28+ 的 Linux，以及支持 CUDA 12.8 和所用显卡的 NVIDIA 驱动；
 570.169 驱动满足 RTX 5090 的这一要求。
 支持的 GPU 架构、PyTorch 配置和源码构建方式见[安装与兼容性](docs/installation.zh-CN.md)。
+
+没有 NVIDIA GPU 的电脑可以安装 CPU 版 PyTorch 和 CPU 依赖组：
+
+```sh
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+```
+
+通过 `Evaluator(..., device="cpu", threads=8)` 选择 CPU；省略 `threads` 时使用当前可用的 CPU 配额。
+完整用法见 [CPU 示例](examples/cpu.py)。
 
 ## 快速开始
 

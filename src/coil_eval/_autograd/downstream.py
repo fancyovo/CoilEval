@@ -498,7 +498,8 @@ def surface_quality(geometry, level: Tensor, trace: Callable, config: Downstream
         geometry = type(geometry)(geometry.axis_samples.double(), geometry.coefficients.double(),
             geometry.nfp, geometry.a, geometry.degree, geometry.mtor,
             maximum_radius_scale=geometry.maximum_radius_scale,
-            root_iterations=geometry.root_iterations, root_tolerance=geometry.root_tolerance)
+            root_iterations=geometry.root_iterations, root_tolerance=geometry.root_tolerance,
+            **({'root_library': geometry.root_library} if hasattr(geometry, 'root_library') else {}))
         level = level.double()
     theta = _arange(config.surface_theta_count, level) * (2 * math.pi / config.surface_theta_count)
     phi = torch.zeros_like(theta)

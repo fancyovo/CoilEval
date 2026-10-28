@@ -14,10 +14,11 @@
 | 0.5.0a1 | Flux-polynomial alpha, shared tensor preparation and surface covering checks | `alpha_radial_basis='flux_legendre'`; batch and Simsopt APIs |
 | 0.5.1 | Capacity guards, reference intersections and stable basis evaluation | Included in later versions |
 | 0.6.0 | Surface f_B, optional f_T, reverse gradients and accuracy presets | `coil_eval.qs`; `TensorEvaluator(surface_qs=...)` |
+| 0.7.0 | CPU backend, thread controls and throughput improvements | `device="cpu"`; `threads=`; CPU `axis_grid=` |
 
-The source version is 0.6.0 (unreleased), adding target-surface f_B, optional f_T,
-their local reverse gradients and accuracy presets. It includes the 0.5.1
-capacity, reference-surface and flux-Legendre fixes.
+The source version is 0.7.0 (unreleased). It adds CPU values and gradients,
+thread and axis-search options, and evaluation throughput improvements.
+It includes the surface QS features introduced in 0.6.0.
 
 The default NumPy behavior stays compatible across these versions. New numerical
 paths are selected explicitly. Use an exact version and save the configuration

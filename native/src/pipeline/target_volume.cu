@@ -8,11 +8,13 @@
 #include "pipeline/surface.cuh"
 #include "pipeline/target_volume.cuh"
 #include "coil_field_internal.h"
+#include "host_profile.h"
 
 namespace coil_eval::pipeline {
 
 bool target_geometry(const AxisData& axis,const PsiData& psi,int nfp,
                      const SgpuScoreConfig& config,sgpu_target::Geometry& g,bool local=false) {
+    CoilEvalHostProfile profile(local?"target.geometry.local":"target.geometry.formal");
     g.degree=config.psi_poly_degree;g.a=config.psi_a;
     if(local && g_target_volume_cache.radii.size()!=static_cast<size_t>(config.flux_phi_count)*config.flux_theta_count)return false;
     g.maximum_level=std::numeric_limits<double>::infinity();
@@ -46,6 +48,7 @@ bool target_geometry(const AxisData& axis,const PsiData& psi,int nfp,
 
 bool screen_target_volume_native(void* field,const AxisData& axis,const PsiData& psi,
     int nfp,const SgpuScoreConfig& config,std::vector<SurfaceScreen>& screens,SgpuScoreResult& result) {
+    CoilEvalHostProfile profile("target.total");
     result.target_volume_requested=config.target_volume;
     g_target_volume_cache=TargetVolumeCache{};
     sgpu_target::Geometry g;
@@ -57,6 +60,7 @@ bool screen_target_volume_native(void* field,const AxisData& axis,const PsiData&
     // per toroidal mode. This remains a sampled, not global, certificate.
     const int guard_phi=std::max(config.psi_n_phi,2*config.psi_m_tor+1);
     if(guard_phi>config.flux_phi_count){
+        CoilEvalHostProfile guard_profile("target.capacity_guard");
         SgpuScoreConfig guard_config=config;
         guard_config.flux_phi_count=guard_phi;
         sgpu_target::Geometry guard;
@@ -66,23 +70,35 @@ bool screen_target_volume_native(void* field,const AxisData& axis,const PsiData&
         g.maximum_level=std::min(g.maximum_level,guard.maximum_level);
     }
     double maximum,dummy;
-    if(!sgpu_target::measure(g,g.maximum_level,maximum,dummy))return true;
+    {
+        CoilEvalHostProfile measure_profile("target.maximum_volume");
+        if(!sgpu_target::measure(g,g.maximum_level,maximum,dummy))return true;
+    }
     result.target_volume_maximum=maximum;
     double level,volume,dVds;int iterations=0;
-    if(!sgpu_target::solve(g,config.target_volume,config.target_volume_relative_tolerance,
-                          level,volume,dVds,iterations)){std::snprintf(result.error_message,sizeof(result.error_message),"target volume outside certified geometry domain or inverse solve failed");return true;}
+    {
+        CoilEvalHostProfile solve_profile("target.solve_volume");
+        if(!sgpu_target::solve(g,config.target_volume,config.target_volume_relative_tolerance,
+                              level,volume,dVds,iterations)){std::snprintf(result.error_message,sizeof(result.error_message),"target volume outside certified geometry domain or inverse solve failed");return true;}
+    }
     result.target_volume_iterations=iterations;
     result.target_volume_dVds=dVds;
     result.target_volume_relative_error=volume/config.target_volume-1;
     SurfaceScreen screen;screen.level=level;
     std::vector<double> R(config.surface_theta_count),Z(R.size()),r(R.size()),Re,Ze;
+    {
+    CoilEvalHostProfile roots_profile("target.surface_roots");
     for(size_t j=0;j<R.size();++j){
         const double theta=TWOPI*j/R.size();std::array<double,25> p;
         ray_polynomial_phi0(psi,config,theta,p);r[j]=solve_ray_radius(p,level,config);
         if(std::abs(sgpu_target::value(p,config.psi_poly_degree,r[j]/config.psi_a)-level)>config.flux_boundary_tolerance)return true;
         R[j]=axis.R[0]+r[j]*std::cos(theta);Z[j]=axis.Z[0]+r[j]*std::sin(theta);
     }
-    if(!trace_map(field,R,Z,nfp,config.surface_trace_steps,false,Re,Ze))return false;
+    }
+    {
+        CoilEvalHostProfile trace_profile("target.surface_trace");
+        if(!trace_map(field,R,Z,nfp,config.surface_trace_steps,false,Re,Ze))return false;
+    }
     screen.radius_mean=std::accumulate(r.begin(),r.end(),0.0)/r.size();
     screen.radius_max=*std::max_element(r.begin(),r.end());std::vector<double> errors(r.size());
     for(size_t j=0;j<r.size();++j){

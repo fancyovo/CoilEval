@@ -220,13 +220,23 @@ def max_closed_boundary(model, phis, ntheta=256, max_radius=None, *, workers=Non
         raise MaxClosedBoundaryError('no positive common closed first-root level')
     low, high = np.zeros(shape), caps.copy()
     # Vectorized Horner evaluation keeps the full 48x256 grid inexpensive.
+    # Reuse the arithmetic workspaces: the same 48 bisections and the same
+    # multiply/add order determine every root and active branch.
+    mid = np.empty(shape)
+    value = np.empty(shape)
+    below = np.empty(shape, dtype=bool)
+    above = np.empty(shape, dtype=bool)
     for _ in range(48):
-        mid = .5*(low+high)
-        value = polynomials[:, :, -1].copy()
+        np.add(low, high, out=mid)
+        np.multiply(mid, .5, out=mid)
+        np.copyto(value, polynomials[:, :, -1])
         for j in range(polynomials.shape[2]-2, -1, -1):
-            value = value*mid+polynomials[:, :, j]
-        below = value < level
-        low = np.where(below, mid, low); high = np.where(below, high, mid)
+            np.multiply(value, mid, out=value)
+            np.add(value, polynomials[:, :, j], out=value)
+        np.less(value, level, out=below)
+        np.logical_not(below, out=above)
+        np.copyto(low, mid, where=below)
+        np.copyto(high, mid, where=above)
     normalized = .5*(low+high)
     radii = a*normalized
     residual = polynomials[:, :, -1].copy()

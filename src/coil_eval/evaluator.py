@@ -88,7 +88,7 @@ class Evaluator:
     LocalMetrics only. Geometry metrics use the center's first-order local model.
     """
     def __init__(self, library: str | Path | None = None, *, config: EvaluationConfig,
-                 device_id: int = 0, backend=None):
+                 device_id: int = 0, backend=None, device: str = 'cuda', threads=None, axis_grid=None):
         if not isinstance(config, EvaluationConfig):
             raise TypeError("config must be an EvaluationConfig")
         self._config = config
@@ -97,11 +97,22 @@ class Evaluator:
         self._owner = object()
         self._generation = 0
         self._closed = False
+        if device not in {'cpu', 'cuda'}:
+            raise ValueError("device must be 'cpu' or 'cuda'")
+        if device != 'cpu' and threads is not None:
+            raise ValueError("threads is only supported with device='cpu'")
+        if device != 'cpu' and axis_grid is not None:
+            raise ValueError("axis_grid is only supported with device='cpu'")
+        self.device = device
         if backend is None:
-            from ._backend import NativeBackend
-            from ._native_loader import resolve_library
-            library = resolve_library(library)
-            backend = NativeBackend(library, device_id=self.device_id)
+            if device == 'cpu':
+                from ._cpu.backend import CpuBackend
+                backend = CpuBackend(library, threads=threads, axis_grid=axis_grid)
+            else:
+                from ._backend import NativeBackend
+                from ._native_loader import resolve_library
+                library = resolve_library(library)
+                backend = NativeBackend(library, device_id=self.device_id)
         self._backend = backend
 
     @property

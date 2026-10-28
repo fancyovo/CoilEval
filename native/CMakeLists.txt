@@ -3,12 +3,21 @@ if(SKBUILD AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES "80-real;86-real;89-real;90-real;100-real;120")
 endif()
 project(coil_eval_native LANGUAGES CXX)
+option(COIL_EVAL_BUILD_CUDA "Build the NVIDIA GPU backends" ON)
+option(COIL_EVAL_BUILD_CPU "Build the CPU backend" ON)
+if(COIL_EVAL_BUILD_CPU)
+    add_subdirectory(cpu)
+endif()
+if(NOT COIL_EVAL_BUILD_CUDA)
+    return()
+endif()
 include(CheckLanguage)
 check_language(CUDA)
 if(NOT CMAKE_CUDA_COMPILER)
     message(FATAL_ERROR
         "CUDA compiler nvcc was not found. Install a CoilEval binary wheel for compiler-free use. "
-        "To build from source, install CUDA Toolkit and set CUDACXX to its nvcc executable.")
+        "For a CPU-only source build, set COIL_EVAL_BUILD_CUDA=OFF. "
+        "For a GPU source build, install CUDA Toolkit and set CUDACXX to its nvcc executable.")
 endif()
 enable_language(CUDA)
 find_package(CUDAToolkit REQUIRED)
@@ -96,6 +105,7 @@ add_library(coil_eval_autograd SHARED
     src/autograd/field.cu
     src/autograd/trace.cu
     src/autograd/batch_field.cu
+    src/autograd/radial_root.cu
 )
 target_link_libraries(coil_eval_autograd PRIVATE CUDA::cudart)
 target_link_options(coil_eval_autograd PRIVATE -static-libstdc++ -static-libgcc)

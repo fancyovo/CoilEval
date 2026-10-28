@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+- Add CPU evaluation and local reverse gradients, with explicit or adaptive thread limits.
+- Add CPU-only magnetic-axis grid selection while retaining the original default and fallback search.
+- Reduce repeated boundary-check work and tensor feature launches.
+- Add an optional native radial-root operator with compatibility fallback for older libraries.
+- Provide CPU and GPU installation extras, bilingual guides and a CPU example.
+
 ## 0.6.0 (unreleased)
 
 - Add optional target-surface f_B values, local reverse gradients and independent batches.

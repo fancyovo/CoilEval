@@ -5,7 +5,11 @@
 脚本默认加载安装包内的后端。通过 `--library /path/to/libcoil_eval_native.so` 可指定自定义原生库，
 `--help` 显示参数。
 
-[autograd.py](autograd.py) 计算 PyTorch 目标与梯度，添加 `--batch` 使用独立几何批次。运行前安装 `torch` 可选依赖。
+[cpu.py](cpu.py) 在 CPU 上求值。按 [CPU 指南](../docs/cpu.zh-CN.md) 安装 `cpu` 依赖组和 CPU 版 PyTorch 后，
+运行 `python examples/cpu.py --threads 8`。添加 `--two-stage` 使用二次 psi 拟合，
+或用 `--axis-grid 32` 选择较小的磁轴初筛网格。
+
+[autograd.py](autograd.py) 在 GPU 上计算 PyTorch 目标与梯度，添加 `--batch` 使用独立几何批次。运行前安装 CUDA 版 PyTorch 和 `gpu` 依赖组。
 
 [qs_metrics.py](qs_metrics.py) 计算目标磁面的 f_B。添加 `--gradient` 计算局部参数梯度，
 `--metric f_T` 同时计算三重积指标，`--accuracy high|balanced|fast` 选择角向分辨率。

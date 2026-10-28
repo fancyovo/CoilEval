@@ -6,7 +6,12 @@ The scripts load the installed wheel's backend automatically. Pass
 `--library /path/to/libcoil_eval_native.so` to select a custom backend.
 Use `--help` for options.
 
-[autograd.py](autograd.py) evaluates a PyTorch objective and its gradient. Add `--batch` for independent geometries. Install the `torch` extra to run it.
+[cpu.py](cpu.py) evaluates coils on CPU. Install the `cpu` extra and CPU PyTorch
+as described in the [CPU guide](../docs/cpu.md), then run
+`python examples/cpu.py --threads 8`. Add `--two-stage` for two-stage psi fitting
+or `--axis-grid 32` to select a smaller primary magnetic-axis seed grid.
+
+[autograd.py](autograd.py) evaluates a GPU PyTorch objective and its gradient. Add `--batch` for independent geometries. Install CUDA-enabled PyTorch and the `gpu` extra to run it.
 
 [qs_metrics.py](qs_metrics.py) evaluates target-surface f_B. Use `--gradient`
 for a local parameter gradient, `--metric f_T` to include the triple-product

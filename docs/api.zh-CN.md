@@ -165,3 +165,10 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 原生求值、Tensor 反向与 Simsopt 初始化中的 flux-Legendre 径向函数均采用 Legendre 三项递推，避免 FP32 展开单项式的消减误差。该修复不增加有限基空间，也不消除 alpha/psi 拟合误差。切换原生库或基函数实现时，应重新生成 source capture。
 
 可选指标与精度档位见[目标磁面的 f_B 和 f_T](qs.zh-CN.md)。
+
+## CPU 后端
+
+使用 `Evaluator(config=..., device='cpu', threads=None)` 选择 CPU，默认设备仍为
+`'cuda'`。`threads` 为正整数时指定 CPU 预算，省略时根据进程亲和性和调度器配额
+自动选择。[CPU 说明](cpu.zh-CN.md) 包含安装、批量、有限差分及
+`TensorEvaluator(..., device='cpu')` 反传梯度用法。

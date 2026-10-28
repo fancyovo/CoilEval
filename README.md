@@ -2,30 +2,40 @@
 
 [简体中文](README.zh-CN.md)
 
-CoilEval evaluates stellarator coils on NVIDIA GPUs. Supply Fourier coefficients,
+CoilEval evaluates stellarator coils on NVIDIA GPUs and CPUs. Supply Fourier coefficients,
 coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.6.0 (unreleased). It adds optional target-surface
-f_B and f_T, local reverse gradients and configurable accuracy settings.
-Use `coil_eval.qs` or the optional `surface_qs` configuration in `TensorEvaluator`.
-Existing `Evaluator` and tensor calls retain their configured evaluation paths.
-See the [surface QS guide](docs/qs.md) and [release history](CHANGELOG.md).
+The source package is 0.7.0 (unreleased). It adds CPU evaluation and local reverse
+gradients, configurable CPU threads, and faster boundary checks and tensor
+features. Optional target-surface f_B and f_T retain their accuracy presets.
+See the [CPU guide](docs/cpu.md), [surface QS guide](docs/qs.md) and
+[release history](CHANGELOG.md).
 
 ## Installation
 
-Install the supplied 0.6.0 binary wheel in a Python 3.10+ environment:
+Install the supplied 0.7.0 binary wheel in a Python 3.10+ environment:
 
 ```sh
-python -m pip install ./coil_eval-0.6.0-py3-none-manylinux_2_28_x86_64.whl
+python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
-The wheel includes the GPU backend. Pip installs NumPy and the CUDA 12.8 runtime
-libraries. Use Linux with glibc 2.28+ and an NVIDIA driver supporting CUDA 12.8
+The wheel includes CPU and GPU backends. The `gpu` extra installs NumPy and a
+matched CUDA 12.8 runtime set. Use Linux with glibc 2.28+ and an NVIDIA driver supporting CUDA 12.8
 and your GPU; driver 570.169 supports the RTX 5090 configuration.
 See [installation and GPU compatibility](docs/installation.md) for supported
 architectures, PyTorch setup and source builds.
+
+For a computer without an NVIDIA GPU, install CPU PyTorch and the CPU extra:
+
+```sh
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+```
+
+Select `Evaluator(..., device="cpu", threads=8)` or omit `threads` to use the
+available CPU allocation. See the [CPU example](examples/cpu.py).
 
 ## Quick start
 

@@ -32,7 +32,7 @@ def _prepare_runtime() -> None:
             except metadata.PackageNotFoundError as exc:
                 raise RuntimeError(
                     f"Missing CUDA runtime dependency {distribution}. "
-                    "Reinstall the CoilEval wheel with dependencies enabled."
+                    "Install the CoilEval gpu extra, for example pip install 'coil-eval[gpu]'."
                 ) from exc
             path = Path(dist.locate_file(f"nvidia/{component}/lib/{soname}"))
             try:

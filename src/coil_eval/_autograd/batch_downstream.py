@@ -245,7 +245,8 @@ def batch_surface_quality(geometries, levels, field, configs, *, return_arrays=F
             geometry = type(geometry)(geometry.axis_samples.double(), geometry.coefficients.double(),
                 geometry.nfp, geometry.a, geometry.degree, geometry.mtor,
                 maximum_radius_scale=geometry.maximum_radius_scale,
-                root_iterations=geometry.root_iterations, root_tolerance=geometry.root_tolerance)
+                root_iterations=geometry.root_iterations, root_tolerance=geometry.root_tolerance,
+                **({'root_library': geometry.root_library} if hasattr(geometry, 'root_library') else {}))
         promoted.append(geometry)
         radius = geometry.solve_rays(geometry.rays(phi, theta), level)
         ar, az, _, _ = geometry.axis_eval(phi)

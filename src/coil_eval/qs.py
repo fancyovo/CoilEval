@@ -92,11 +92,21 @@ class SurfaceQSResult:
 class SurfaceQSEvaluator:
     """Evaluate target-surface f_B/f_T without recording a reverse graph.
 
-    CUDA-enabled PyTorch is loaded on construction. Standard score calls do
+    PyTorch is loaded on construction for the selected CPU or CUDA device. Standard score calls do
     not import it. Inputs and physical units follow :class:`CoilSet`.
     """
+    def __new__(cls,*args,device='cuda',threads=None,axis_grid=None,**kwargs):
+        if device=='cpu':
+            from ._cpu.qs import CpuSurfaceQSEvaluator
+            return CpuSurfaceQSEvaluator(*args,device=device,threads=threads,axis_grid=axis_grid,**kwargs)
+        if device!='cuda':raise ValueError("device must be 'cpu' or 'cuda'")
+        if threads is not None:raise ValueError("threads is only supported with device='cpu'")
+        if axis_grid is not None:raise ValueError("axis_grid is only supported with device='cpu'")
+        return super().__new__(cls)
+
     def __init__(self, library=None, field_library=None, *, config,
-                 surface_qs=None, device_id=0, batch_axis=True, share_geometry=True):
+                 surface_qs=None, device_id=0, batch_axis=True, share_geometry=True,
+                 device='cuda',threads=None,axis_grid=None):
         import torch
         from .torch import TensorEvaluator
         self._evaluator=TensorEvaluator(library,field_library,config=config,

@@ -1,7 +1,16 @@
 """Fixed polar nodes with area weights for a moving star-shaped fit domain."""
 from __future__ import annotations
 
+from functools import lru_cache
 import numpy as np
+
+
+@lru_cache(maxsize=16)
+def _radial_gauss_rule(count):
+    """Reuse the fixed rule; each call still owns its returned radial arrays."""
+    gauss,weights=np.polynomial.legendre.leggauss(count)
+    gauss.setflags(write=False);weights.setflags(write=False)
+    return gauss,weights
 
 
 def sample_polar_quadrature(boundary, target_count=82368, *, nfp=4, theta_count=128):
@@ -44,7 +53,7 @@ def sample_polar_quadrature(boundary, target_count=82368, *, nfp=4, theta_count=
     axis_R = np.mean(polygons[..., 0]-radii*np.cos(theta), axis=1)
     axis_Z = np.mean(polygons[..., 1]-radii*np.sin(theta), axis=1)
     radial_count = max(1, int(np.floor(int(target_count)/(len(phi)*int(theta_count))+.5)))
-    gauss, weights = np.polynomial.legendre.leggauss(radial_count)
+    gauss, weights = _radial_gauss_rule(radial_count)
     radial_u = (gauss+1)/2
     radial_weights = weights/2
     radius = edge[..., None]*np.sqrt(radial_u)

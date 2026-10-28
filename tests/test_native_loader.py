@@ -47,7 +47,7 @@ def test_missing_runtime_is_actionable_and_retryable(runtime, monkeypatch):
     def missing(name):
         raise loader.metadata.PackageNotFoundError(name)
     monkeypatch.setattr(loader.metadata, 'distribution', missing)
-    with pytest.raises(RuntimeError, match='dependencies enabled'):
+    with pytest.raises(RuntimeError, match='gpu extra'):
         loader.resolve_library()
     assert not loader._READY
 

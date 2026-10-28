@@ -2,7 +2,7 @@
 
 [English](development.md)
 
-仅开发 Python 接口及运行 CPU 测试时：
+开发 Python 接口，并按已安装的可选依赖运行测试时：
 
 ```sh
 python -m pip install numpy pytest build scikit-build-core
@@ -11,6 +11,9 @@ python -m pytest -q
 python tools/check_layout.py
 python -m build --sdist
 ```
+
+CPU 后端测试使用 `cpu` 依赖和编译的 CPU 库，安装方式见 [CPU 源码构建](installation.zh-CN.md#从源码构建-cpu-版本)。
+CUDA 测试还需要 GPU 后端和可用设备。
 
 制作发行 wheel 时，用 micromamba 创建并激活 `tools/build-environment.yml` 中的环境：
 
@@ -21,7 +24,7 @@ bash tools/build_linux_wheel.sh
 ```
 
 构建使用 CUDA 12.8、GCC 11 和 glibc 2.28 sysroot；`auditwheel` 检查系统兼容基线，
-NVIDIA 运行库由 Python 包依赖提供。GitHub Actions 中的 wheel 流程可手动触发，保存构建产物供审阅。
+NVIDIA 运行库由 `gpu` 安装依赖组提供。GitHub Actions 中的 wheel 流程可手动触发，保存构建产物供审阅。
 在全新的 GPU 环境中验证安装包，确认 PATH 中没有 nvcc，并检查 NumPy 梯度及可选 Tensor 接口：
 
 ```sh
@@ -33,11 +36,13 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 | `src/coil_eval` | Python API、结果、配置和原生接口 |
 | `src/coil_eval/_two_stage` | 闭合区域几何、采样和两阶段原生求值编排 |
 | `src/coil_eval/_autograd` | 局部磁场、追踪、拟合及下游反传算子 |
+| `src/coil_eval/_cpu` | CPU 源捕获、拟合、磁场算子和线程控制 |
 | `src/coil_eval/simsopt` | 源记录、初始值、标准求解与参考 QS |
 | `native/src/field` | 线圈离散、磁场、追踪和 psi 拟合 |
 | `native/src/pipeline` | 磁轴、目标磁面、磁通、alpha、QS 和近邻求值 |
 | `native/include` | 共享类型与模块接口 |
 | `native/src/autograd` | 可选 Tensor 接口的 CUDA 算子 |
+| `native/cpu` | CPU 磁场、追踪、几何与主机搜索策略适配 |
 | `tests` | API、数值 oracle 和源码结构测试 |
 | `examples` | 求值与自定义目标示例 |
 
@@ -53,12 +58,12 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 后续版本使用 `主版本.次版本.修订版本`（`major.minor.patch`），不再添加 `a` 后缀：
 
 - 新增功能时增加第二位 minor，并将第三位重置为零，例如 `0.5.1` → `0.6.0`。
-- 修复问题时增加第三位 patch；小补丁和明显错误的修复也按此规则编号，例如 `0.5.1` → `0.5.2`。
+- 修复问题时增加第三位 patch；小补丁和明显错误的修复也按此规则编号，例如 `0.7.0` → `0.7.1`。
 
-包含容量保护、自交检查和 flux-Legendre 修复的源码包版本为 `0.6.0`，
+源码包版本为 `0.7.0`，包含 CPU 支持、吞吐改进、磁面 QS 功能及此前的数值修复，
 变更记录在实际发布前标记为未发布。交付实现改动时同步更新包版本元数据和 CHANGELOG，
 不必等到打标签或构建发行二进制。仅修改文档或诊断报告不需要递增包版本。
-下一次修复使用 `0.5.2`，新增功能使用 `0.6.0`。
+下一次修复使用 `0.7.1`，新增功能使用 `0.8.0`。
 历史版本号、发行产物和标签保持原样，包括 `0.5.0a1` 及更早带 `a` 的版本。
 版本标签为 `v` 加包版本号，旧标签保留用于复现安装。
 

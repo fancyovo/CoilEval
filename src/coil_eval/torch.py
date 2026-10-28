@@ -60,9 +60,21 @@ class TensorEvaluation:
 class TensorEvaluator:
     """Single or independent-batch local response, with optional PyTorch autograd."""
 
+    def __new__(cls,*args,device='cuda',threads=None,axis_grid=None,**kwargs):
+        if device=='cpu':
+            from ._cpu.tensor import CpuTensorEvaluator
+            return CpuTensorEvaluator(*args,device=device,threads=threads,axis_grid=axis_grid,**kwargs)
+        if device!='cuda':
+            raise ValueError("device must be 'cpu' or 'cuda'")
+        if threads is not None:
+            raise ValueError("threads is only supported with device='cpu'")
+        if axis_grid is not None:
+            raise ValueError("axis_grid is only supported with device='cpu'")
+        return super().__new__(cls)
+
     def __init__(self, library=None, field_library=None, *, config: EvaluationConfig,
                  device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
-                 surface_qs=None):
+                 surface_qs=None,device='cuda',threads=None,axis_grid=None):
         self._validate_config(config)
         if field_dtype not in (torch.float32, torch.float64):
             raise ValueError('field_dtype must be torch.float32 or torch.float64')

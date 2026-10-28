@@ -16,7 +16,7 @@ from typing import Mapping
 import torch
 
 from .front import (FrontResult, PsiGeometry, TensorProductPsiOperator,
-                    _coefficient_matrix, _trig, differentiable_axis,
+                    _coefficient_matrix, _trig, _monomial_features, differentiable_axis,
                     cylindrical_rhs, four_step_pcgls, monomials, periodic_hermite,
                     predict_target_level,_section_column_norms)
 from .batch_front import (BatchFrontResult, BatchTensorProductPsiOperator,
@@ -94,11 +94,7 @@ class SectionPsiOperator:
         self.features=tuple(torch.where(mask,value*root_weight,torch.zeros_like(value)) for value in (cr,cz,cp))
         self.X,self.Y=X,Y
         self.monomials=monomials(degree)
-        px=torch.stack([X**k for k in range(degree+1)],-1)
-        py=torch.stack([Y**k for k in range(degree+1)],-1)
-        self.P=torch.stack([px[...,i]*py[...,j] for i,j in self.monomials],-1)
-        self.PR=torch.stack([i*px[...,max(i-1,0)]*py[...,j]/a for i,j in self.monomials],-1)
-        self.PZ=torch.stack([j*px[...,i]*py[...,max(j-1,0)]/a for i,j in self.monomials],-1)
+        self.P,self.PR,self.PZ=_monomial_features(X,Y,degree,a)
         self.T,self.Tp=_trig(phis,mtor,nfp),_trig(phis,mtor,nfp,derivative=True)
         self.rhs=-2*X*self.features[0]/a
         self.coefficient_count=len(self.monomials)*(2*mtor+1)-1
@@ -226,11 +222,7 @@ class BatchSectionPsiOperator:
         self.X,self.Y=X,Y
         self.valid_rows=torch.tensor([len(p) for p in point_lists],device=device,dtype=torch.long)
         self.monomials=monomials(degree)
-        px=torch.stack([X**k for k in range(degree+1)],-1)
-        py=torch.stack([Y**k for k in range(degree+1)],-1)
-        self.P=torch.stack([px[...,i]*py[...,j] for i,j in self.monomials],-1)
-        self.PR=torch.stack([i*px[...,max(i-1,0)]*py[...,j]/scale for i,j in self.monomials],-1)
-        self.PZ=torch.stack([j*px[...,i]*py[...,max(j-1,0)]/scale for i,j in self.monomials],-1)
+        self.P,self.PR,self.PZ=_monomial_features(X,Y,degree,scale)
         self.T,self.Tp=_trig(self.phis,mtor,nfp),_trig(self.phis,mtor,nfp,derivative=True)
         self.rhs=-2*X*self.features[0]/scale
         self.coefficient_count=len(self.monomials)*(2*mtor+1)-1
@@ -438,7 +430,8 @@ def build_two_stage_front(field,trace,center: Mapping,*,config=None,
     geometry=PsiGeometry(axis,coefficients,nfp,a,degree,mtor,
         maximum_radius_scale=float(cfg.get('surface_max_radius_scale',1.)),
         root_iterations=int(cfg.get('surface_newton_iters',20)),
-        root_tolerance=float(cfg.get('surface_newton_tolerance',1e-12)))
+        root_tolerance=float(cfg.get('surface_newton_tolerance',1e-12)),
+        root_library=getattr(field, 'library', None))
     diagnostics.update(stage1_psi_train_rms=rms1.detach(),
                        stage1_column_scale_relative_max=(op1.column_scale_ratio-1).abs().max().detach(),
                        psi_column_scale_relative_max=(op2.column_scale_ratio-1).abs().max().detach(),
@@ -548,7 +541,8 @@ def build_batch_two_stage_front(field,centers,*,config_overrides=None,
     geometries=[PsiGeometry(axes[i],coefficients[i],nfp,radii[i],degree,mtor,
         maximum_radius_scale=float(common['surface_max_radius_scale']),
         root_iterations=int(common['surface_newton_iters']),
-        root_tolerance=float(common['surface_newton_tolerance'])) for i in range(len(centers))]
+        root_tolerance=float(common['surface_newton_tolerance']),
+        root_library=getattr(field, 'library', None)) for i in range(len(centers))]
     levels=torch.stack([predict_target_level(g,c) for g,c in zip(geometries,centers)])
     diagnostics.update(stage1_psi_train_rms=rms1.detach(),
         stage1_column_scale_relative_max=(op1.column_scale_ratio-1).abs().amax(-1).detach(),

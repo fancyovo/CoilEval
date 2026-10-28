@@ -39,22 +39,40 @@ inline double derivative(const Polynomial& p,int degree,double u) {
 inline double choose(int n,int k) {
     double v=1;for(int j=1;j<=k;++j)v*=double(n-j+1)/j;return v;
 }
-inline bool positive_bernstein(std::vector<double> b,int depth=0) {
-    const auto mm=std::minmax_element(b.begin(),b.end());
+inline const std::array<Polynomial,25>& binomial_table() {
+    static const auto table=[] {
+        std::array<Polynomial,25> values{};
+        for(int n=0;n<25;++n)for(int k=0;k<=n;++k)values[n][k]=choose(n,k);
+        return values;
+    }();
+    return table;
+}
+inline bool positive_bernstein_fixed(Polynomial b,int n,int depth=0) {
+    const auto mm=std::minmax_element(b.begin(),b.begin()+n+1);
     if(*mm.first>1e-12) return true;
     if(*mm.second<=1e-12 || depth==10) return false;
-    const int n=int(b.size())-1; std::vector<double> l(n+1),r(n+1);
+    Polynomial l{},r{};
     l[0]=b[0];r[n]=b[n];
     for(int k=1;k<=n;++k){for(int j=0;j<=n-k;++j)b[j]=.5*(b[j]+b[j+1]);l[k]=b[0];r[n-k]=b[n-k];}
-    return positive_bernstein(l,depth+1)&&positive_bernstein(r,depth+1);
+    return positive_bernstein_fixed(l,n,depth+1)&&positive_bernstein_fixed(r,n,depth+1);
+}
+inline bool positive_bernstein(std::vector<double> b,int depth=0) {
+    Polynomial fixed{};
+    std::copy(b.begin(),b.end(),fixed.begin());
+    return positive_bernstein_fixed(fixed,int(b.size())-1,depth);
 }
 // Certify (d psi/du)/u > 0 over the whole radial interval via Bernstein bounds.
 inline bool nested(const Polynomial& p,int degree,double maximum) {
     if(!(p[2]>1e-12) || !(maximum>0))return false;
-    const int n=degree-2; std::vector<double>b(n+1);
+    const int n=degree-2;
+    Polynomial b{},powers{};
+    const auto& combinations=binomial_table();
+    // Reuse identical pow/choose values while preserving the original summation
+    // order, thresholds, subdivision depth and floating-point expression.
+    for(int j=0;j<=n;++j)powers[j]=std::pow(maximum,j);
     for(int k=0;k<=n;++k)for(int j=0;j<=k;++j)
-        b[k]+=(j+2)*p[j+2]*std::pow(maximum,j)*choose(k,j)/choose(n,j);
-    return positive_bernstein(b);
+        b[k]+=(j+2)*p[j+2]*powers[j]*combinations[k][j]/combinations[n][j];
+    return positive_bernstein_fixed(b,n);
 }
 struct Ray { Polynomial p{}; double R=0,Z=0,theta=0,phi=0,umax=0; };
 struct Geometry { std::vector<Ray> rays; int degree=0; double a=0,maximum_level=0; };

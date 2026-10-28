@@ -2,9 +2,10 @@
 
 [简体中文](torch.zh-CN.md)
 
-Install a CUDA-enabled PyTorch build compatible with your GPU and driver, then
-run `python examples/autograd.py`. Installation options are described in
-[the installation guide](installation.md).
+For GPU use, install a CUDA-enabled PyTorch build compatible with your GPU and
+driver, then run `python examples/autograd.py`. CPU execution uses CPU PyTorch
+and `TensorEvaluator(device='cpu', ...)`; see the [CPU guide](cpu.md).
+Installation options are described in [the installation guide](installation.md).
 
 ## Physical parameter tensors
 
@@ -23,16 +24,22 @@ default, with `field_dtype=torch.float64` available.
 ## Evaluation and batches
 
 Use `TensorEvaluator(library=None, field_library=None, config=...,
-device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True)` as a context manager on its creating
-thread. A wheel supplies both native libraries. Explicit paths select custom
-builds; the field library otherwise comes from the same directory as `library`.
+device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
+device='cuda', threads=None, axis_grid=None)` as a context manager on its creating
+thread. A wheel supplies the GPU evaluation and gradient libraries and the CPU
+library. Explicit paths select custom builds. On GPU, the field library otherwise
+comes from the same directory as `library`; on CPU, both operations use the CPU library.
 
-`batch_axis=True` batches ordinary magnetic-axis preparation for distinct
+On GPU, `batch_axis=True` batches ordinary magnetic-axis preparation for distinct
 geometries. `share_geometry=True` shares captured two-stage fits for identical
 physical parameters whose configurations differ only in target volume. Each
 query retains its own downstream calculation and parameter gradient. Set either
 option to `False` to select its independent preparation path. Libraries without
 the batch-axis API use independent axis preparation.
+CPU batches prepare queries independently; `threads` controls each query's CPU
+budget and `axis_grid` optionally selects its primary magnetic-axis seed grid.
+CPU query diagnostics and timings are available under `diagnostics['queries']`
+and `timings['queries']`.
 
 GPU triangular solves run independently for each query, while field and feature
 calculations remain batched. Temporary workspaces are bounded; the retained
@@ -48,7 +55,7 @@ GPU memory.
 Fourier width, psi-fit method, `alpha_radial_basis`, `alpha_radial_weighting`, `alpha_weight_sigma`
 and `alpha_count_floor` within a batch. Target volume and `psi_a` may vary by
 query; two-stage sampling methods and row counts may also vary. Centers are captured in input
-order; field, tracing and fit operations then use the batch operators. An
+order; GPU field, tracing and fit operations then use the batch operators. An
 unusable captured center raises `InvalidEvaluationError` identifying the
 affected geometry.
 
@@ -76,8 +83,9 @@ For independent geometries, stack parameter tensors and call
 `loss.mean()` includes the averaging factor. The gradient has the input's layout
 and physical units. Normalization and custom losses can use ordinary PyTorch
 operations.
-Inputs may use float32 or float64 on the evaluator's GPU. Match `pack_coils`'s
-device with `TensorEvaluator(device_id=...)`. If an input does not request
+Inputs may use float32 or float64 on the evaluator's device. Match `pack_coils`'s
+device with `TensorEvaluator(device_id=...)` for GPU or use `device='cpu'`
+in both calls. If an input does not request
 gradients, the result contains a new leaf in `.parameters`; differentiate with
 respect to that returned tensor, as in the example.
 
@@ -113,8 +121,9 @@ do not trigger an integration-method change.
 
 `timings` records forward stages, including center capture and geometry-metric
 preparation. Objective construction and `torch.autograd.grad` run after
-`evaluate` returns. Measure the whole call plus one reverse pass, with CUDA
-synchronization at the endpoints, for value-and-gradient latency.
+`evaluate` returns. Measure the whole call plus one reverse pass for
+value-and-gradient latency. Synchronize CUDA at both endpoints for GPU timing;
+CPU operations complete synchronously.
 
 The reverse path differentiates the continuous response at a captured center,
 including magnetic-axis movement, psi fitting, surface selection and integration

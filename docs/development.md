@@ -2,7 +2,7 @@
 
 [简体中文](development.zh-CN.md)
 
-For Python-only development and CPU tests:
+For Python API development and tests that use installed optional dependencies:
 
 ```sh
 python -m pip install numpy pytest build scikit-build-core
@@ -11,6 +11,10 @@ python -m pytest -q
 python tools/check_layout.py
 python -m build --sdist
 ```
+
+CPU-backend tests use the `cpu` dependencies and a compiled CPU library; follow
+the [CPU source build](installation.md#cpu-source-build) instructions to enable
+them. CUDA tests additionally require the GPU backend and an available device.
 
 For a release wheel, create and activate the environment from
 `tools/build-environment.yml` with micromamba, then run:
@@ -22,8 +26,8 @@ bash tools/build_linux_wheel.sh
 ```
 
 The build uses CUDA 12.8, GCC 11 and a glibc 2.28 sysroot. `auditwheel` checks
-the platform baseline; NVIDIA runtime libraries are supplied by Python package
-dependencies. The manually triggered GitHub Actions wheel workflow saves build
+the platform baseline; NVIDIA runtime libraries are supplied by the `gpu`
+installation extra. The manually triggered GitHub Actions wheel workflow saves build
 artifacts for review. Verify a wheel in a fresh GPU environment with nvcc absent
 from PATH, including NumPy gradients and the optional Tensor API:
 
@@ -36,11 +40,13 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 | `src/coil_eval` | Public Python API, records, configuration and native binding |
 | `src/coil_eval/_two_stage` | Closed-domain geometry, sampling and native two-stage orchestration |
 | `src/coil_eval/_autograd` | Local field, tracing, fitting and downstream reverse operators |
+| `src/coil_eval/_cpu` | CPU capture, fitting, field operators and thread controls |
 | `src/coil_eval/simsopt` | Source records, initialization, standard solves and reference QS |
 | `native/src/field` | Coil discretization, field evaluation, tracing and psi fitting |
 | `native/src/pipeline` | Axis, target surface, flux, alpha, QS and local evaluation |
 | `native/include` | Shared records and module interfaces |
 | `native/src/autograd` | CUDA primitives for the optional Tensor API |
+| `native/cpu` | CPU magnetic field, tracing, geometry and host policy adapters |
 | `tests` | API, numerical oracle and source layout tests |
 | `examples` | Runnable evaluation and custom objective examples |
 
@@ -60,14 +66,14 @@ Use `major.minor.patch` without an `a` suffix:
 - New features increment the second (minor) component and reset patch to zero,
   for example `0.5.1` to `0.6.0`.
 - Bug fixes increment the third (patch) component, including small patches and
-  obvious corrections, for example `0.5.1` to `0.5.2`.
+  obvious corrections, for example `0.7.0` to `0.7.1`.
 
-The source package is `0.6.0`, including surface QS features and the capacity, self-intersection and
-flux-Legendre fixes; its changelog entry remains unreleased until publication.
+The source package is `0.7.0`, including CPU support, throughput improvements,
+surface QS features and earlier numerical fixes; its changelog entry remains unreleased until publication.
 Update package metadata and CHANGELOG when delivering implementation changes,
 even before tagging or building release binaries. Documentation-only changes
 and diagnostic reports do not require a package bump. The next fix uses
-`0.5.2`; a new feature uses `0.6.0`. Keep historical version numbers, artifacts
+`0.7.1`; a new feature uses `0.8.0`. Keep historical version numbers, artifacts
 and tags unchanged, including `0.5.0a1` and earlier `a` versions. Release tags use `v` followed by
 the package version; retain earlier tags for reproducible installations.
 

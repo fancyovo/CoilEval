@@ -7,7 +7,7 @@ import torch
 
 from .triangular import independent_triangular_solve
 
-from .front import (PsiGeometry,monomials,periodic_hermite,_trig,
+from .front import (PsiGeometry,monomials,periodic_hermite,_trig,_monomial_features,
                                _coefficient_matrix,predict_target_level,_tensor_product_column_norms,_frozen_fit_tensor)
 
 
@@ -78,9 +78,7 @@ class BatchTensorProductPsiOperator:
         phi=(torch.arange(phi_grid,device=device,dtype=torch.float64)*(2*math.pi/(nfp*phi_grid))).to(dtype)
         self.X,self.Y,self.phi=X,Y,phi
         mono=monomials(degree)
-        self.P=torch.stack([X**ax*Y**bz for ax,bz in mono],-1)
-        self.PR=torch.stack([ax*X**max(ax-1,0)*Y**bz for ax,bz in mono],-1)
-        self.PZ=torch.stack([bz*X**ax*Y**max(bz-1,0) for ax,bz in mono],-1)
+        self.P,self.PR,self.PZ=_monomial_features(X,Y,degree)
         self.T=_trig(phi,mtor,nfp);self.Tp=_trig(phi,mtor,nfp,derivative=True)
         ax=axis_samples.to(dtype)
         ra,rap=periodic_hermite(phi,ax[:,:,0],ax[:,:,2],nfp)
@@ -189,6 +187,7 @@ def build_batch_front(field,centers,*,config_overrides=None,dtype=torch.float32,
     diagnostics['psi_column_scale_relative_max']=(op.column_scale_ratio-1).abs().amax(-1).detach()
     geometries=[PsiGeometry(axes[i],coefficients[i],nfp,radii[i],int(common['psi_poly_degree']),int(common['psi_m_tor']),
         maximum_radius_scale=float(common['surface_max_radius_scale']),root_iterations=int(common['surface_newton_iters']),
-        root_tolerance=float(common['surface_newton_tolerance'])) for i in range(len(centers))]
+        root_tolerance=float(common['surface_newton_tolerance']),
+        root_library=getattr(field, 'library', None)) for i in range(len(centers))]
     levels=torch.stack([predict_target_level(g,c) for g,c in zip(geometries,centers)])
     return BatchFrontResult(axes,coefficients,levels,rms,diagnostics,op,geometries)

@@ -191,3 +191,11 @@ contains available results. An expired or cross-session center raises
 Flux-Legendre radial values use a three-term Legendre recurrence in the native, tensor and Simsopt initialization paths. This avoids cancellation from an expanded FP32 monomial polynomial; it does not increase the finite basis or remove alpha/psi fitting error. Regenerate source captures when changing the native library or basis implementation.
 
 See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.
+
+## CPU backend
+
+Select `Evaluator(config=..., device='cpu', threads=None)` for CPU execution.
+The default device remains `'cuda'`. A positive `threads` selects the CPU
+budget; `None` follows process affinity and the scheduler allocation.
+The [CPU guide](cpu.md) covers installation, batch execution, finite differences
+and `TensorEvaluator(..., device='cpu')` reverse gradients.
