@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 (unreleased)
+
+- Overlap independent two-stage domain preparation and CPU engineering derivatives with GPU evaluation.
+- Batch optional target-surface magnetic sweeps across independent queries.
+- Defer stage timing to CUDA events to avoid per-stage device barriers.
+- Preserve detailed native capture errors and report unsupported concurrent solver captures explicitly.
+- Add execution controls, independent-query regression and GPU parity benchmarks.
+
 ## 0.7.0 (unreleased)
 
 - Add CPU evaluation and local reverse gradients, with explicit or adaptive thread limits.

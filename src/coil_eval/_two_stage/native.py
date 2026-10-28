@@ -83,6 +83,14 @@ class TwoStageNative:
     def _check(self, code):
         native._check_lib_code(self.lib,code)
 
+    def _check_result(self,code,raw):
+        # A native RAII capture guard can clear the thread-local error during
+        # unwinding. The result owns the stage-qualified failure message.
+        message=bytes(raw.error_message).split(b'\0',1)[0] if code else b''
+        if message:
+            raise native.GpuError(message.decode('utf-8','replace'))
+        self._check(code)
+
     def _factor(self, count):
         upper=np.empty((count,count),dtype=np.float64)
         scale=np.empty(count,dtype=np.float64)
@@ -103,6 +111,14 @@ class TwoStageNative:
 
     def _prepare(self,coils,config,cfg,arrays,capture,timings):
         """Create one field/S1/domain/S2 model, independently of target volume."""
+        initial=self._begin_prepare(coils,config,cfg,arrays,capture,timings)
+        if 'partial_result' in initial:
+            return initial
+        domain=self._prepare_domain(coils,config,cfg,initial,timings)
+        return self._finish_prepare(cfg,initial,domain,capture,timings)
+
+    def _begin_prepare(self,coils,config,cfg,arrays,capture,timings):
+        """Run native S1 on the caller thread and own all exported host data."""
         modes=((cfg.psi_poly_degree+1)*(cfg.psi_poly_degree+2)//2-3)*(2*cfg.psi_m_tor+1)-1
         axes=np.empty(4*cfg.axis_sample_count,dtype=np.float64)
         first=np.empty(modes,dtype=np.float64)
@@ -121,7 +137,7 @@ class TwoStageNative:
         # Own a returned context before checking the return code, so even a
         # partially allocated failing C call is released by the outer finally.
         self._context=context
-        self._check(code)
+        self._check_result(code,raw)
         timings['stage1']=perf_counter()-stage
         if raw.status!=0 or not context.value:
             return dict(partial_result=native._score_result_dict(raw))
@@ -144,6 +160,13 @@ class TwoStageNative:
         axis=axes[:4*count.value].reshape(4,count.value).T.copy()
         first=first[:npsi.value].copy()
         s1_scale,s1_upper=self._factor(len(first)) if capture else (None,None)
+        return dict(axis=axis,first=first,alpha_options=alpha_options,
+                    s1_scale=s1_scale,s1_upper=s1_upper)
+
+    @staticmethod
+    def _prepare_domain(coils,config,cfg,initial,timings):
+        """Pure host geometry work; it never reads native thread-local state."""
+        axis,first=initial['axis'],initial['first']
         model=PsiModel(first,axis,nfp=coils.nfp,a=cfg.psi_a,
                        degree=cfg.psi_poly_degree,mtor=cfg.psi_m_tor)
         phis=np.arange(cfg.psi_n_phi)*2*np.pi/(coils.nfp*cfg.psi_n_phi)
@@ -160,12 +183,19 @@ class TwoStageNative:
         timings['training_points']=perf_counter()-stage
         rows=[np.ascontiguousarray(sample['rz'][:,i]) for i in range(2)]
         rows.append(np.ascontiguousarray(sample['phi']))
+        return dict(boundary=boundary,sample=sample,rows=rows)
+
+    def _finish_prepare(self,cfg,initial,domain,capture,timings):
+        """Fit S2 on the caller thread, copying its factor before another fit."""
+        first=initial['first']
+        s1_scale,s1_upper=initial['s1_scale'],initial['s1_upper']
+        boundary,sample,rows=domain['boundary'],domain['sample'],domain['rows']
         coefficients=np.empty_like(first)
         rms=ct.c_double();stats=np.zeros(16,dtype=np.float64)
         stage=perf_counter()
         weights=sample.get('row_weights')
         if weights is None:
-            self._check(self.lib.sgpu_two_stage_fit_v1(context,*[pointer(a) for a in rows],
+            self._check(self.lib.sgpu_two_stage_fit_v1(self._context,*[pointer(a) for a in rows],
                 len(rows[0]),pointer(coefficients),ct.byref(rms),pointer(stats),len(stats)))
         else:
             weights=np.ascontiguousarray(weights,dtype=np.float64)
@@ -176,7 +206,7 @@ class TwoStageNative:
             weighted_fit=getattr(self.lib,'sgpu_two_stage_fit_weighted_v1',None)
             if weighted_fit is None:
                 raise RuntimeError('native library does not provide weighted two-stage fitting; rebuild the library')
-            self._check(weighted_fit(context,*[pointer(a) for a in rows],len(rows[0]),pointer(weights),
+            self._check(weighted_fit(self._context,*[pointer(a) for a in rows],len(rows[0]),pointer(weights),
                 pointer(coefficients),ct.byref(rms),pointer(stats),len(stats)))
         timings['stage2_fit']=perf_counter()-stage
         s2_scale,s2_upper=self._factor(len(first)) if capture else (None,None)
@@ -196,9 +226,19 @@ class TwoStageNative:
             sampling_members_sha256=members.hexdigest(),spacing=sample['spacing'],training_count=len(rows[0]),
             sampling_kind=sample.get('kind','cartesian'),weighted_fit=weights is not None)
         return dict(coefficients=coefficients,train_rms=rms.value,first=first,
-            alpha_options=alpha_options,
+            alpha_options=initial['alpha_options'],
             s1_scale=s1_scale,s1_upper=s1_upper,s2_scale=s2_scale,s2_upper=s2_upper,
             boundary=boundary,sample=sample,branch=branch,training_count=len(rows[0]))
+
+    @staticmethod
+    def _prepare_snapshot_arrays(prepared,capture_mode,source_native):
+        prepared['native_source_capture']=source_native
+        prepared['shared_snapshot_arrays']=({
+            'psi_scale':prepared['s2_scale'],'psi_upper':prepared['s2_upper']}
+            if capture_mode=='reverse' else {})
+        prepared['shared_two_stage']=_shared_array_tree(dict(
+            stage1_coefficients=prepared['first'],stage1_scale=prepared['s1_scale'],
+            stage1_upper=prepared['s1_upper'],boundary=prepared['boundary'],sampling=prepared['sample']))
 
     def _resume(self,prepared,cfg,arrays,capture_mode,include_torsion):
         coefficients=prepared['coefficients']
@@ -206,9 +246,10 @@ class TwoStageNative:
         iota=np.empty(cfg.iota_degree+1,dtype=np.float64)
         niota,edge_iota=ct.c_int(),ct.c_double()
         stage=perf_counter()
-        self._check(self.lib.sgpu_two_stage_resume_v1(self._context,pointer(coefficients),len(coefficients),
+        code=self.lib.sgpu_two_stage_resume_v1(self._context,pointer(coefficients),len(coefficients),
             prepared['train_rms'],ct.byref(cfg),ct.byref(raw),pointer(iota),len(iota),ct.byref(niota),
-            ct.byref(edge_iota),None))
+            ct.byref(edge_iota),None)
+        self._check_result(code,raw)
         formal_seconds=perf_counter()-stage
         stage=perf_counter()
         result=native._score_result_dict(raw)
@@ -314,13 +355,7 @@ class TwoStageNative:
             self._check(self.lib.sgpu_set_reverse_capture(flag))
             prepared=self._prepare(coils,configs[0],native_configs[0],arrays,capture_mode=='reverse',timings)
             if capture_mode is not None and 'partial_result' not in prepared:
-                prepared['native_source_capture']=source_native
-                prepared['shared_snapshot_arrays']=({
-                    'psi_scale':prepared['s2_scale'],'psi_upper':prepared['s2_upper']}
-                    if capture_mode=='reverse' else {})
-                prepared['shared_two_stage']=_shared_array_tree(dict(
-                    stage1_coefficients=prepared['first'],stage1_scale=prepared['s1_scale'],
-                    stage1_upper=prepared['s1_upper'],boundary=prepared['boundary'],sampling=prepared['sample']))
+                self._prepare_snapshot_arrays(prepared,capture_mode,source_native)
             shared_seconds=perf_counter()-started
             if 'partial_result' in prepared:
                 results=[(deepcopy(prepared['partial_result']),None) for _ in configs]

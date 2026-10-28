@@ -25,7 +25,9 @@ default, with `field_dtype=torch.float64` available.
 
 Use `TensorEvaluator(library=None, field_library=None, config=...,
 device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
-device='cuda', threads=None, axis_grid=None)` as a context manager on its creating
+device='cuda', threads=None, axis_grid=None, surface_qs=None,
+capture_pipeline=True, batch_surface_qs=True, synchronize_stages=False,
+engineering_overlap=True, capture_workers=1)` as a context manager on its creating
 thread. A wheel supplies the GPU evaluation and gradient libraries and the CPU
 library. Explicit paths select custom builds. On GPU, the field library otherwise
 comes from the same directory as `library`; on CPU, both operations use the CPU library.
@@ -41,6 +43,35 @@ budget and `axis_grid` optionally selects its primary magnetic-axis seed grid.
 CPU query diagnostics and timings are available under `diagnostics['queries']`
 and `timings['queries']`.
 
+Version 0.8.0 (unreleased) adds the following GPU execution controls. These
+options change scheduling; numerical settings remain in `EvaluationConfig`
+and `SurfaceQSConfig`.
+
+| GPU option | Default | Execution behavior |
+| --- | --- | --- |
+| `capture_pipeline` | `True` | With `capture_workers=1`, overlap CPU closed-domain construction for distinct two-stage geometry groups with the next native first fit or a preceding second fit and formal continuation. |
+| `capture_workers` | `1` | Integer from 1 to 4. Values 2–4 select experimental independent two-stage capture workers; validation is pending. |
+| `batch_surface_qs` | `True` | Combine corresponding magnetic-field sweeps across queries during optional target-surface f_B/f_T sampling. |
+| `synchronize_stages` | `False` | Record stage CUDA events and resolve them at the public-call boundary. `True` enables a device synchronization before and after each stage for diagnostic wall timing. |
+| `engineering_overlap` | `True` | Prepare coil metrics and their active derivatives in one CPU worker while GPU response stages execute, then attach the returned derivatives on the caller. |
+
+With `capture_workers=1`, the capture pipeline retains at most two native
+contexts and keeps native capture calls on the creating thread. Target-surface geometry roots and angular
+solves retain each query's independent numerical branch. These controls apply
+within one evaluation call; schedule separate application batches explicitly.
+Their effect on latency and throughput depends on batch size, host CPU resources
+and GPU workload. Set `capture_pipeline`, `batch_surface_qs` or `engineering_overlap` to `False`
+to compare its independent execution path; set `synchronize_stages=True` to
+compare synchronized stage timing.
+With `capture_workers=2`, `3` or `4`, each host worker would own a complete
+geometry group and its native context. The public native path currently rejects
+these values because the independent cuSOLVER handles used by two-stage capture
+still need a dedicated isolation implementation. `capture_workers=1` is the
+validated path; use it with `capture_pipeline=True` for CPU-domain/native
+overlap.
+The execution controls in the table are GPU-only; CPU evaluation retains its
+existing thread budget and independent-query execution.
+
 GPU triangular solves run independently for each query, while field and feature
 calculations remain batched. Temporary workspaces are bounded; the retained
 gradient graph still grows with batch size. Select a batch size that fits your
@@ -54,13 +85,18 @@ GPU memory.
 `configs` supplies one `EvaluationConfig` per independent geometry. Use a common
 Fourier width, psi-fit method, `alpha_radial_basis`, `alpha_radial_weighting`, `alpha_weight_sigma`
 and `alpha_count_floor` within a batch. Target volume and `psi_a` may vary by
-query; two-stage sampling methods and row counts may also vary. Centers are captured in input
+query; two-stage sampling methods and row counts may also vary. Captured centers are returned in input
 order; GPU field, tracing and fit operations then use the batch operators. An
 unusable captured center raises `InvalidEvaluationError` identifying the
 affected geometry.
 
 `diagnostics['capture']` records the actual geometry groups, axis preparation
 and query count, including independent preparation when a cache is unavailable.
+Its `pipeline` entry, when present, records the selected execution mode,
+effective workers and group spans. The one-worker pipeline also records
+domain-worker waits. Use `pipeline['total_s']` for capture batch wall time;
+group spans can overlap.
+`diagnostics['engineering_overlap']` records whether the host worker was used.
 
 ```python
 import torch
@@ -120,10 +156,35 @@ under `center_validation`. Physical changes in flux across endpoints therefore
 do not trigger an integration-method change.
 
 `timings` records forward stages, including center capture and geometry-metric
-preparation. Objective construction and `torch.autograd.grad` run after
-`evaluate` returns. Measure the whole call plus one reverse pass for
-value-and-gradient latency. Synchronize CUDA at both endpoints for GPU timing;
-CPU operations complete synchronously.
+preparation. With `synchronize_stages=False`, values are CUDA-event elapsed
+spans on the caller's stream, resolved before return. Such spans can include
+host launch gaps and waiting for work; they do not measure GPU active time.
+The joining stage can include a remaining wait for its concurrent worker and
+the result upload; work completed before that stage is already overlapped.
+With `synchronize_stages=True`, values are synchronized host wall spans.
+`diagnostics['stage_timing']` distinguishes `'deferred_cuda_events'` from
+`'synchronized_wall'`. Overlapping stage and worker spans should not be added
+to estimate complete latency.
+
+Objective construction and `torch.autograd.grad` run after `evaluate` returns.
+Measure the entire fresh call plus one reverse pass for value-and-gradient
+latency, with CUDA synchronization at both endpoints. For example, inside the
+GPU evaluator's context:
+
+```python
+import time
+
+torch.cuda.synchronize(evaluator.device)
+started = time.perf_counter()
+result = evaluator.evaluate(x)
+loss = torch.log(result.metrics.qs_volume + 1e-8)
+gradient, = torch.autograd.grad(loss, result.parameters)
+torch.cuda.synchronize(evaluator.device)
+value_and_gradient_s = time.perf_counter() - started
+```
+
+Measure imports, compilation and warmup separately. CPU operations complete
+synchronously and retain host wall timings.
 
 The reverse path differentiates the continuous response at a captured center,
 including magnetic-axis movement, psi fitting, surface selection and integration

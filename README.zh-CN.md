@@ -5,10 +5,10 @@
 CoilEval 使用 NVIDIA GPU 或 CPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-源码包版本为 0.7.0（尚未发布），新增 CPU 求值、局部反传与可配置线程数，
-并加速边界检查和张量特征构造。可选的目标磁面 f_B、f_T 保留精度档位。
-详见 [CPU 指南](docs/cpu.zh-CN.md)、[磁面 QS 指南](docs/qs.zh-CN.md)和
-[版本记录](docs/changelog.zh-CN.md)。
+源码包版本为 0.8.0（尚未发布），改进 GPU 批量调度，将 CPU 准备工作与 GPU
+计算重叠，并合并目标表面的磁场采样。保留数值设置、物理拒绝检查与已有 CPU
+求值和局部反传。参见 [GPU 批量指南](docs/torch.zh-CN.md)、
+[CPU 指南](docs/cpu.zh-CN.md)和[版本记录](CHANGELOG.md)。
 
 ## 安装
 

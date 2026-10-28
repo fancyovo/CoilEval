@@ -250,6 +250,19 @@ def test_c_api_failure_always_closes_allocated_context_and_restores_capture_flag
     assert driver.last_many_timing['completed_volumes']==0
 
 
+def test_begin_preserves_owned_error_when_native_capture_guard_clears_tls(factory):
+    driver,library,_=factory()
+    original=library.sgpu_two_stage_begin_v1
+    def begin(*args):
+        original(*args)
+        args[8]._obj.error_message=b'two-stage cylindrical psi fit: solver failed'
+        return 1
+    library.sgpu_two_stage_begin_v1=Function(begin)
+    with pytest.raises(module.native.GpuError,match='cylindrical psi fit: solver failed'):
+        driver.evaluate(make_coils(),configurations()[0],capture=True)
+    assert driver._context is None and library.flags==[1,0]
+
+
 def test_python_preparation_failure_always_closes_context(factory,monkeypatch):
     driver,library,_=factory()
     def fail(*args,**kwargs):raise ValueError('mock boundary failure')

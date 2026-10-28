@@ -48,6 +48,17 @@ def refine_surface_alpha(geometry, level, alpha_data, iota, field, *, nfp,
     angle exactly. In ``geometric`` coordinates it replaces that correction
     on this surface. Neither route projects onto the original radial basis.
     """
+    from .batch_surface_qs import _run_field_steps
+    return _run_field_steps(_refine_surface_alpha_steps(
+        geometry, level, alpha_data, iota, nfp=nfp, order=order, nphi=nphi,
+        ntheta=ntheta, ridge=ridge, root_options=root_options,
+        coordinates=coordinates), field)
+
+
+def _refine_surface_alpha_steps(geometry, level, alpha_data, iota, *, nfp,
+                                order, nphi, ntheta, ridge=1e-12,
+                                root_options=None, coordinates='straight'):
+    """Scalar numerical path, suspended at its independent magnetic sweep."""
     from .boozer import ComposedAngularCorrection, straight_surface, surface_geometry
     from .angular_fourier import angular_fourier_values, transport_fourier_design
     from .least_squares import ridge_least_squares
@@ -64,7 +75,8 @@ def refine_surface_alpha(geometry, level, alpha_data, iota, field, *, nfp,
         original_diagnostics = {'alpha_jacobian_min': level*0+1}
     else:
         raise ValueError('target-alpha coordinates must be straight or geometric')
-    magnetic = field(xyz.reshape(-1, 3)).reshape_as(xyz).double()
+    magnetic = (yield xyz.reshape(-1, 3), False)
+    magnetic = magnetic.reshape_as(xyz).double()
     gtt, gtp, gpp = (xt*xt).sum(-1), (xt*xp).sum(-1), (xp*xp).sum(-1)
     determinant = gtt*gpp-gtp.square()
     if not bool(torch.isfinite(determinant).all() & (determinant > 0).all()):

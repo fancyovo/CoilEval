@@ -200,6 +200,26 @@ def sample_boozer_surface(geometry, level, physics, field, config, *,
     an independently certified invariant magnetic surface.  The sampler never
     damps lambda to manufacture an invertible map.
     """
+    from .batch_surface_qs import _run_field_steps
+    return _run_field_steps(_sample_boozer_surface_steps(
+        geometry, level, physics, config, nphi=nphi, ntheta=ntheta,
+        nu_order=nu_order, max_iterations=max_iterations, tolerance=tolerance,
+        min_jacobian=min_jacobian, resonance_tolerance=resonance_tolerance,
+        field_derivatives=field_derivatives, nu_method=nu_method,
+        alpha_order=alpha_order, alpha_ridge=alpha_ridge,
+        alpha_coordinates=alpha_coordinates, alpha_fit_nphi=alpha_fit_nphi,
+        alpha_fit_ntheta=alpha_fit_ntheta), field)
+
+
+def _sample_boozer_surface_steps(geometry, level, physics, config, *,
+                                nphi=65, ntheta=67, nu_order=12,
+                                max_iterations=30, tolerance=1e-11,
+                                min_jacobian=1e-6, resonance_tolerance=1e-10,
+                                field_derivatives=False, nu_method='transport',
+                                alpha_order=0, alpha_ridge=1e-12,
+                                alpha_coordinates='straight', alpha_fit_nphi=None,
+                                alpha_fit_ntheta=None):
+    """Shared scalar/batch numerical path, yielding independent field sweeps."""
     for value in (nphi, ntheta, nu_order, max_iterations):
         if isinstance(value, bool):
             raise ValueError('Boozer grid, order and iteration counts must be integers')
@@ -221,16 +241,17 @@ def sample_boozer_surface(geometry, level, physics, field, config, *,
     options = dict(max_iterations=max_iterations, tolerance=tolerance, min_jacobian=min_jacobian)
     alpha_diagnostics = {}
     if alpha_order:
-        from .surface_alpha import refine_surface_alpha
+        from .surface_alpha import _refine_surface_alpha_steps
         fit_nphi = max(nphi, 4*alpha_order+1) if alpha_fit_nphi is None else alpha_fit_nphi
         fit_ntheta = max(ntheta, 4*alpha_order+3) if alpha_fit_ntheta is None else alpha_fit_ntheta
-        alpha_data, iota, alpha_diagnostics = refine_surface_alpha(
-            geometry, level, alpha_data, iota, field, nfp=config.nfp, order=alpha_order,
+        alpha_data, iota, alpha_diagnostics = yield from _refine_surface_alpha_steps(
+            geometry, level, alpha_data, iota, nfp=config.nfp, order=alpha_order,
             nphi=fit_nphi, ntheta=fit_ntheta, ridge=alpha_ridge, root_options=options,
             coordinates=alpha_coordinates)
     xyz, xt, xp, first_diagnostics = straight_surface(
         geometry, level, alpha_data, tt, pp, **options)
-    B = field(xyz.reshape(-1, 3)).reshape_as(xyz).double()
+    B = (yield xyz.reshape(-1, 3), False)
+    B = B.reshape_as(xyz).double()
     tangent = xp + iota * xt
     local_G = (B * tangent).sum(-1)
     G = local_G.mean()
@@ -249,11 +270,12 @@ def sample_boozer_surface(geometry, level, physics, field, config, *,
     mapped, mt, mp, final_diagnostics = straight_surface(
         geometry, level, alpha_data, ts, po, **options)
     if field_derivatives:
-        magnetic, field_jacobian = field(mapped.reshape(-1, 3), gradient=True)
+        magnetic, field_jacobian = (yield mapped.reshape(-1, 3), True)
         magnetic = magnetic.reshape_as(mapped).double()
         field_jacobian = field_jacobian.reshape(*mapped.shape[:-1], 3, 3).double()
     else:
-        magnetic = field(mapped.reshape(-1, 3)).reshape_as(mapped).double()
+        magnetic = (yield mapped.reshape(-1, 3), False)
+        magnetic = magnetic.reshape_as(mapped).double()
     magnitude = torch.linalg.vector_norm(magnetic, dim=-1)
     if not bool(torch.isfinite(magnitude).all() & (magnitude > 0).all()):
         raise ValueError('nonfinite or zero magnetic field on Boozer surface')

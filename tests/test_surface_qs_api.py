@@ -103,6 +103,7 @@ def tensor_api(monkeypatch):
     import coil_eval._native_loader as loader
     import coil_eval._autograd.cuda_memory as memory
     import coil_eval._autograd.boozer as boozer
+    import coil_eval._autograd.batch_surface_qs as batch_boozer
     calls = []
     monkeypatch.setattr(loader, 'resolve_library', lambda path: Path('fake.so'))
     monkeypatch.setattr(api, 'NativeFieldLibrary', lambda path: object())
@@ -171,12 +172,22 @@ def tensor_api(monkeypatch):
         return result
 
     monkeypatch.setattr(boozer, 'sample_boozer_surface', sample)
+    # This API fixture supplies manufactured samples, not a live psi basis.
+    # Numerical batching and VJP isolation are covered in test_batch_surface_qs.
+    def sample_batch(geometries, levels, physics, field, configs, **settings):
+        assert len(geometries) == len(field.positions)
+        return [sample(geometry, level, phys, field, config, **settings)
+                for geometry, level, phys, config in zip(geometries, levels, physics, configs)]
+    monkeypatch.setattr(batch_boozer, 'sample_boozer_surfaces', sample_batch)
 
-    def evaluator(surface_qs=None):
+    def evaluator(surface_qs=None, **execution_options):
         config = EvaluationConfig(target_volume=.05, fast=True, flux_method='stokes',
             stokes_validation_rtol=None)
-        engine = api.TensorEvaluator(config=config, surface_qs=surface_qs,
-            batch_axis=False)
+        # Native execution and CUDA timers are separately mocked in the tests
+        # that exercise their switches; this general API fixture stays on CPU.
+        options = dict(batch_axis=False, synchronize_stages=True, engineering_overlap=False)
+        options.update(execution_options)
+        engine = api.TensorEvaluator(config=config, surface_qs=surface_qs, **options)
         engine.device = torch.device('cpu')
         engine._capture = lambda *args: {'config': config.native_options(),
             'score_result': {'status': 'ok'}, 'alpha_upper': [1.],
@@ -244,6 +255,102 @@ def test_tensor_constructor_rejects_invalid_optional_config(tensor_api, value):
     _, _, evaluator, _ = tensor_api
     with pytest.raises(TypeError, match='SurfaceQSConfig'):
         evaluator(value)
+
+
+@pytest.mark.parametrize('workers', [True, False, 0, -1, 5, 2., '2', None])
+def test_capture_worker_budget_rejects_invalid_values(tensor_api, workers):
+    _, _, evaluator, _ = tensor_api
+    with pytest.raises(ValueError, match='capture_workers'):
+        evaluator(capture_workers=workers)
+
+
+@pytest.mark.parametrize('workers', [1, 2, 3, 4, np.int64(2)])
+def test_capture_worker_budget_accepts_supported_integers(tensor_api, workers):
+    _, _, evaluator, _ = tensor_api
+    with evaluator(capture_workers=workers) as engine:
+        assert engine.capture_workers == workers
+
+
+@pytest.mark.parametrize('batch', [False, True])
+def test_deferred_stage_events_resolve_once_after_all_forward_stages(tensor_api, monkeypatch, batch):
+    torch, _, evaluator, _ = tensor_api
+    actions, events = [], []
+    stream = object()
+
+    class Event:
+        def __init__(self, *, enable_timing):
+            assert enable_timing
+            self.index = len(events)
+            events.append(self)
+        def record(self, actual_stream):
+            assert actual_stream is stream
+            actions.append(('record', self.index))
+        def synchronize(self):
+            actions.append(('synchronize', self.index))
+        def elapsed_time(self, other):
+            assert ('synchronize', len(events)-1) in actions
+            actions.append(('elapsed', self.index, other.index))
+            return 2.5
+
+    monkeypatch.setattr(torch.cuda, 'Event', Event)
+    monkeypatch.setattr(torch.cuda, 'current_stream', lambda device: stream)
+    monkeypatch.setattr(torch.cuda, 'synchronize', lambda *a: pytest.fail('device-wide stage barrier'))
+    x = torch.ones((2, 4, 10) if batch else (4, 10), dtype=torch.float64, requires_grad=True)
+    with evaluator(synchronize_stages=False) as engine:
+        result = engine.evaluate_batch(x) if batch else engine.evaluate(x)
+    assert result.diagnostics['stage_timing'] == 'deferred_cuda_events'
+    assert len(events) == 2*len(result.timings)
+    assert actions[:len(events)] == [('record', i) for i in range(len(events))]
+    assert actions[len(events)] == ('synchronize', len(events)-1)
+    assert [action for action in actions if action[0] == 'synchronize'] == [actions[len(events)]]
+    assert set(result.timings.values()) == {.0025}
+    result.metrics.qs_volume.sum().backward()
+    torch.testing.assert_close(x.grad, torch.ones_like(x))
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+def test_surface_batch_switch_selects_requested_sampler(tensor_api, monkeypatch, enabled):
+    torch, _, evaluator, _ = tensor_api
+    import coil_eval._autograd.batch_surface_qs as batch_boozer
+    original = batch_boozer.sample_boozer_surfaces
+    batch_calls = []
+    def sample_batch(*args, **kwargs):
+        batch_calls.append(len(args[0]))
+        return original(*args, **kwargs)
+    monkeypatch.setattr(batch_boozer, 'sample_boozer_surfaces', sample_batch)
+    config = SurfaceQSConfig(nphi=9, ntheta=11, nu_order=3)
+    x = torch.ones((2, 4, 10), dtype=torch.float64, requires_grad=True)
+    with evaluator(config, batch_surface_qs=enabled) as engine:
+        result = engine.evaluate_batch(x)
+    assert batch_calls == ([2] if enabled else [])
+    assert result.surface_qs.f_B.shape == (2,)
+
+
+def test_engineering_overlap_attaches_results_and_closes_worker_context(tensor_api, monkeypatch):
+    from contextlib import contextmanager
+    torch, api, evaluator, _ = tensor_api
+    import coil_eval._autograd.engineering as engineering
+    actions = []
+    @contextmanager
+    def prepare(host, library, nfp):
+        actions.append('begin')
+        def tensor(xs):
+            actions.append('join')
+            return xs.sum((-1, -2))[:, None]*xs.new_tensor([1., 2., 3.])
+        try:
+            yield SimpleNamespace(tensor=tensor)
+        finally:
+            actions.append('close')
+    monkeypatch.setattr(engineering, 'prepare_engineering_batch', prepare)
+    monkeypatch.setattr(api, '_EngineeringMetrics', SimpleNamespace(
+        apply=lambda *a: pytest.fail('unexpected independent engineering call')))
+    x = torch.ones((2, 4, 10), dtype=torch.float64, requires_grad=True)
+    with evaluator(engineering_overlap=True) as engine:
+        result = engine.evaluate_batch(x)
+    assert actions == ['begin', 'join', 'close']
+    assert result.diagnostics['engineering_overlap'] is True
+    result.metrics.coil_length_mean.sum().backward()
+    torch.testing.assert_close(x.grad, torch.full_like(x, 3.))
 
 
 def test_value_wrapper_enables_explicit_or_default_config(monkeypatch):

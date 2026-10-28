@@ -28,7 +28,7 @@ def oracle(p, w, q, potential=False):
         return (w[None] * inv[..., None]).sum(1) * 1e-7
     cross = torch.linalg.cross(w[None].expand_as(r), r)
     b = (cross * inv[..., None] ** 3).sum(1) * 1e-7
-    axes = torch.eye(3, dtype=p.dtype)
+    axes = torch.eye(3, dtype=p.dtype, device=p.device)
     cross_gradient = torch.linalg.cross(w[:, None, :].expand(-1, 3, -1),
                                         axes[None].expand(len(w), -1, -1)).transpose(-1, -2)
     g = (cross_gradient[None] * inv[..., None, None] ** 3

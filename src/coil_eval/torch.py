@@ -74,7 +74,9 @@ class TensorEvaluator:
 
     def __init__(self, library=None, field_library=None, *, config: EvaluationConfig,
                  device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
-                 surface_qs=None,device='cuda',threads=None,axis_grid=None):
+                 surface_qs=None,device='cuda',threads=None,axis_grid=None,
+                 capture_pipeline=True, batch_surface_qs=True, synchronize_stages=False,
+                 engineering_overlap=True, capture_workers=1):
         self._validate_config(config)
         if field_dtype not in (torch.float32, torch.float64):
             raise ValueError('field_dtype must be torch.float32 or torch.float64')
@@ -83,6 +85,19 @@ class TensorEvaluator:
         self.dtype = field_dtype
         self.batch_axis = bool(batch_axis)
         self.share_geometry = bool(share_geometry)
+        from operator import index
+        if isinstance(capture_workers, bool):
+            raise ValueError('capture_workers must be an integer between 1 and 4')
+        try:
+            self.capture_workers = index(capture_workers)
+        except TypeError as exc:
+            raise ValueError('capture_workers must be an integer between 1 and 4') from exc
+        if not 1 <= self.capture_workers <= 4:
+            raise ValueError('capture_workers must be an integer between 1 and 4')
+        self.capture_pipeline = bool(capture_pipeline)
+        self.batch_surface_qs = bool(batch_surface_qs)
+        self.synchronize_stages = bool(synchronize_stages)
+        self.engineering_overlap = bool(engineering_overlap)
         from .qs import SurfaceQSConfig
         if surface_qs is not None and not isinstance(surface_qs,SurfaceQSConfig):
             raise TypeError('surface_qs must be SurfaceQSConfig or None')
@@ -180,15 +195,35 @@ class TensorEvaluator:
         configs = validate_tensor_batch_configs(
             configs if configs is not None else [self.config]*len(xs),count=len(xs))
         timings = {}
+        stage_events = []
+        synchronized = getattr(self, 'synchronize_stages', True)
         def stage(name, fn):
-            torch.cuda.synchronize(self.device)
-            start=time.perf_counter(); result=fn(); torch.cuda.synchronize(self.device)
-            timings[name]=time.perf_counter()-start
+            if synchronized:
+                torch.cuda.synchronize(self.device)
+                start=time.perf_counter(); result=fn(); torch.cuda.synchronize(self.device)
+                timings[name]=time.perf_counter()-start
+            else:
+                # Keep the launch stream moving. Events are resolved together
+                # at the public-call boundary, never between adjacent stages.
+                stream = torch.cuda.current_stream(self.device)
+                begin = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+                begin.record(stream)
+                result = fn()
+                end.record(stream)
+                stage_events.append((name, begin, end))
             return result
+        def finish_timings():
+            if stage_events:
+                stage_events[-1][2].synchronize()
+                for name, begin, end in stage_events:
+                    timings[name] = begin.elapsed_time(end) / 1000.
+        captured_host = []
         def capture_all():
             from ._autograd.cuda_memory import prepare_native_memory
             capture_metadata['allocator_handoff']=prepare_native_memory(self.device)
             host = xs.detach().double().cpu().numpy()
+            captured_host.append(host)
             # Only exact physical duplicates and configurations differing solely
             # in target volume share S1/domain/S2 work. Graph parameters remain
             # independent per query; sharing applies to constant host captures.
@@ -205,8 +240,27 @@ class TensorEvaluator:
             prepared=(prepare_axis_batch(host[representatives],[configs[i] for i in representatives],
                 self.library_path,device=self.device.index,nfp=4) if self.batch_axis else None)
             captures = [None]*len(host)
+            if ((getattr(self, 'capture_pipeline', False) or getattr(self, 'capture_workers', 1)>1) and len(groups)>1
+                    and all(c.psi_fit == 'two_stage' for c in configs)):
+                from ._two_stage.capture_batch import capture_two_stage_batch
+                try:
+                    if getattr(self, 'capture_workers', 1)>1:
+                        from ._two_stage.capture_batch import capture_two_stage_workers
+                        pairs, pipeline = capture_two_stage_workers(host, configs, groups,
+                            self.library_path, device_id=self.device.index, prepared_axis=prepared,
+                            workers=self.capture_workers)
+                    else:
+                        pairs, pipeline = capture_two_stage_batch(host, configs, groups,
+                            self.library_path, device_id=self.device.index, prepared_axis=prepared)
+                except native.GpuError as exc:
+                    raise InvalidEvaluationError(f'batched center capture: {exc}') from exc
+                for i, (raw, snapshot) in enumerate(pairs):
+                    if snapshot is None or raw['status'] != 'ok':
+                        raise InvalidEvaluationError(f'geometry {i}: {raw["status"]}')
+                    captures[i] = snapshot
+                capture_metadata['pipeline'] = pipeline
             from contextlib import nullcontext
-            for j,group in enumerate(groups):
+            for j,group in enumerate(groups if captures[0] is None else []):
                 i=group[0]
                 try:
                     with prepared.capture(j) if prepared is not None else nullcontext():
@@ -238,124 +292,152 @@ class TensorEvaluator:
         snapshots=stage('center_capture',capture_all) if _snapshots is None else list(_snapshots)
         if len(snapshots)!=len(xs):
             raise ValueError('provide one owned snapshot per query')
-        centers=stage('center_upload',lambda:[self._center(s) for s in snapshots])
-        def make_field():
-            if batch:
-                p,w=coil_segments_batch(x.double(),nfp=4,count=256)
-                return BatchSegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
-            p,w=coil_segments(x.double(),nfp=4,count=256)
-            return SegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
-        field=stage('coil_segments',make_field)
-        def make_front():
-            methods={c.psi_fit for c in configs}
-            if len(methods)!=1:
-                raise ValueError('group batches by psi_fit method')
-            if configs[0].psi_fit!='two_stage':
-                return (build_batch_front(field,centers,dtype=torch.float64,nfp=4) if batch else
-                        build_front(field,field.trace,centers[0],dtype=torch.float64))
+        from contextlib import nullcontext
+        from ._autograd.engineering import prepare_engineering_batch
+        overlap = _engineering and getattr(self, 'engineering_overlap', False)
+        engineering_context = (prepare_engineering_batch(
+            captured_host[0] if captured_host else xs.detach().double().cpu().numpy(),
+            self.library_path, 4) if overlap else nullcontext(None))
+        with engineering_context as engineering_work:
+            centers=stage('center_upload',lambda:[self._center(s) for s in snapshots])
+            def make_field():
+                if batch:
+                    p,w=coil_segments_batch(x.double(),nfp=4,count=256)
+                    return BatchSegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
+                p,w=coil_segments(x.double(),nfp=4,count=256)
+                return SegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
+            field=stage('coil_segments',make_field)
+            def make_front():
+                methods={c.psi_fit for c in configs}
+                if len(methods)!=1:
+                    raise ValueError('group batches by psi_fit method')
+                if configs[0].psi_fit!='two_stage':
+                    return (build_batch_front(field,centers,dtype=torch.float64,nfp=4) if batch else
+                            build_front(field,field.trace,centers[0],dtype=torch.float64))
+                if not batch:
+                    return build_two_stage_front(field,field.trace,centers[0],dtype=torch.float64,
+                        local_value=_local_value,value_only=not _parameter_grad)
+                return build_batch_two_stage_front(field,centers,dtype=torch.float64,
+                    local_value=_local_value,value_only=not _parameter_grad,nfp=4)
+            front=stage('axis_psi_surface',make_front)
+            downstream_configs=[DownstreamConfig.from_mapping({**s['config'],'nfp':4,
+                'stokes_validation_rtol':cfg.stokes_validation_rtol})
+                for s,cfg in zip(snapshots,configs)]
+            caches=[{name:torch.as_tensor(s[key],device=self.device,dtype=self.dtype).detach()
+                     for name,key in (('upper','alpha_upper'),('scale','alpha_scale'),
+                                      ('scaled_solution','alpha_center_scaled_solution'))} for s in snapshots]
+            for cache,snapshot,cfg in zip(caches,snapshots,configs):
+                if 'flux_coefficients' in snapshot and 'target_level' in snapshot:
+                    cache['reference_flux_coefficients']=torch.tensor(
+                        snapshot['flux_coefficients'],device=self.device,dtype=torch.float64)
+                    cache['reference_flux_level']=torch.tensor(
+                        snapshot['target_level'],device=self.device,dtype=torch.float64).reshape(())
+                elif cfg.stokes_validation_rtol is not None:
+                    raise InvalidEvaluationError('formal center lacks the flux reference required for Stokes validation')
+                for name in ('volume_source_indices','volume_sampling_shape'):
+                    if name in snapshot:
+                        cache[name]=torch.tensor(snapshot[name],device=self.device,dtype=torch.int64)
+            if _flux_choice_only:
+                from ._autograd.downstream import flux_calibration
+                from ._autograd.flux_validation import stokes_check
+                flux=stage('flux_choice',lambda:flux_calibration(front.geometry,front.level,
+                    field,field.potential,downstream_configs[0]))
+                _,choice=stokes_check(flux,front.level,caches[0],configs[0].stokes_validation_rtol)
+                finish_timings()
+                return choice,timings
+            if _flux_choice is not None:
+                downstream_configs=[replace(c,stokes_flux=_flux_choice['method']=='stokes',
+                                            stokes_validation_rtol=None) for c in downstream_configs]
+            physics=stage('surface_metrics',lambda: batch_downstream(front,caches,field,downstream_configs)
+                          if batch else downstream(front.geometry,front.level,caches[0],field,
+                                                   field.trace,field.potential,downstream_configs[0]))
+            if _flux_choice is not None:
+                selected={**_flux_choice,'validation':'center_selected',
+                          'center_validation':_flux_choice['validation']}
+                physics['flux_validation']=([dict(selected) for _ in configs] if batch else selected)
+            qs_result=None
+            if getattr(self,'surface_qs',None) is not None:
+                from dataclasses import asdict
+                from ._autograd.boozer import sample_boozer_surface
+                from .qs_metrics import boozer_spectrum_metrics,boozer_qs_metrics_field
+                from .qs import SurfaceQSResult
+                def evaluate_qs_surfaces():
+                    # Spectral second derivatives amplify FP32 sampling noise.
+                    # Build these field quadratures in FP64 while preserving the
+                    # configured precision of the existing score and its gradient.
+                    qp,qw=(coil_segments_batch(x.double(),nfp=4,count=256) if batch
+                           else coil_segments(x.double(),nfp=4,count=256))
+                    geometries = [front.geometry(i) if batch else front.geometry
+                                  for i in range(len(configs))]
+                    levels = list(front.levels.unbind()) if batch else [front.level]
+                    physics_queries = []
+                    for geometry, i in zip(geometries, range(len(configs))):
+                        phys = {k:v[i] if batch and isinstance(v,torch.Tensor) else v
+                                for k,v in physics.items()}
+                        phys['major_radius'] = geometry.axis_samples[:,0].double().mean()
+                        physics_queries.append(phys)
+                    if batch and getattr(self, 'batch_surface_qs', False):
+                        from ._autograd.batch_surface_qs import sample_boozer_surfaces
+                        samples = sample_boozer_surfaces(geometries, levels, physics_queries,
+                            BatchSegmentField(qp, qw, self.field_library), downstream_configs,
+                            **self.surface_qs.sampler_options(),
+                            field_derivatives=self.surface_qs.compute_f_T)
+                    else:
+                        samples = [sample_boozer_surface(geometry, level, phys,
+                            SegmentField(qp[i] if batch else qp, qw[i] if batch else qw,
+                                         self.field_library), downstream_configs[i],
+                            **self.surface_qs.sampler_options(),
+                            field_derivatives=self.surface_qs.compute_f_T)
+                            for i, (geometry, level, phys) in enumerate(
+                                zip(geometries, levels, physics_queries))]
+                    records=[]
+                    for i, (cfg, sample) in enumerate(zip(configs, samples)):
+                        values=(boozer_qs_metrics_field(sample['B'],sample['dBdx'],
+                            sample['x_theta'],sample['x_phi'],nfp=4,helicity=cfg.helicity,
+                            iota=sample['iota'],G=sample['G'],major_radius=sample['major_radius'])
+                            if self.surface_qs.compute_f_T else boozer_spectrum_metrics(
+                                sample['B_magnitude'],nfp=4,helicity=cfg.helicity))
+                        clean_diagnostics={k:(v.detach().cpu().item() if v.numel()==1
+                            else v.detach().cpu().tolist()) if isinstance(v,torch.Tensor) else v
+                            for k,v in sample['diagnostics'].items()}
+                        records.append((values,dict(clean_diagnostics,
+                            major_radius_m=float(sample['major_radius'].detach()),
+                            iota_surface=float(sample['iota'].detach()),G_rad=float(sample['G'].detach()),
+                            spectral_tail_fraction=float(values['spectral_tail_fraction'].detach()))))
+                    return records
+                records=stage('boozer_surface_qs',evaluate_qs_surfaces)
+                qs_result=SurfaceQSResult(
+                    torch.stack([v['f_B'] for v,d in records]) if batch else records[0][0]['f_B'],
+                    (torch.stack([v['f_T'] for v,d in records]) if batch else records[0][0]['f_T'])
+                        if self.surface_qs.compute_f_T else None,
+                    {'configuration':asdict(self.surface_qs),'surfaces':[d for v,d in records],
+                     'region':'target_surface','f_B_average':'uniform_boozer_angle_energy',
+                     'f_T_average':'flux_shell_rms','f_T_normalization':'R_axis_mean^2 * T / B^4'})
+            # The host metric worker is independent of optional target-surface
+            # sampling. Join it after QS work so its result does not leave the
+            # GPU idle while the surface sampler is still running.
+            engineering=(stage('coil_metrics',lambda: engineering_work.tensor(xs)
+                if engineering_work is not None else torch.stack([
+                    _EngineeringMetrics.apply(v,self.library_path,4) for v in xs.unbind()]))
+                if _engineering else xs.new_zeros((len(xs),3)))
             if not batch:
-                return build_two_stage_front(field,field.trace,centers[0],dtype=torch.float64,
-                    local_value=_local_value,value_only=not _parameter_grad)
-            return build_batch_two_stage_front(field,centers,dtype=torch.float64,
-                local_value=_local_value,value_only=not _parameter_grad,nfp=4)
-        front=stage('axis_psi_surface',make_front)
-        downstream_configs=[DownstreamConfig.from_mapping({**s['config'],'nfp':4,
-            'stokes_validation_rtol':cfg.stokes_validation_rtol})
-            for s,cfg in zip(snapshots,configs)]
-        caches=[{name:torch.as_tensor(s[key],device=self.device,dtype=self.dtype).detach()
-                 for name,key in (('upper','alpha_upper'),('scale','alpha_scale'),
-                                  ('scaled_solution','alpha_center_scaled_solution'))} for s in snapshots]
-        for cache,snapshot,cfg in zip(caches,snapshots,configs):
-            if 'flux_coefficients' in snapshot and 'target_level' in snapshot:
-                cache['reference_flux_coefficients']=torch.tensor(
-                    snapshot['flux_coefficients'],device=self.device,dtype=torch.float64)
-                cache['reference_flux_level']=torch.tensor(
-                    snapshot['target_level'],device=self.device,dtype=torch.float64).reshape(())
-            elif cfg.stokes_validation_rtol is not None:
-                raise InvalidEvaluationError('formal center lacks the flux reference required for Stokes validation')
-            for name in ('volume_source_indices','volume_sampling_shape'):
-                if name in snapshot:
-                    cache[name]=torch.tensor(snapshot[name],device=self.device,dtype=torch.int64)
-        if _flux_choice_only:
-            from ._autograd.downstream import flux_calibration
-            from ._autograd.flux_validation import stokes_check
-            flux=stage('flux_choice',lambda:flux_calibration(front.geometry,front.level,
-                field,field.potential,downstream_configs[0]))
-            _,choice=stokes_check(flux,front.level,caches[0],configs[0].stokes_validation_rtol)
-            return choice,timings
-        if _flux_choice is not None:
-            downstream_configs=[replace(c,stokes_flux=_flux_choice['method']=='stokes',
-                                        stokes_validation_rtol=None) for c in downstream_configs]
-        physics=stage('surface_metrics',lambda: batch_downstream(front,caches,field,downstream_configs)
-                      if batch else downstream(front.geometry,front.level,caches[0],field,
-                                               field.trace,field.potential,downstream_configs[0]))
-        if _flux_choice is not None:
-            selected={**_flux_choice,'validation':'center_selected',
-                      'center_validation':_flux_choice['validation']}
-            physics['flux_validation']=([dict(selected) for _ in configs] if batch else selected)
-        engineering=(stage('coil_metrics',lambda: torch.stack([
-            _EngineeringMetrics.apply(v,self.library_path,4) for v in xs.unbind()]))
-            if _engineering else xs.new_zeros((len(xs),3)))
-        if not batch:
-            engineering=engineering[0]
-        metrics=TensorMetrics(physics['raw_qs'],physics['iota_boundary'],physics['target_quality_error'],
-                              *engineering.unbind(-1),physics['surface_volume'],front.psi_train_rms,
-                              physics['raw_qs_outer'],physics['iota_min'],physics['iota_max'])
-        diagnostics={'configuration':[c.to_dict() for c in configs] if batch else configs[0].to_dict(),
-                     'field_dtype':str(self.dtype),'psi_dtype':'torch.float64',
-                     'gradient_method':'local_reverse', 'native_centers':[
-                         s['score_result']['status'] for s in snapshots],
-                     'volume_sampling_source':[
-                         'formal_capture' if 'volume_source_indices' in s else 'legacy_local'
-                         for s in snapshots],
-                     'flux_integration':physics['flux_validation'],
-                     'capture':capture_metadata}
-        qs_result=None
-        if getattr(self,'surface_qs',None) is not None:
-            from dataclasses import asdict
-            from ._autograd.boozer import sample_boozer_surface
-            from .qs_metrics import boozer_spectrum_metrics,boozer_qs_metrics_field
-            from .qs import SurfaceQSResult
-            def evaluate_qs_surfaces():
-                # Spectral second derivatives amplify FP32 sampling noise.
-                # Build these field quadratures in FP64 while preserving the
-                # configured precision of the existing score and its gradient.
-                qp,qw=(coil_segments_batch(x.double(),nfp=4,count=256) if batch
-                       else coil_segments(x.double(),nfp=4,count=256))
-                records=[]
-                for i,cfg in enumerate(configs):
-                    geometry=front.geometry(i) if batch else front.geometry
-                    level=front.levels[i] if batch else front.level
-                    phys={k:v[i] if batch and isinstance(v,torch.Tensor) else v
-                          for k,v in physics.items()}
-                    phys['major_radius']=geometry.axis_samples[:,0].double().mean()
-                    sample_field=SegmentField(qp[i] if batch else qp,
-                        qw[i] if batch else qw,self.field_library)
-                    sample=sample_boozer_surface(geometry,level,phys,sample_field,
-                        downstream_configs[i],**self.surface_qs.sampler_options(),
-                        field_derivatives=self.surface_qs.compute_f_T)
-                    values=(boozer_qs_metrics_field(sample['B'],sample['dBdx'],
-                        sample['x_theta'],sample['x_phi'],nfp=4,helicity=cfg.helicity,
-                        iota=sample['iota'],G=sample['G'],major_radius=sample['major_radius'])
-                        if self.surface_qs.compute_f_T else boozer_spectrum_metrics(
-                            sample['B_magnitude'],nfp=4,helicity=cfg.helicity))
-                    clean_diagnostics={k:(v.detach().cpu().item() if v.numel()==1
-                        else v.detach().cpu().tolist()) if isinstance(v,torch.Tensor) else v
-                        for k,v in sample['diagnostics'].items()}
-                    records.append((values,dict(clean_diagnostics,
-                        major_radius_m=float(sample['major_radius'].detach()),
-                        iota_surface=float(sample['iota'].detach()),G_rad=float(sample['G'].detach()),
-                        spectral_tail_fraction=float(values['spectral_tail_fraction'].detach()))))
-                return records
-            records=stage('boozer_surface_qs',evaluate_qs_surfaces)
-            qs_result=SurfaceQSResult(
-                torch.stack([v['f_B'] for v,d in records]) if batch else records[0][0]['f_B'],
-                (torch.stack([v['f_T'] for v,d in records]) if batch else records[0][0]['f_T'])
-                    if self.surface_qs.compute_f_T else None,
-                {'configuration':asdict(self.surface_qs),'surfaces':[d for v,d in records],
-                 'region':'target_surface','f_B_average':'uniform_boozer_angle_energy',
-                 'f_T_average':'flux_shell_rms','f_T_normalization':'R_axis_mean^2 * T / B^4'})
-        return TensorEvaluation(x,metrics,diagnostics,timings,qs_result)
+                engineering=engineering[0]
+            metrics=TensorMetrics(physics['raw_qs'],physics['iota_boundary'],physics['target_quality_error'],
+                                  *engineering.unbind(-1),physics['surface_volume'],front.psi_train_rms,
+                                  physics['raw_qs_outer'],physics['iota_min'],physics['iota_max'])
+            diagnostics={'configuration':[c.to_dict() for c in configs] if batch else configs[0].to_dict(),
+                         'field_dtype':str(self.dtype),'psi_dtype':'torch.float64',
+                         'gradient_method':'local_reverse', 'native_centers':[
+                             s['score_result']['status'] for s in snapshots],
+                         'volume_sampling_source':[
+                             'formal_capture' if 'volume_source_indices' in s else 'legacy_local'
+                             for s in snapshots],
+                         'flux_integration':physics['flux_validation'],
+                         'capture':capture_metadata,
+                         'engineering_overlap': engineering_work is not None,
+                         'stage_timing': 'synchronized_wall' if synchronized else 'deferred_cuda_events'}
+            finish_timings()
+            return TensorEvaluation(x,metrics,diagnostics,timings,qs_result)
 
     def close(self):
         if threading.get_ident()!=self._thread:

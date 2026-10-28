@@ -7,11 +7,11 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.7.0 (unreleased). It adds CPU evaluation and local reverse
-gradients, configurable CPU threads, and faster boundary checks and tensor
-features. Optional target-surface f_B and f_T retain their accuracy presets.
-See the [CPU guide](docs/cpu.md), [surface QS guide](docs/qs.md) and
-[release history](CHANGELOG.md).
+The source package is 0.8.0 (unreleased). It improves GPU batch scheduling,
+overlaps CPU preparation with GPU work, and batches target-surface field sweeps.
+Numerical settings and physical rejection checks are retained. CPU values and
+local reverse gradients remain available. See the [GPU batch guide](docs/torch.md),
+[CPU guide](docs/cpu.md) and [release history](CHANGELOG.md).
 
 ## Installation
 

@@ -23,7 +23,10 @@ psi 计算使用 float64，磁场计算默认使用 float32，也可指定 `fiel
 在创建它的线程上，通过上下文管理器使用
 `TensorEvaluator(library=None, field_library=None, config=..., device_id=0,
 field_dtype=torch.float32, batch_axis=True, share_geometry=True, device='cuda',
-threads=None, axis_grid=None)`。安装包提供 GPU 求值库、GPU 梯度库和 CPU 库。
+threads=None, axis_grid=None, surface_qs=None, capture_pipeline=True,
+batch_surface_qs=True, synchronize_stages=False, engineering_overlap=True,
+capture_workers=1)`。
+安装包提供 GPU 求值库、GPU 梯度库和 CPU 库。
 显式路径可选择自定义构建；GPU 省略 `field_library` 时，从 `library` 所在目录加载，
 CPU 的两类操作则共用 CPU 库。
 
@@ -33,6 +36,32 @@ GPU 的 `batch_axis=True` 将不同几何的常规磁轴准备合批。
 原生库缺少批量磁轴 API 时，采用逐个磁轴准备。
 CPU 批量独立准备每个查询；`threads` 指定单个查询的 CPU 预算，`axis_grid` 可选配磁轴初筛网格。
 CPU 的逐查询诊断和计时分别保存在 `diagnostics['queries']` 和 `timings['queries']` 中。
+
+0.8.0（未发布）加入以下 GPU 执行选项。选项控制调度方式；数值设置仍由
+`EvaluationConfig` 和 `SurfaceQSConfig` 指定。
+
+| GPU 选项 | 默认值 | 执行方式 |
+| --- | --- | --- |
+| `capture_pipeline` | `True` | `capture_workers=1` 时，对不同的两阶段几何分组，将 CPU 闭域构建与下一组的原生第一次拟合，或前一组的第二次拟合及正式后续计算重叠。 |
+| `capture_workers` | `1` | 取 1–4 的整数；2–4 启用实验性的独立两阶段捕获工作线程，验证尚未完成。 |
+| `batch_surface_qs` | `True` | 可选目标磁面 f_B/f_T 采样中，将不同查询对应的磁场评估合批。 |
+| `synchronize_stages` | `False` | 记录各阶段的 CUDA event，在公开调用返回前统一读取；设为 `True` 时在每个阶段前后同步设备，供诊断墙钟计时使用。 |
+| `engineering_overlap` | `True` | GPU 响应阶段执行期间，由一个 CPU 工作线程准备线圈几何指标及其活动分支导数，再由调用线程接入梯度图。 |
+
+`capture_workers=1` 时，捕获流水线最多保留两个原生上下文，
+原生捕获调用始终由创建评估器的线程执行。
+目标磁面的几何求根和角坐标求解继续保留各查询独立的数值分支。
+这些控制作用于单次求值调用；应用程序中的不同批次需要另行调度。
+耗时和吞吐变化取决于批量大小、可用 CPU 资源与 GPU 工作负载。
+可将相应并行选项设为 `False`，比较其独立执行路径；设 `synchronize_stages=True`
+可比较带同步的阶段计时。
+`capture_workers=2`、`3` 或 `4` 时，各主机工作线程独立拥有一个完整几何分组及其原生上下文。
+对于包含多个不同两阶段几何分组的批次，该实验路径优先于 `capture_pipeline`。
+实际线程数受可用 CPU 配额和分组数量限制，工作区显存随实际线程数增加。
+目前公开的原生路径会拒绝这些取值，因为两阶段捕获内部的独立 cuSOLVER
+句柄仍需要专门的隔离实现。`capture_workers=1` 已完成验证；请配合
+`capture_pipeline=True` 使用 CPU 闭域与原生 GPU 阶段的重叠。
+表中执行选项仅适用于 GPU；CPU 继续使用原有线程预算和逐查询执行方式。
 
 GPU 三角求解按查询独立执行，磁场与特征计算仍保持批量。临时工作区有明确上限，
 保留的梯度图仍随批量大小增长；请根据 GPU 显存选择批量大小。
@@ -45,11 +74,15 @@ GPU 三角求解按查询独立执行，磁场与特征计算仍保持批量。�
 `configs` 可为每个独立几何提供一份 `EvaluationConfig`。同一批次使用一致的 Fourier
 宽度、psi 拟合方式以及 `alpha_radial_basis`、`alpha_radial_weighting`、`alpha_weight_sigma` 和
 `alpha_count_floor`。目标体积、`psi_a` 可以逐样本变化，两阶段采样方式和行数也可不同。
-接口按输入顺序捕获中心，GPU 再用批量算子执行磁场、追踪和拟合。
+接口按输入顺序返回捕获中心，GPU 再用批量算子执行磁场、追踪和拟合。
 捕获到不可用中心时抛出 `InvalidEvaluationError`，并标明相应几何。
 
 `diagnostics['capture']` 记录实际几何分组、磁轴准备方式和查询数量，
 也会记录缓存不可用时采用的独立准备方式。
+存在 `pipeline` 条目时，其中记录实际执行方式、工作线程数和分组时间跨度；
+单工作线程流水线还记录 CPU 域构建等待。捕获批次的墙钟耗时应使用
+`pipeline['total_s']`，各分组时间跨度可能互相重叠。
+`diagnostics['engineering_overlap']` 表示是否使用了几何指标工作线程。
 
 ```python
 import torch
@@ -97,8 +130,31 @@ with TensorEvaluator(config=config) as evaluator:
 `center_validation` 保存中心检查状态，因此端点磁通的真实物理变化不会触发积分方法切换。
 
 `timings` 记录前向阶段，包括中心捕获和线圈几何指标准备。
+`synchronize_stages=False` 时，数值来自调用线程 CUDA stream 上的 event 时间跨度，
+并在返回前统一读取。时间跨度可能包含主机发射间隙和等待，不能解读为 GPU 活跃时间。
+汇合阶段可能包含等待工作线程剩余计算及结果上传的时间；
+在该阶段前已完成的计算已经与其他工作重叠。
+`synchronize_stages=True` 时，记录每个阶段同步后的主机墙钟时间。
+`diagnostics['stage_timing']` 分别为 `'deferred_cuda_events'` 或 `'synchronized_wall'`。
+相互重叠的阶段和工作线程时间不宜求和后作为完整耗时。
+
 目标构造和 `torch.autograd.grad` 发生在 `evaluate` 返回之后。
-统计一次求值加一次梯度耗时时，应覆盖完整调用与反传。GPU 计时在两端同步 CUDA；CPU 操作同步完成。
+统计一次全新求值加一次梯度耗时时，应覆盖完整调用与反传，并在两端同步 CUDA。
+例如，在 GPU 评估器的上下文中：
+
+```python
+import time
+
+torch.cuda.synchronize(evaluator.device)
+started = time.perf_counter()
+result = evaluator.evaluate(x)
+loss = torch.log(result.metrics.qs_volume + 1e-8)
+gradient, = torch.autograd.grad(loss, result.parameters)
+torch.cuda.synchronize(evaluator.device)
+value_and_gradient_s = time.perf_counter() - started
+```
+
+导入、编译和预热应单独统计。CPU 操作同步完成，继续使用主机墙钟计时。
 
 反传计算捕获中心处的连续响应，包括磁轴移动、psi 拟合、磁面选择和积分点。
 两阶段路径还包含训练区域、采样坐标和第二次拟合的变化；可选极坐标求积还包含行权重的
