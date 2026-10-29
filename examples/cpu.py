@@ -12,9 +12,11 @@ parser.add_argument('--threads',type=int)
 parser.add_argument('--axis-grid',type=int,help='CPU primary magnetic-axis seed grid; default 48')
 parser.add_argument('--library',type=Path)
 parser.add_argument('--two-stage',action='store_true')
+parser.add_argument('--helicity',type=int,nargs=2,default=(1,4),metavar=('M','N'),
+                    help='QS helicity: QA 1 0; standard QH 1 nfp (default: 1 4)')
 args=parser.parse_args()
 coils=CoilSet.read_json(args.coils)
-config=EvaluationConfig(target_volume=args.volume,psi_a=args.radius,fast=True,
+config=EvaluationConfig(target_volume=args.volume,psi_a=args.radius,helicity=tuple(args.helicity),fast=True,
     psi_fit='two_stage' if args.two_stage else 'single_stage',
     psi_refit_sampling='polar_quadrature',
     alpha_radial_basis='flux_legendre' if args.two_stage else 'zernike')

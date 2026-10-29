@@ -115,12 +115,15 @@ def test_rk4_reverse_matches_torch_with_moving_states(library, field_dtype, stat
 
 
 @pytest.mark.parametrize("potential", [False, True])
-def test_cpu_token_and_current_derivatives(library, potential):
+@pytest.mark.parametrize("nfp,ncoils", [(1,1),(2,3),(3,2),(5,6)])
+def test_cpu_token_and_current_derivatives(library, potential, nfp, ncoils):
     tokens = torch.tensor([[1., .04, .3, 0., .2, .03, 0., .4, .02, 1e5]],
-                          dtype=torch.float64, requires_grad=True)
+                          dtype=torch.float64).repeat(ncoils,1)
+    tokens[:,0]+=torch.arange(ncoils)*.1
+    tokens.requires_grad_()
     q = torch.tensor([[.1, .3, .2], [.8, .1, -.3]], dtype=torch.float64, requires_grad=True)
-    field = CpuSegmentField.from_tokens(tokens, library, nfp=2, count=16)
-    expected_field = coil_segments(tokens, nfp=2, count=16)
+    field = CpuSegmentField.from_tokens(tokens, library, nfp=nfp, count=16)
+    expected_field = coil_segments(tokens, nfp=nfp, count=16)
     actual = field.potential(q) if potential else field(q)
     expected = oracle(*expected_field, q, potential)
     if not potential:

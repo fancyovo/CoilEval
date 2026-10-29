@@ -107,6 +107,19 @@ def test_worker_count_respects_cpu_allowance(factory,monkeypatch):
     assert len({r[0] for r in records})==1
 
 
+def test_single_worker_capture_preserves_arbitrary_nfp_and_coil_count(factory,monkeypatch):
+    factory()
+    private_libraries(monkeypatch)
+    seen=[];original=module.TwoStageNative.evaluate_many
+    def evaluate(driver,coils,*args,**kwargs):
+        seen.append((coils.nfp,coils.n_base_coils))
+        return original(driver,coils,*args,**kwargs)
+    monkeypatch.setattr(module.TwoStageNative,'evaluate_many',evaluate)
+    physical,configs,groups=inputs(3)
+    results,_=batch.capture_two_stage_workers(physical,configs,groups,'unused-native.so',workers=1,nfp=2)
+    assert len(results)==3 and seen==[(2,3)]*2
+
+
 @pytest.mark.parametrize('workers',[True,0,5,1.5,'2'])
 def test_invalid_worker_count_fails_before_native_calls(factory,workers):
     _,lib,_=factory();physical,configs,groups=inputs()

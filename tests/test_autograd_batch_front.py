@@ -1,12 +1,13 @@
 """Full-basis independent-center batch algebra and gradient isolation checks."""
 import math
 import unittest
+from types import SimpleNamespace
 
 import pytest
 torch = pytest.importorskip("torch")
 
 from coil_eval._autograd.batch_front import (
-    BatchTensorProductPsiOperator,batch_four_step_pcgls,differentiable_batch_axis,
+    BatchTensorProductPsiOperator,batch_four_step_pcgls,differentiable_batch_axis,build_batch_front,
 )
 from coil_eval._autograd.front import TensorProductPsiOperator,four_step_pcgls
 
@@ -94,6 +95,13 @@ class BatchFrontTests(unittest.TestCase):
         torch.testing.assert_close(actual[0],C[0].T@reference)
         self.assertEqual(torch.count_nonzero(actual[1]).item(),0)
         self.assertTrue(bool(diag['valid'].all()))
+
+
+def test_batch_front_rejects_mixed_field_periods_before_algebra():
+    fake=SimpleNamespace(positions=torch.zeros(2,1,3))
+    centers=[{'config':{'nfp':2}},{'config':{'nfp':3}}]
+    with pytest.raises(ValueError,match='share nfp'):
+        build_batch_front(fake,centers,nfp=2)
 
 
 if __name__=='__main__':unittest.main()

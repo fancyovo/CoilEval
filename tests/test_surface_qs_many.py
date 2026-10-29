@@ -12,9 +12,9 @@ from coil_eval.evaluator import EvaluationError, InvalidEvaluationError
 from coil_eval.qs import SurfaceQSEvaluator, SurfaceQSResult, SurfaceQSConfig
 
 
-def coil(marker, width=3, nfp=4):
-    coefficients=np.zeros((4,width));coefficients[:,0]=marker
-    return CoilSet(coefficients,coefficients*2,coefficients*3,np.full(4,1e5),nfp)
+def coil(marker, width=3, nfp=4, nc=4):
+    coefficients=np.zeros((nc,width));coefficients[:,0]=marker
+    return CoilSet(coefficients,coefficients*2,coefficients*3,np.full(nc,1e5),nfp)
 
 
 @pytest.fixture
@@ -44,8 +44,8 @@ def environment(monkeypatch):
         def observations(self):return self.used
 
     def prepare(physical,configs,library,**kwargs):
-        assert library=='native.so' and kwargs['nfp']==4
-        result=Prepared(physical,configs);preparations.append(result)
+        assert library=='native.so'
+        result=Prepared(physical,configs);result.nfp=kwargs["nfp"];preparations.append(result)
         return result
     monkeypatch.setattr(axis,'prepare_axis_batch',prepare)
 
@@ -121,7 +121,7 @@ def test_mixed_fourier_orders_use_compatible_axis_batches(environment):
 
 @pytest.mark.parametrize('inputs,configs,error', [
     ([coil(1)],[],ValueError), ([coil(1)],[object()],ValueError),
-    ([object()],None,TypeError), ([coil(1,nfp=3)],None,ValueError),
+    ([object()],None,TypeError),
     ([coil(1)],[EvaluationConfig(.05)],ValueError),
 ])
 def test_malformed_requests_fail_before_preparation(environment,inputs,configs,error):
@@ -170,7 +170,8 @@ def test_single_stage_batch_uses_each_query_config_without_source_sharing(enviro
     e=environment
     e.engine.config=replace(e.config,psi_fit='single_stage')
     calls=[]
-    def capture(physical,config):
+    def capture(physical,config,*,nfp):
+        assert nfp == 4
         calls.append((physical.copy(),config))
         return {'score_result':{'status':'ok'},
             'source':{'coil':float(physical[0,0]),'volume':config.target_volume,'radius':config.psi_a},
@@ -204,3 +205,15 @@ def test_source_basis_provenance_guards_survive_shared_helper(environment,corrup
         radial_basis='flux_legendre' if corruption=='alpha_basis' else cfg.alpha_radial_basis)
     with pytest.raises(ValueError,match='source (psi|alpha) mode order'):
         SurfaceQSEvaluator._evaluate_source(e.evaluator,coil(1),e.config,source,alpha,{})
+
+
+def test_mixed_field_periods_and_coil_counts_are_bucketed_without_sharing(environment):
+    e = environment
+    inputs = [coil(1, nfp=2, nc=3), coil(1, nfp=3, nc=3),
+              coil(2, nfp=2, nc=1), coil(3, nfp=2, nc=3)]
+    results = e.evaluator.evaluate_many(inputs)
+    assert [r.f_B for r in results] == [1, 1, 2, 3]
+    assert [(p.nfp, p.physical.shape) for p in e.preparations] == [
+        (2, (2, 3, 10)), (3, (1, 3, 10)), (2, (1, 1, 10))]
+    assert len(e.captures) == 4
+    assert [(c.nfp, c.n_base_coils) for c, _ in e.captures] == [(2,3),(3,3),(2,1),(2,3)]

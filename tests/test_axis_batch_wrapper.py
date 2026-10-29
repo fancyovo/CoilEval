@@ -58,6 +58,7 @@ class FakeBatch:
     fail=None
     def __init__(self,path,x,y,z,current,nfp,**kwargs):
         self.blocks=tuple(a.copy() for a in (x,y,z,current));self.handle=37
+        self.nfp=nfp
         self.options=kwargs;self.closed=False;self.instances.append(self)
     def trace_period(self,R,Z,*,steps):
         self.steps=steps
@@ -74,9 +75,9 @@ def fake_native(monkeypatch):
     monkeypatch.setattr(m,'resolve_library',lambda path:Path('mock.so'))
 
 
-def physical(batch=2,order=16):
+def physical(batch=2,order=16,coils=4):
     width=3*(2*order+1)+1
-    a=np.arange(batch*4*width,dtype=float).reshape(batch,4,width)/1000
+    a=np.arange(batch*coils*width,dtype=float).reshape(batch,coils,width)/1000
     a[:,:,-1]=1e5
     return a
 
@@ -118,6 +119,26 @@ def test_helicity_is_explicit_and_independent_of_field_periods(fake_native):
     p=m.prepare_axis_batch(physical(),cfg,'unused',nfp=4)
     assert [(e.config.target_M,e.config.target_N) for e in p.entries]==[(1,0),(2,7)]
     assert all(e.nfp==4 for e in p.entries)
+
+
+@pytest.mark.parametrize('coils,nfp,helicity',[(1,1,(1,0)),(2,3,(1,0)),(5,2,(2,3))])
+def test_arbitrary_basic_coils_and_field_periods_reach_native_batch(fake_native,coils,nfp,helicity):
+    values=physical(coils=coils,order=2)
+    prepared=m.prepare_axis_batch(values,configs(helicity=helicity),'unused',nfp=nfp)
+    field=FakeBatch.instances[0]
+    assert field.nfp==nfp
+    assert [v.shape for v in field.blocks]==[(2,coils,5)]*3+[(2,coils)]
+    assert prepared.metadata['grouping_signature'][2]==nfp
+    for entry in prepared.entries:
+        assert entry.nfp==nfp and entry.coefficients[0].shape==(coils,5)
+        assert (entry.config.target_M,entry.config.target_N)==helicity
+
+
+@pytest.mark.parametrize('nfp',[0,-1,True,np.bool_(True),1.5,'2'])
+def test_invalid_nfp_rejected_before_native_allocation(fake_native,nfp):
+    with pytest.raises(ValueError,match='nfp'):
+        m.prepare_axis_batch(physical(coils=2),configs(),'unused',nfp=nfp)
+    assert not FakeLibrary.instances and not FakeBatch.instances
 
 
 @pytest.mark.parametrize('state',[1,3,4])
@@ -195,7 +216,7 @@ def test_coarse_only_mode_and_mixed_layout_rejection(fake_native):
         m.prepare_axis_batch(physical(),mixed,'unused')
 
 
-@pytest.mark.parametrize('shape',[(0,4,28),(2,3,28),(2,4,29),(2,4,4),(4,28)])
+@pytest.mark.parametrize('shape',[(0,4,28),(2,0,28),(2,4,29),(2,4,4),(4,28)])
 def test_bad_layouts_reject_before_native_allocation(fake_native,shape):
     with pytest.raises(ValueError,match='physical input'):
         m.prepare_axis_batch(np.zeros(shape),configs(),'unused')

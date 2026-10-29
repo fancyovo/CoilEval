@@ -14,7 +14,7 @@ Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel:
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Replace the wheel filename with the supplied file. CPU evaluation loads
@@ -55,7 +55,13 @@ and repeats the original periodicity and topology checks. Accepted roots keep
 their original selection. `axis_fp64_polish` diagnostics record this correction,
 its displacement and any rejection reason.
 
-`evaluate_many()` preserves input order. CPU batches process samples in order,
+`CoilSet.nfp` accepts any positive integer, and a coil set may contain any
+positive number of basic coils with stellarator symmetry. `EvaluationConfig`
+keeps helicity explicit: use `(1,0)` for QA or `(1,coils.nfp)` for QH. The
+default remains `(1,4)`, even when `nfp` changes.
+
+`evaluate_many()` accepts coil sets with different `nfp`, coil counts and
+Fourier widths and preserves input order. CPU batches process samples in order,
 with all selected threads available to each sample's field evaluations and
 linear algebra. For multiple independent worker processes, divide the CPU
 allocation among their `threads` settings.
@@ -73,22 +79,28 @@ from coil_eval.torch import TensorEvaluator, pack_coils
 
 config = EvaluationConfig(target_volume=0.05, fast=True, flux_method="stokes")
 x = pack_coils(coils, device="cpu")
-with TensorEvaluator(config=config, device="cpu", threads=8) as evaluator:
+with TensorEvaluator(config=config, device="cpu", threads=8, nfp=coils.nfp) as evaluator:
     result = evaluator.evaluate(x)
     loss = torch.log(result.metrics.qs_volume + 1e-8)
     gradient, = torch.autograd.grad(loss, result.parameters)
 ```
 
-The tensor interface retains its usual restrictions on coil count, symmetry
-and local iteration settings. `evaluate_batch()` returns stacked metrics and
-independent gradients. `surface_qs=SurfaceQSConfig(...)` enables the optional
+The tensor interface accepts any positive `nfp` and basic-coil count. Set
+`nfp=coils.nfp` explicitly: the tensor contains no field-period metadata, and
+the evaluator defaults to 4. It retains stellarator symmetry, 256 segments
+per coil and four psi/alpha local fit iterations. `evaluate_batch()` requires
+a common `nfp`, coil count and Fourier width and returns stacked metrics and
+independent gradients. Its configurations may specify a different helicity
+for each query, including QA `(1,0)`; `M` must be nonzero.
+`surface_qs=SurfaceQSConfig(...)` enables the optional
 surface metrics. GPU preparation options `batch_axis` and `share_geometry`
 apply to the GPU backend; CPU batches prepare each query independently.
 
 For values alone, use `SurfaceQSEvaluator(config=config, device='cpu',
 threads=8)`. Its `evaluate(coils)` and `evaluate_many(coils)` methods return
 ordinary floating-point `SurfaceQSResult` values from one formal capture per
-query.
+query. Its value batches accept mixed field periods and coil layouts and retain
+input order.
 
 Perform the forward calculation and backward pass inside the evaluator's
 context manager so they share the requested thread budget. PyTorch and BLAS

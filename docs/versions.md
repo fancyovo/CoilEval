@@ -19,7 +19,9 @@
 | 0.8.1 | Query and stage attribution for batch capture errors | Included in the GPU Tensor path |
 | 0.8.2 | Early dependency checks and complete installation guidance | Install the wheel with the extra for the chosen backend |
 
-The source version is 0.8.2 (unreleased). It adds GPU batch scheduling improvements,
+| 0.9.0 | General field-period/coil counts and QA/QH modes | Explicit tensor nfp and configuration helicity |
+
+The source version is 0.9.0 (unreleased). It adds GPU batch scheduling improvements,
 while retaining CPU values and gradients,
 thread and axis-search options, and evaluation throughput improvements.
 It includes the surface QS features introduced in 0.6.0.

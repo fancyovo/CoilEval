@@ -288,7 +288,7 @@ def prepare_axis_batch(physical,configs,native_library=None,*,device=0,nfp=4,
                        include_refinement=True,allow_missing=True):
     """Prepare ordinary axis search for independent geometry representatives.
 
-    ``physical`` has shape ``(B,4,3*ncoeff+1)`` in metres/amperes. Supply one
+    ``physical`` has shape ``(B,coils,3*ncoeff+1)`` in metres/amperes. Supply one
     EvaluationConfig per representative. Wrap exactly one ordinary native score
     or two-stage ``evaluate_many`` group in ``with prepared.capture(i)``.
 
@@ -302,17 +302,20 @@ def prepare_axis_batch(physical,configs,native_library=None,*,device=0,nfp=4,
     physical=np.asarray(physical,dtype=np.float64)
     width=physical.shape[-1] if physical.ndim else 0
     coefficients=(width-1)//3
-    if (physical.ndim!=3 or physical.shape[1]!=4 or coefficients<3 or
+    if (physical.ndim!=3 or physical.shape[1]<1 or coefficients<3 or
         width!=3*coefficients+1 or coefficients%2!=1 or not len(physical) or
         not np.isfinite(physical).all()):
-        raise ValueError('physical input must be finite [query,4,3*ncoeff+1] with odd ncoeff>=3')
+        raise ValueError('physical input must be finite [query,coil,3*ncoeff+1] with nonempty coils and odd ncoeff>=3')
     configs=list(configs)
     if len(configs)!=len(physical) or any(not isinstance(c,EvaluationConfig) for c in configs):
         raise ValueError('provide one EvaluationConfig per geometry')
     if isinstance(device,bool) or int(device)!=device or device<0:
         raise ValueError('device must be a nonnegative integer')
-    if isinstance(nfp,bool) or int(nfp)!=nfp or nfp<=0:
+    if isinstance(nfp,(bool,np.bool_)):
         raise ValueError('nfp must be a positive integer')
+    try:nfp=integer_index(nfp)
+    except TypeError as exc:raise ValueError('nfp must be a positive integer') from exc
+    if nfp<1:raise ValueError('nfp must be a positive integer')
     metadata=dict(enabled=False,batch=len(physical),include_refinement=bool(include_refinement),
         geometry_inputs='native CPU exact raster and original CPU coil segments',
         selector='ordinary winding, fallback, FP64, topology and priority selection',

@@ -141,7 +141,8 @@ def test_tensor_and_surface_cpu_dispatch_do_not_resolve_cuda(monkeypatch):
 
 
 @pytest.mark.parametrize('two_stage',[False,True])
-def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage):
+@pytest.mark.parametrize('nfp,ncoils,helicity',[(4,4,(1,4)),(2,1,(1,0)),(3,2,(1,-3)),(5,6,(1,5))])
+def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage,nfp,ncoils,helicity):
     """Exercise all stage interfaces against a known circular flux foliation."""
     from pathlib import Path
     from coil_eval import CoilSet,EvaluationConfig
@@ -180,8 +181,11 @@ def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage):
                     x*math.sin(angle)+z*math.cos(angle)),-1)
             return torch.stack([at((p1-p0)*k/steps) for k in range(steps+1)]) if return_samples else at(p1-p0)
     monkeypatch.setattr('coil_eval._cpu.backend.CpuField',Field)
-    coils=CoilSet.read_json(Path(__file__).parents[1]/'examples/coils.json')
-    config=EvaluationConfig(.01,fast=True,psi_fit='two_stage' if two_stage else 'single_stage',
+    example=CoilSet.read_json(Path(__file__).parents[1]/'examples/coils.json')
+    selection=np.arange(ncoils)%example.n_base_coils
+    coils=CoilSet(*(a[selection] for a in (example.coeffs_x,example.coeffs_y,
+        example.coeffs_z,example.currents_a)),nfp=nfp)
+    config=EvaluationConfig(.01,fast=True,helicity=helicity,psi_fit='two_stage' if two_stage else 'single_stage',
         psi_refit_points=1024,psi_refit_sampling='polar_quadrature')
     raw,snapshot=backend.capture(coils,config)
     assert raw['status']=='ok',raw
@@ -189,3 +193,6 @@ def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage):
     assert raw['diagnostics']['target_quality_error']<1e-4
     assert snapshot['volume_source_indices'].shape==(2048,)
     assert ('two_stage' in snapshot)==two_stage
+    assert snapshot['config']['nfp']==nfp
+    assert (snapshot['config']['target_M'],snapshot['config']['target_N'])==helicity
+    assert raw['diagnostics']['surface_volume']==pytest.approx(config.target_volume,rel=2e-5)

@@ -32,8 +32,8 @@ class CpuSurfaceQSEvaluator:
         configs=(engine.config,)*len(coils) if configs is None else tuple(configs)
         if len(configs)!=len(coils):raise ValueError('provide one configuration per coil set')
         for coil,config in zip(coils,configs):
-            if not isinstance(coil,CoilSet) or coil.nfp!=4 or coil.n_base_coils!=4:
-                raise ValueError('surface QS evaluation requires nfp=4 and four basic coils')
+            if not isinstance(coil,CoilSet):
+                raise TypeError('surface QS evaluation requires CoilSet inputs')
             validate_tensor_config(config)
         results=[];batch_start=perf_counter()
         with thread_scope(engine.threads),torch.no_grad():
@@ -46,12 +46,12 @@ class CpuSurfaceQSEvaluator:
                 options=snapshot['config']
                 def tensor(x):return torch.as_tensor(x,dtype=torch.float64)
                 geometry=PsiGeometry(tensor(snapshot['axis_samples']),tensor(snapshot['psi_coefficients']),
-                    nfp=4,a=options['psi_a'],degree=options['psi_poly_degree'],mtor=options['psi_m_tor'])
+                    nfp=coil.nfp,a=options['psi_a'],degree=options['psi_poly_degree'],mtor=options['psi_m_tor'])
                 physics=dict(alpha_coefficients=tensor(snapshot['alpha_coefficients']),
                     iota_coefficients=tensor(snapshot['iota_coefficients']),
                     major_radius=geometry.axis_samples[:,0].mean())
                 parameters=pack_coils(coil,device='cpu')
-                p,w=coil_segments(parameters,nfp=4,count=config.segments_per_coil)
+                p,w=coil_segments(parameters,nfp=coil.nfp,count=config.segments_per_coil)
                 field=CpuSegmentField(p,w,engine.field_library)
                 dcfg=DownstreamConfig.from_mapping(options)
                 start=perf_counter()
@@ -59,9 +59,9 @@ class CpuSurfaceQSEvaluator:
                     field,dcfg,**engine.surface_qs.sampler_options(),field_derivatives=engine.surface_qs.compute_f_T)
                 timings['boozer_surface']=perf_counter()-start;start=perf_counter()
                 values=boozer_qs_metrics_field(sample['B'],sample['dBdx'],sample['x_theta'],sample['x_phi'],
-                    nfp=4,helicity=config.helicity,iota=sample['iota'],G=sample['G'],
+                    nfp=coil.nfp,helicity=config.helicity,iota=sample['iota'],G=sample['G'],
                     major_radius=sample['major_radius']) if engine.surface_qs.compute_f_T else boozer_spectrum_metrics(
-                    sample['B_magnitude'],nfp=4,helicity=config.helicity)
+                    sample['B_magnitude'],nfp=coil.nfp,helicity=config.helicity)
                 timings['qs_spectrum']=perf_counter()-start
                 diagnostic={k:(v.item() if v.numel()==1 else v.tolist()) if isinstance(v,torch.Tensor) else v
                             for k,v in sample['diagnostics'].items()}
@@ -69,7 +69,7 @@ class CpuSurfaceQSEvaluator:
                     major_radius_m=float(sample['major_radius']),spectral_tail_fraction=float(values['spectral_tail_fraction']))
                 results.append(SurfaceQSResult(float(values['f_B']),float(values['f_T']) if 'f_T' in values else None,
                     dict(configuration=asdict(engine.surface_qs),evaluation_configuration=config.to_dict(),
-                        device='cpu',cpu_threads=engine.threads,surfaces=[diagnostic],timings=timings,
+                        device='cpu',cpu_threads=engine.threads,nfp=coil.nfp,surfaces=[diagnostic],timings=timings,
                         capture=raw['timing'],region='target_surface',f_B_average='uniform_boozer_angle_energy',
                         f_T_average='flux_shell_rms',f_T_normalization='R_axis_mean^2 * T / B^4')))
         elapsed=perf_counter()-batch_start

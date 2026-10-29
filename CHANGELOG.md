@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 (unreleased)
+
+- Support positive field-period counts and arbitrary nonempty base-coil counts in CPU and GPU tensor evaluation, source capture, neighborhoods and target-surface QS. Tensor evaluators accept an explicit `nfp` (default 4).
+- Support explicit QA `(1,0)` and general QH helicities, including independent per-query helicity reductions in tensor batches. Keep the existing `(1,4)` configuration default for compatibility.
+- Group heterogeneous CoilSet value requests by compatible geometry and preserve input order. Dense tensor batches share field periods, coil count and Fourier width.
+- Retain stellarator symmetry, numerical settings, validity guards and the requirement that helicity M is nonzero.
+
 ## 0.8.2 (unreleased)
 
 - Check optional CPU and PyTorch dependencies before backend loading and report missing packages together with installation commands.

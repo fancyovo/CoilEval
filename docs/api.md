@@ -10,6 +10,15 @@ and coefficient order `[constant, sin(1), cos(1), ..., sin(order), cos(order)]`.
 Coordinates use metres and currents use amperes. Symmetry produces `2*nfp`
 physical coils for each basic coil.
 
+Field periods `nfp` and the number of base coils may be any positive integers.
+The geometry retains stellarator symmetry. QS helicity is explicit: QA uses
+`(1,0)` and standard QH uses `(1,nfp)`, where N is the physical full-torus
+helicity, not a field-period index. The compatibility default is still `(1,4)`;
+changing `CoilSet.nfp` does not silently change the selected QS metric. M must
+remain nonzero. Tensor inputs carry no nfp metadata: construct their evaluator
+with `nfp=coils.nfp`. `evaluate_many` accepts mixed CoilSet layouts and preserves
+input order; dense tensor batches share nfp, coil count and coefficient width.
+
 `parameter_vector()` flattens all x coefficients, then y, z and currents.
 `with_parameters(vector)` creates a new coil set in that order. `read_json(path)`
 and `write_json(path)` preserve these units and conventions.
@@ -152,7 +161,8 @@ Simsopt reference's flux-shell RMS describe different regions; see
 Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
 selected helicity. The outer bin uses the native point weights in the final
 radial bin; iota profile samples cover the selected radial range.
-The reference helpers implement QH helicity `(1,nfp)`; use matching native
+The reference helpers default to QH helicity `(1,nfp)` and accept explicit QA
+`helicity=(1,0)`; use matching native
 helicity when comparing those results.
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` is a

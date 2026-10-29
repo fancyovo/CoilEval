@@ -142,7 +142,7 @@ class NativeBackend:
         lookup = {}
         preparation_started = perf_counter()
         for (shape, nfp, trace_signature), indices in groups.items():
-            supported = shape[0] == 4 and shape[1] >= 3 and shape[1] % 2 == 1
+            supported = shape[0] >= 1 and shape[1] >= 3 and shape[1] % 2 == 1
             if len(indices) > 1 and supported:
                 physical = np.stack([np.column_stack(arrays[index]) for index in indices])
                 batch = prepare_axis_batch(physical, [configs[index] for index in indices], self.library,
@@ -199,6 +199,17 @@ class NativeBackend:
         candidates = list(candidates)
         if not candidates:
             return []
+        if self._active_batch is not None:
+            raise RuntimeError("native neighborhood calls must not overlap")
+        center_arrays = _coil_arrays(coils)
+        candidate_arrays = []
+        for candidate in candidates:
+            arrays = _coil_arrays(candidate)
+            if int(candidate.nfp) != int(coils.nfp) or any(
+                a.shape != c.shape for a, c in zip(arrays, center_arrays)
+            ):
+                raise ValueError("nearby candidates must match center shape and nfp")
+            candidate_arrays.append(arrays)
         if config.psi_fit == "two_stage":
             from ._two_stage.native import TwoStageNative
             fallback = None
@@ -206,8 +217,6 @@ class NativeBackend:
                 from ._tensor_config import validate_tensor_config
                 try:
                     validate_tensor_config(config)
-                    if coils.nfp != 4 or coils.n_base_coils != 4:
-                        raise ValueError("local tensor response requires nfp=4 and four basic coils")
                 except (TypeError, ValueError) as exc:
                     fallback = str(exc)
             if config.psi_nearby_method == "local" and fallback is None:
@@ -227,18 +236,7 @@ class NativeBackend:
             return _nearby_metadata(
                 [driver.evaluate(candidate,config,axis_hint=axis)[0] for candidate in candidates],
                 requested=config.psi_nearby_method, effective="formal", backend="native", fallback=fallback)
-        if self._active_batch is not None:
-            raise RuntimeError("native neighborhood calls must not overlap")
         total_started = perf_counter()
-        center_arrays = _coil_arrays(coils)
-        candidate_arrays = []
-        for candidate in candidates:
-            arrays = _coil_arrays(candidate)
-            if int(candidate.nfp) != int(coils.nfp) or any(
-                a.shape != c.shape for a, c in zip(arrays, center_arrays)
-            ):
-                raise ValueError("nearby candidates must match center shape and nfp")
-            candidate_arrays.append(arrays)
         x, y, z, currents = (
             np.ascontiguousarray(np.stack(values), dtype=np.float64)
             for values in zip(*candidate_arrays)

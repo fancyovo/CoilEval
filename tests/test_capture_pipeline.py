@@ -1,6 +1,7 @@
 """CPU-domain/native overlap preserves caller-thread ownership and failures."""
 from dataclasses import replace
 import threading
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -11,16 +12,60 @@ from test_two_stage_native import factory, configurations, Function
 from _oracle import make_coils
 
 
-def inputs():
+def inputs(coil_count=4):
     coils=make_coils()
     tokens=np.concatenate([coils.coeffs_x,coils.coeffs_y,coils.coeffs_z,
                            coils.currents_a[:,None]],axis=-1)
-    # The scorer's batch entry is restricted to four physical base coils.
-    tokens=np.tile(tokens,(4//len(tokens),1)) if len(tokens)!=4 else tokens
+    tokens=np.tile(tokens,((coil_count+len(tokens)-1)//len(tokens),1))[:coil_count]
     physical=np.stack([tokens,tokens,tokens.copy()])
     physical[2,0,0]+=.001
     base=configurations()[0]
     return physical,[base,replace(base,target_volume=.01),base],[[0,1],[2]]
+
+
+@pytest.mark.parametrize('coil_count,nfp',[(1,1),(2,3),(5,2)])
+def test_pipeline_propagates_basic_coil_layout_and_nfp(factory,monkeypatch,coil_count,nfp):
+    _,library,_=factory()
+    starts=[];domains=[];samples=[]
+    original_begin=library.sgpu_two_stage_begin_v1
+    def begin(*args):
+        starts.append((args[4],args[5],args[6]))
+        return original_begin(*args)
+    library.sgpu_two_stage_begin_v1=Function(begin)
+    original_domain=module.max_closed_boundary
+    def domain(model,phis,**kwargs):
+        domains.append((model.nfp,np.asarray(phis).copy()))
+        return original_domain(model,phis,**kwargs)
+    monkeypatch.setattr(module,'max_closed_boundary',domain)
+    original_sample=module.sample_frozen_sections
+    def sample(*args,**kwargs):
+        samples.append(kwargs['nfp'])
+        return original_sample(*args,**kwargs)
+    monkeypatch.setattr(module,'sample_frozen_sections',sample)
+    physical,configs,groups=inputs(coil_count)
+    configs=[replace(cfg,helicity=(1,0)) for cfg in configs]
+    results,_=capture_two_stage_batch(physical,configs,groups,'unused-native.so',nfp=nfp)
+    assert starts==[(coil_count,3,nfp)]*2 and samples==[nfp,nfp]
+    assert [item[0] for item in domains]==[nfp,nfp]
+    for _,phis in domains:np.testing.assert_array_equal(phis,np.arange(4)*2*np.pi/(nfp*4))
+    assert all((snapshot['config']['target_M'],snapshot['config']['target_N'])==(1,0)
+               for _,snapshot in results)
+
+
+@pytest.mark.parametrize('nfp',[0,-1,True,np.bool_(True),1.5,'2'])
+def test_pipeline_invalid_nfp_fails_before_native_calls(factory,nfp):
+    _,library,_=factory();physical,configs,groups=inputs()
+    with pytest.raises(ValueError,match='nfp'):
+        capture_two_stage_batch(physical,configs,groups,'unused-native.so',nfp=nfp)
+    assert not library.calls and not library.flags
+
+
+def test_pipeline_rejects_prepared_axis_for_other_field_periods(factory):
+    _,library,_=factory();physical,configs,groups=inputs(2)
+    prepared=SimpleNamespace(query_count=2,entries=[SimpleNamespace(nfp=4)]*2)
+    with pytest.raises(ValueError,match='capture nfp'):
+        capture_two_stage_batch(physical,configs,groups,'unused-native.so',nfp=2,prepared_axis=prepared)
+    assert not library.calls and not library.flags
 
 
 def track_native(library):

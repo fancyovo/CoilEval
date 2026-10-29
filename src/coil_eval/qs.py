@@ -159,7 +159,7 @@ class SurfaceQSEvaluator:
                                  coils.currents_a[:,None]),axis=1)
         records=[]
         for config in configs:
-            snapshot=engine._capture(physical,config)
+            snapshot=engine._capture(physical,config,nfp=coils.nfp)
             status=snapshot.get('score_result',{}).get('status','ok')
             if status!='ok':
                 raise InvalidEvaluationError(status)
@@ -193,8 +193,6 @@ class SurfaceQSEvaluator:
         for coil,config in zip(coils,configs):
             if not isinstance(coil,CoilSet):
                 raise TypeError('coils must contain CoilSet objects')
-            if coil.nfp!=4 or coil.n_base_coils!=4:
-                raise ValueError('surface QS evaluation requires nfp=4 and four basic coils')
             validate_tensor_config(config)
         if not coils:
             return ()
@@ -203,16 +201,15 @@ class SurfaceQSEvaluator:
         groups=[];keys={}
         for index,(value,config) in enumerate(zip(physical,configs)):
             options=config.to_dict();options.pop('target_volume')
-            key=(value.shape,value.tobytes(),json.dumps(options,sort_keys=True))
+            key=(coils[index].nfp,value.shape,value.tobytes(),json.dumps(options,sort_keys=True))
             if engine.share_geometry and config.psi_fit=='two_stage' and key in keys:
                 groups[keys[key]].append(index)
             else:
                 keys[key]=len(groups);groups.append([index])
-        # All validated configurations share nfp, segments and fast trace
-        # settings. Distinct Fourier widths need separate native batches.
+        # Native field batches share symmetry and rectangular coil dimensions.
         buckets={}
         for group_index,group in enumerate(groups):
-            buckets.setdefault(physical[group[0]].shape,[]).append(group_index)
+            buckets.setdefault((coils[group[0]].nfp,physical[group[0]].shape),[]).append(group_index)
         axis={};axis_times={};results=[None]*len(coils)
         torch.cuda.synchronize(engine.device)
         batch_started=time.perf_counter()
@@ -223,7 +220,7 @@ class SurfaceQSEvaluator:
                 started=time.perf_counter()
                 prepared=(prepare_axis_batch(np.stack([physical[i] for i in representatives]),
                     [configs[i] for i in representatives],engine.library_path,
-                    device=engine.device.index,nfp=4) if engine.batch_axis else None)
+                    device=engine.device.index,nfp=coils[representatives[0]].nfp) if engine.batch_axis else None)
                 torch.cuda.synchronize(engine.device)
                 elapsed=time.perf_counter()-started if prepared is not None else 0.
                 requests=sum(len(groups[index]) for index in bucket)
@@ -312,7 +309,7 @@ class SurfaceQSEvaluator:
                 physics={'alpha_coefficients':tensor(alpha.lambda_coefficients),
                     'iota_coefficients':tensor(alpha.iota_coefficients),
                     'major_radius':geometry.axis_samples[:,0].mean()}
-                p,w=coil_segments(parameters,nfp=4,count=query_config.segments_per_coil)
+                p,w=coil_segments(parameters,nfp=coils.nfp,count=query_config.segments_per_coil)
                 field=SegmentField(p,w,engine.field_library)
                 return sample_boozer_surface(geometry,tensor(source.level),physics,field,config,
                     **engine.surface_qs.sampler_options(),field_derivatives=engine.surface_qs.compute_f_T)

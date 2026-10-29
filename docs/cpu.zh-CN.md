@@ -12,7 +12,7 @@ CPU 后端沿用 GPU 后端的线圈离散、磁轴搜索策略、拟合基函�
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 请将 wheel 文件名换成实际收到的文件。CPU 求值加载 `libcoil_eval_cpu.so`，
@@ -46,7 +46,12 @@ CPU 磁轴搜索使用双精度检验周期闭合误差。如果所有候选都�
 然后重新执行原有的周期闭合与拓扑检验。已有合格磁轴时保留原选择。
 `axis_fp64_polish` 诊断记录是否修正、位移以及未通过的原因。
 
-`evaluate_many()` 按输入顺序返回结果。CPU 批量模式依次处理样本，每个样本的
+`CoilSet.nfp` 接受任意正整数，基本线圈数量也可为任意正整数，并要求保留
+stellarator symmetry。`EvaluationConfig` 的螺旋度仍需显式指定：QA 用 `(1,0)`，
+对应场周期的 QH 用 `(1,coils.nfp)`。即使改变 `nfp`，默认螺旋度仍为 `(1,4)`。
+
+`evaluate_many()` 接受不同 `nfp`、基本线圈数量和 Fourier 宽度的线圈集合，
+按输入顺序返回结果。CPU 批量模式依次处理样本，每个样本的
 磁场计算和线性代数使用所指定的线程数。若使用多个独立工作进程，应把 CPU
 配额分配给各进程的 `threads`。
 
@@ -62,20 +67,25 @@ from coil_eval.torch import TensorEvaluator, pack_coils
 
 config = EvaluationConfig(target_volume=0.05, fast=True, flux_method="stokes")
 x = pack_coils(coils, device="cpu")
-with TensorEvaluator(config=config, device="cpu", threads=8) as evaluator:
+with TensorEvaluator(config=config, device="cpu", threads=8, nfp=coils.nfp) as evaluator:
     result = evaluator.evaluate(x)
     loss = torch.log(result.metrics.qs_volume + 1e-8)
     gradient, = torch.autograd.grad(loss, result.parameters)
 ```
 
-Tensor 接口对线圈数量、对称性和局部迭代参数的要求与 GPU 相同。
-`evaluate_batch()` 返回堆叠指标及相互独立的梯度。
+Tensor 接口接受任意正整数 `nfp` 和基本线圈数量。请显式传入 `nfp=coils.nfp`：
+张量不包含场周期元数据，评估器默认仍为 4。接口保留 stellarator symmetry、
+每条线圈 256 段及四次 psi/alpha 局部拟合迭代。
+`evaluate_batch()` 要求统一的 `nfp`、基本线圈数量和 Fourier 宽度，
+返回堆叠指标及相互独立的梯度。各查询的配置可指定不同螺旋度，包括 QA `(1,0)`；
+`M` 必须非零。
 `surface_qs=SurfaceQSConfig(...)` 启用可选磁面指标。
 `batch_axis` 和 `share_geometry` 是 GPU 准备阶段选项；CPU 批量逐个准备查询。
 
 仅需数值时可用 `SurfaceQSEvaluator(config=config, device='cpu', threads=8)`。
 其 `evaluate(coils)` 和 `evaluate_many(coils)` 为每个查询进行一次正式拟合，
-返回包含普通浮点数的 `SurfaceQSResult`。
+返回包含普通浮点数的 `SurfaceQSResult`；数值批次可混用不同场周期和线圈布局，
+并保留输入顺序。
 
 请将前向和反传都放在 evaluator 的上下文管理器内，以使用同一线程预算。
 PyTorch 和 BLAS 的线程上限对整个进程生效，退出上下文后恢复。

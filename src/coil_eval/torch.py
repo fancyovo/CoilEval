@@ -27,9 +27,12 @@ from ._autograd.axis_batch import prepare_axis_batch
 
 
 def pack_coils(coils: CoilSet, *, device='cuda:0', dtype=torch.float64):
-    """Pack four basic coils as physical [coil, x/y/z coefficients + I]."""
-    if coils.nfp != 4 or coils.coeffs_x.shape[0] != 4:
-        raise ValueError('tensor evaluation requires nfp=4 and four basic coils')
+    """Pack basic coils as physical [coil, x/y/z coefficients + I].
+
+    The tensor contains no symmetry metadata; pass coils.nfp to TensorEvaluator.
+    """
+    if not isinstance(coils, CoilSet):
+        raise TypeError('coils must be a CoilSet')
     values = np.concatenate((coils.coeffs_x, coils.coeffs_y, coils.coeffs_z,
                              coils.currents_a[:, None]), axis=1)
     return torch.tensor(values, device=device, dtype=dtype)
@@ -79,10 +82,19 @@ class TensorEvaluator:
                  device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
                  surface_qs=None,device='cuda',threads=None,axis_grid=None,
                  capture_pipeline=True, batch_surface_qs=True, synchronize_stages=False,
-                 engineering_overlap=True, capture_workers=1):
+                 engineering_overlap=True, capture_workers=1, nfp=4):
         self._validate_config(config)
         if field_dtype not in (torch.float32, torch.float64):
             raise ValueError('field_dtype must be torch.float32 or torch.float64')
+        from operator import index
+        if isinstance(nfp, (bool, np.bool_)):
+            raise ValueError('nfp must be a positive integer')
+        try:
+            self.nfp = index(nfp)
+        except TypeError as exc:
+            raise ValueError('nfp must be a positive integer') from exc
+        if self.nfp < 1:
+            raise ValueError('nfp must be a positive integer')
         self.config = config
         self.device = torch.device('cuda', int(device_id))
         self.dtype = field_dtype
@@ -121,18 +133,19 @@ class TensorEvaluator:
         if self._closed or threading.get_ident() != self._thread:
             raise CenterContextError('use an open evaluator on its creating thread')
 
-    def _capture(self, physical, config):
+    def _capture(self, physical, config, *, nfp=None):
+        nfp = self.nfp if nfp is None else nfp
         arrays = split_tokens(physical)
         if config.psi_fit == 'two_stage':
             from ._two_stage.native import TwoStageNative
-            coils=CoilSet(*arrays,nfp=4)
+            coils=CoilSet(*arrays,nfp=nfp)
             result,snapshot=TwoStageNative(self.library_path,self.device.index).evaluate(
                 coils,config,capture=True,include_torsion=False)
             if snapshot is None:
                 raise native.GpuError(f'two-stage center is not valid: {result["status"]}')
             return snapshot
         batch = native.BatchCoilFieldGpu(self.library_path, *(a[None] for a in arrays),
-                                         nfp=4, device_id=self.device.index)
+                                         nfp=nfp, device_id=self.device.index)
         try:
             return capture_center(batch, *arrays, target_helicity=config.helicity,
                                   config_overrides=config.native_options(),include_torsion=False)
@@ -140,10 +153,15 @@ class TensorEvaluator:
             batch.close()
 
     def _center(self, snapshot):
+        for source in (snapshot, snapshot['config']):
+            if 'nfp' in source:
+                captured_nfp = np.asarray(source['nfp'])
+                if captured_nfp.size != 1 or captured_nfp.item() != self.nfp:
+                    raise ValueError('snapshot field periods do not match evaluator nfp')
         names = ('axis_samples', 'psi_coefficients', 'psi_scale', 'psi_upper',
                  'target_adjoint_weights', 'target_axis_weights', 'target_phi',
                  'target_axis_R', 'target_level', 'target_adjoint_residual', 'target_dVds')
-        center={'config': {**snapshot['config'], 'nfp': 4}, **{
+        center={'config': {**snapshot['config'], 'nfp': self.nfp}, **{
             k: torch.tensor(snapshot[k], device=self.device, dtype=torch.float64).detach()
             for k in names}}
         if 'two_stage' in snapshot:
@@ -151,11 +169,11 @@ class TensorEvaluator:
         return center
 
     def evaluate(self, parameters):
-        """Evaluate physical parameters (4, 3*ncoeff+1); metrics are scalars."""
+        """Evaluate physical parameters (nc, 3*ncoeff+1); metrics are scalars."""
         return self._evaluate(parameters, batch=False)
 
     def evaluate_batch(self, parameters, *, configs=None):
-        """Evaluate physical parameters (B,4,3*ncoeff+1); metrics have shape (B,)."""
+        """Evaluate physical parameters (B,nc,3*ncoeff+1); metrics have shape (B,)."""
         return self._evaluate(parameters, batch=True, configs=configs)
 
     def _choose_local_flux(self, parameters, snapshot):
@@ -185,9 +203,9 @@ class TensorEvaluator:
             parameters, device=self.device, dtype=torch.float64)
         wanted_ndim = 3 if batch else 2
         width=x.shape[-1] if x.ndim else 0
-        if (x.device != self.device or x.ndim != wanted_ndim or x.shape[-2] != 4 or
+        if (x.device != self.device or x.ndim != wanted_ndim or x.shape[-2] < 1 or
                 width<10 or (width-1)%3 or ((width-1)//3)%2!=1 or x.numel() == 0):
-            raise ValueError('parameters require four coils with XYZ odd Fourier widths plus a current on the evaluator GPU')
+            raise ValueError('parameters require nonempty coils with XYZ odd Fourier widths plus a current on the evaluator GPU')
         if x.dtype not in (torch.float32, torch.float64) or not bool(torch.isfinite(x).all()):
             raise ValueError('parameters must be finite float32 or float64 physical values')
         if not _parameter_grad:
@@ -241,7 +259,7 @@ class TensorEvaluator:
                     keys[key]=len(groups);groups.append([i])
             representatives=[g[0] for g in groups]
             prepared=(prepare_axis_batch(host[representatives],[configs[i] for i in representatives],
-                self.library_path,device=self.device.index,nfp=4) if self.batch_axis else None)
+                self.library_path,device=self.device.index,nfp=self.nfp) if self.batch_axis else None)
             captures = [None]*len(host)
             if ((getattr(self, 'capture_pipeline', False) or getattr(self, 'capture_workers', 1)>1) and len(groups)>1
                     and all(c.psi_fit == 'two_stage' for c in configs)):
@@ -251,10 +269,10 @@ class TensorEvaluator:
                         from ._two_stage.capture_batch import capture_two_stage_workers
                         pairs, pipeline = capture_two_stage_workers(host, configs, groups,
                             self.library_path, device_id=self.device.index, prepared_axis=prepared,
-                            workers=self.capture_workers)
+                            workers=self.capture_workers,nfp=self.nfp)
                     else:
                         pairs, pipeline = capture_two_stage_batch(host, configs, groups,
-                            self.library_path, device_id=self.device.index, prepared_axis=prepared)
+                            self.library_path, device_id=self.device.index, prepared_axis=prepared,nfp=self.nfp)
                 except CapturePipelineError as exc:
                     raise InvalidEvaluationError(str(exc)) from exc
                 except native.GpuError as exc:
@@ -271,7 +289,7 @@ class TensorEvaluator:
                     with prepared.capture(j) if prepared is not None else nullcontext():
                         if len(group)>1:
                             from ._two_stage.native import TwoStageNative
-                            coils=CoilSet(*split_tokens(host[i]),nfp=4)
+                            coils=CoilSet(*split_tokens(host[i]),nfp=self.nfp)
                             results=TwoStageNative(self.library_path,self.device.index).evaluate_many(
                                 coils,[configs[k] for k in group],capture=True,include_torsion=False)
                             if len(results)!=len(group):
@@ -302,14 +320,14 @@ class TensorEvaluator:
         overlap = _engineering and getattr(self, 'engineering_overlap', False)
         engineering_context = (prepare_engineering_batch(
             captured_host[0] if captured_host else xs.detach().double().cpu().numpy(),
-            self.library_path, 4) if overlap else nullcontext(None))
+            self.library_path, self.nfp) if overlap else nullcontext(None))
         with engineering_context as engineering_work:
             centers=stage('center_upload',lambda:[self._center(s) for s in snapshots])
             def make_field():
                 if batch:
-                    p,w=coil_segments_batch(x.double(),nfp=4,count=256)
+                    p,w=coil_segments_batch(x.double(),nfp=self.nfp,count=256)
                     return BatchSegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
-                p,w=coil_segments(x.double(),nfp=4,count=256)
+                p,w=coil_segments(x.double(),nfp=self.nfp,count=256)
                 return SegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
             field=stage('coil_segments',make_field)
             def make_front():
@@ -317,15 +335,15 @@ class TensorEvaluator:
                 if len(methods)!=1:
                     raise ValueError('group batches by psi_fit method')
                 if configs[0].psi_fit!='two_stage':
-                    return (build_batch_front(field,centers,dtype=torch.float64,nfp=4) if batch else
+                    return (build_batch_front(field,centers,dtype=torch.float64,nfp=self.nfp) if batch else
                             build_front(field,field.trace,centers[0],dtype=torch.float64))
                 if not batch:
                     return build_two_stage_front(field,field.trace,centers[0],dtype=torch.float64,
                         local_value=_local_value,value_only=not _parameter_grad)
                 return build_batch_two_stage_front(field,centers,dtype=torch.float64,
-                    local_value=_local_value,value_only=not _parameter_grad,nfp=4)
+                    local_value=_local_value,value_only=not _parameter_grad,nfp=self.nfp)
             front=stage('axis_psi_surface',make_front)
-            downstream_configs=[DownstreamConfig.from_mapping({**s['config'],'nfp':4,
+            downstream_configs=[DownstreamConfig.from_mapping({**s['config'],'nfp':self.nfp,
                 'stokes_validation_rtol':cfg.stokes_validation_rtol})
                 for s,cfg in zip(snapshots,configs)]
             caches=[{name:torch.as_tensor(s[key],device=self.device,dtype=self.dtype).detach()
@@ -370,8 +388,8 @@ class TensorEvaluator:
                     # Spectral second derivatives amplify FP32 sampling noise.
                     # Build these field quadratures in FP64 while preserving the
                     # configured precision of the existing score and its gradient.
-                    qp,qw=(coil_segments_batch(x.double(),nfp=4,count=256) if batch
-                           else coil_segments(x.double(),nfp=4,count=256))
+                    qp,qw=(coil_segments_batch(x.double(),nfp=self.nfp,count=256) if batch
+                           else coil_segments(x.double(),nfp=self.nfp,count=256))
                     geometries = [front.geometry(i) if batch else front.geometry
                                   for i in range(len(configs))]
                     levels = list(front.levels.unbind()) if batch else [front.level]
@@ -398,10 +416,10 @@ class TensorEvaluator:
                     records=[]
                     for i, (cfg, sample) in enumerate(zip(configs, samples)):
                         values=(boozer_qs_metrics_field(sample['B'],sample['dBdx'],
-                            sample['x_theta'],sample['x_phi'],nfp=4,helicity=cfg.helicity,
+                            sample['x_theta'],sample['x_phi'],nfp=self.nfp,helicity=cfg.helicity,
                             iota=sample['iota'],G=sample['G'],major_radius=sample['major_radius'])
                             if self.surface_qs.compute_f_T else boozer_spectrum_metrics(
-                                sample['B_magnitude'],nfp=4,helicity=cfg.helicity))
+                                sample['B_magnitude'],nfp=self.nfp,helicity=cfg.helicity))
                         clean_diagnostics={k:(v.detach().cpu().item() if v.numel()==1
                             else v.detach().cpu().tolist()) if isinstance(v,torch.Tensor) else v
                             for k,v in sample['diagnostics'].items()}
@@ -423,14 +441,14 @@ class TensorEvaluator:
             # GPU idle while the surface sampler is still running.
             engineering=(stage('coil_metrics',lambda: engineering_work.tensor(xs)
                 if engineering_work is not None else torch.stack([
-                    _EngineeringMetrics.apply(v,self.library_path,4) for v in xs.unbind()]))
+                    _EngineeringMetrics.apply(v,self.library_path,self.nfp) for v in xs.unbind()]))
                 if _engineering else xs.new_zeros((len(xs),3)))
             if not batch:
                 engineering=engineering[0]
             metrics=TensorMetrics(physics['raw_qs'],physics['iota_boundary'],physics['target_quality_error'],
                                   *engineering.unbind(-1),physics['surface_volume'],front.psi_train_rms,
                                   physics['raw_qs_outer'],physics['iota_min'],physics['iota_max'])
-            diagnostics={'configuration':[c.to_dict() for c in configs] if batch else configs[0].to_dict(),
+            diagnostics={'nfp':self.nfp,'n_base_coils':x.shape[-2],'configuration':[c.to_dict() for c in configs] if batch else configs[0].to_dict(),
                          'field_dtype':str(self.dtype),'psi_dtype':'torch.float64',
                          'gradient_method':'local_reverse', 'native_centers':[
                              s['score_result']['status'] for s in snapshots],

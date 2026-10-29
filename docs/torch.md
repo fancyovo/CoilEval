@@ -10,13 +10,20 @@ Installation options are described in [the installation guide](installation.md).
 ## Physical parameter tensors
 
 `pack_coils(coils, device='cuda:0', dtype=torch.float64)` converts a `CoilSet`
-into a tensor of shape `(4, 3*(2*order+1)+1)`. Each row contains that coil's x,
-y and z Fourier coefficients followed by its current. Order 4 gives `(4,28)`;
-order 16 gives `(4,100)`. Coordinates use metres and currents use amperes.
+into a tensor of shape `(nc, 3*(2*order+1)+1)`, where `nc` is the positive number
+of basic coils. Each row contains that coil's x, y and z Fourier coefficients
+followed by its current. Order 4 gives `(nc,28)`; order 16 gives `(nc,100)`.
+Coordinates use metres and currents use amperes.
 The NumPy `parameter_vector()` retains its coordinate-major flat layout.
 
-The Tensor API supports four basic coils, `nfp=4`, helicity `(1,4)`, 256 coil
-segments and four psi/alpha local fit iterations. Select `fast=True` and
+The Tensor API supports any positive integer `nfp`, any positive basic-coil
+count and explicit helicity `(M,N)` with nonzero `M`. Stellarator symmetry is
+required. Set `TensorEvaluator(nfp=coils.nfp, ...)`: tensor values do not encode
+field periods, and `pack_coils` does not attach that metadata. The defaults
+remain `nfp=4` and helicity `(1,4)`. Set `EvaluationConfig(helicity=(1,0), ...)`
+for QA, or `(1,nfp)` for QH at the selected field period; helicity is never
+inferred from `nfp`. The interface retains 256 coil segments and four
+psi/alpha local fit iterations. Select `fast=True` and
 `flux_method='stokes'`. Both `psi_fit='single_stage'` and `'two_stage'` are
 accepted. Psi calculations use float64; field calculations use float32 by
 default, with `field_dtype=torch.float64` available.
@@ -27,7 +34,7 @@ Use `TensorEvaluator(library=None, field_library=None, config=...,
 device_id=0, field_dtype=torch.float32, batch_axis=True, share_geometry=True,
 device='cuda', threads=None, axis_grid=None, surface_qs=None,
 capture_pipeline=True, batch_surface_qs=True, synchronize_stages=False,
-engineering_overlap=True, capture_workers=1)` as a context manager on its creating
+engineering_overlap=True, capture_workers=1, nfp=4)` as a context manager on its creating
 thread. A wheel supplies the GPU evaluation and gradient libraries and the CPU
 library. Explicit paths select custom builds. On GPU, the field library otherwise
 comes from the same directory as `library`; on CPU, both operations use the CPU library.
@@ -43,7 +50,7 @@ budget and `axis_grid` optionally selects its primary magnetic-axis seed grid.
 CPU query diagnostics and timings are available under `diagnostics['queries']`
 and `timings['queries']`.
 
-Version 0.8.0 (unreleased) adds the following GPU execution controls. These
+The following GPU execution controls are available. These
 options change scheduling; numerical settings remain in `EvaluationConfig`
 and `SurfaceQSConfig`.
 
@@ -79,12 +86,12 @@ GPU memory.
 
 | Method | Physical input shape | Each metric's shape |
 | --- | --- | --- |
-| `evaluate(parameters)` | `(4, width)` | scalar |
-| `evaluate_batch(parameters, configs=None)` | `(B,4,width)` | `(B,)` |
+| `evaluate(parameters)` | `(nc, width)` | scalar |
+| `evaluate_batch(parameters, configs=None)` | `(B,nc,width)` | `(B,)` |
 
 `configs` supplies one `EvaluationConfig` per independent geometry. Use a common
-Fourier width, psi-fit method, `alpha_radial_basis`, `alpha_radial_weighting`, `alpha_weight_sigma`
-and `alpha_count_floor` within a batch. Target volume and `psi_a` may vary by
+`nfp`, basic-coil count, Fourier width, psi-fit method, `alpha_radial_basis`, `alpha_radial_weighting`, `alpha_weight_sigma`
+and `alpha_count_floor` within a batch. Helicity, target volume and `psi_a` may vary by
 query; two-stage sampling methods and row counts may also vary. Captured centers are returned in input
 order; GPU field, tracing and fit operations then use the batch operators. An
 unusable captured center raises `InvalidEvaluationError` identifying the
@@ -106,12 +113,13 @@ import torch
 from coil_eval import CoilSet, EvaluationConfig
 from coil_eval.torch import TensorEvaluator, pack_coils
 
-x = pack_coils(CoilSet.read_json("examples/coils.json"))
+coils = CoilSet.read_json("examples/coils.json")
+x = pack_coils(coils)
 config = EvaluationConfig(
     target_volume=0.05, fast=True, flux_method="stokes",
     psi_fit="two_stage", psi_refit_sampling="cartesian",
 )
-with TensorEvaluator(config=config) as evaluator:
+with TensorEvaluator(config=config, nfp=coils.nfp) as evaluator:
     result = evaluator.evaluate(x)
     loss = torch.log(result.metrics.qs_volume + 1e-8)
     gradient, = torch.autograd.grad(loss, result.parameters)

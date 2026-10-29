@@ -8,9 +8,9 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from coil_eval._autograd.batch_downstream import (
-    _BatchAlphaDesign, batch_frozen_pcgls, batch_downstream)
+    _BatchAlphaDesign, batch_frozen_pcgls, batch_downstream, batch_qs_metric)
 from coil_eval._autograd.downstream import (
-    _AlphaDesign, DownstreamConfig, clebsch_modes, downstream, frozen_pcgls)
+    _AlphaDesign, DownstreamConfig, clebsch_modes, downstream, frozen_pcgls, qs_metric)
 from test_autograd_downstream import CircleGeometry
 
 
@@ -99,7 +99,8 @@ class BatchDownstreamTests(unittest.TestCase):
             volume_point_count=50, volume_phi_count=3, volume_theta_count=5, alpha_fit_point_count=40,
             alpha_radial_order=2, alpha_poloidal_order=2, alpha_toroidal_order=1, iota_degree=1,
             radial_bin_count=4, alpha_chunk_columns=5)
-        configs = [config, replace(config, volume_rho_min=.13, target_quality_threshold=.008)]
+        configs = [config, replace(config, volume_rho_min=.13, target_quality_threshold=.008,
+                                   target_M=1, target_N=0)]
         values = torch.tensor([[1.2, .03, .8], [1.3, .04, 1.1]], dtype=self.dtype, requires_grad=True)
         front = SimpleNamespace(levels=values[:, 1], geometry=lambda i: CircleGeometry(values[i, 0]))
         field = ToyBatchField(values[:, 2])
@@ -126,6 +127,36 @@ class BatchDownstreamTests(unittest.TestCase):
             only_first = torch.autograd.grad(actual[key][0], values, retain_graph=True)[0]
             torch.testing.assert_close(only_first[1], torch.zeros_like(only_first[1]), atol=0, rtol=0)
 
+
+
+def test_mixed_helicity_qs_values_and_all_input_gradients_match_scalar():
+    torch.manual_seed(84)
+    nq,n=3,13
+    dtype=torch.float64
+    B=(torch.randn(nq,n,3,dtype=dtype)+1).requires_grad_()
+    gradB=torch.randn(nq,n,3,3,dtype=dtype,requires_grad=True)
+    iota=torch.randn(nq,3,dtype=dtype,requires_grad=True)
+    G=torch.tensor([.8,1.3,-.7],dtype=dtype,requires_grad=True)
+    points=dict(grad_s=torch.randn(nq,n,3,dtype=dtype,requires_grad=True),
+        flux_derivative=(torch.rand(nq,n,dtype=dtype)+.2).requires_grad_(),
+        rho=torch.linspace(.2,1.,n,dtype=dtype).expand(nq,-1).clone().requires_grad_(),
+        volume_weight=(torch.rand(nq,n,dtype=dtype)+.1).requires_grad_())
+    configs=[replace(DownstreamConfig(),target_M=m,target_N=k,volume_rho_min=r)
+             for m,k,r in [(1,0,.08),(1,-3,.12),(2,1,.15)]]
+    actual=batch_qs_metric(points,B,gradB,iota,G,configs)
+    expected=[qs_metric({key:value[q] for key,value in points.items()},
+                        B[q],gradB[q],iota[q],G[q],configs[q]) for q in range(nq)]
+    source=(B,gradB,iota,G,*points.values())
+    for key in ('raw_qs','raw_qs_outer','qs_global_error','qs_edge_error','qs_loss'):
+        target=torch.stack([item[key] for item in expected])
+        torch.testing.assert_close(actual[key],target,atol=1e-12,rtol=1e-12)
+        actual_grad=torch.autograd.grad(actual[key].sum(),source,retain_graph=True)
+        target_grad=torch.autograd.grad(target.sum(),source,retain_graph=True)
+        for got,want in zip(actual_grad,target_grad):
+            torch.testing.assert_close(got,want,atol=2e-11,rtol=2e-11)
+        selected=torch.autograd.grad(actual[key][1],source,retain_graph=True)
+        for gradient in selected:
+            assert torch.count_nonzero(gradient[[0,2]]).item()==0
 
 
 if __name__ == '__main__':

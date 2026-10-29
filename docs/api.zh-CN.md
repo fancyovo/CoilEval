@@ -13,6 +13,13 @@
 `with_parameters(vector)` 按此顺序建立新对象。
 `read_json(path)` 和 `write_json(path)` 保存和读取相同的单位与约定。
 
+`nfp` 和基本线圈数可为任意正整数，仍要求 stellarator symmetry。
+QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
+其中 N 是完整环面的物理螺旋度，不是单个场周期的模式编号。兼容默认值仍为 `(1,4)`，
+修改 `CoilSet.nfp` 不会自动更换 QS 指标；M 必须非零。
+张量本身不携带 nfp，构造评估器时传入 `nfp=coils.nfp`。
+`evaluate_many` 支持不同 CoilSet 布局并恢复输入顺序；稠密张量批次共享 nfp、线圈数和系数宽度。
+
 ## 配置
 
 `EvaluationConfig(target_volume, ...)` 是只读配置，目标体积单位为 m³。
@@ -132,7 +139,7 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 详见 [Simsopt 接口](simsopt.zh-CN.md)。
 两个原生 QS 字段都除以所选螺旋度的 `max(sqrt(M*M + N*N), 1)`。
 外侧 bin 保留最后一个径向 bin 内的原生点权重；iota 剖面采样覆盖所选径向范围。
-参考接口实现 QH 螺旋度 `(1,nfp)`，与原生结果比较时应选择相同螺旋度。
+参考接口默认使用 QH 螺旋度 `(1,nfp)`，也接受显式 QA `helicity=(1,0)`；与原生结果比较时应选择相同螺旋度。
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` 提供可组合的标量惩罚。
 拟合与质量诊断独立于用户定义的目标函数。线圈几何指标基于采样曲线。

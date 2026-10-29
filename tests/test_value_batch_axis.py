@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -53,7 +54,7 @@ def test_native_value_groups_preserve_order_and_clear_each_query(monkeypatch,ena
         return dict(status='ok',diagnostics={})
     backend.evaluate=evaluate
     # Compatible groups may interleave. Scoring itself keeps the input order,
-    # while unsupported two-coil input retains the scalar path.
+    # while the singleton two-coil input retains the scalar path.
     coils=[four_coils(1,4,0),four_coils(2,3,1),four_coils(1,4,2),
            make_coils(),four_coils(2,3,4)]
     records=backend.evaluate_many(coils,EvaluationConfig(.03))
@@ -88,14 +89,56 @@ def test_batch_query_error_exits_armed_context_and_preserves_error(monkeypatch):
     assert log==[('arm',0.),('clear',0.),('arm',1.),('clear',1.)]
 
 
-def test_singleton_and_unsupported_shapes_do_not_prepare(monkeypatch):
+def test_empty_and_singleton_batches_do_not_prepare(monkeypatch):
     monkeypatch.setattr(axis_batch,'prepare_axis_batch',lambda *a,**k:pytest.fail('unexpected batch'))
     backend=NativeBackend('missing.so');backend.evaluate=lambda *a:dict(status='ok',diagnostics={})
     assert backend.evaluate_many([],EvaluationConfig(.03))==[]
     one=backend.evaluate_many([four_coils()],EvaluationConfig(.03))
     assert one[0]['diagnostics']['independent_batch_axis']['reason']=='single_query'
-    unsupported=backend.evaluate_many([make_coils()]*2,EvaluationConfig(.03))
-    assert all(r['diagnostics']['independent_batch_axis']['reason']=='unsupported_coil_layout' for r in unsupported)
+
+
+def test_mixed_nfp_and_coil_counts_prepare_separate_compatible_groups(monkeypatch):
+    preparations=[];seen=[]
+    def prepare(physical,configs,path,**kwargs):
+        preparations.append((physical.shape,kwargs['nfp']))
+        return Prepared(physical,[])
+    monkeypatch.setattr(axis_batch,'prepare_axis_batch',prepare)
+    backend=NativeBackend('missing.so')
+    backend.evaluate=lambda coils,cfg:seen.append((coils.nfp,coils.n_base_coils,cfg.helicity)) or dict(status='ok')
+    two=make_coils()
+    four=four_coils(nfp=3)
+    qa=EvaluationConfig(.03,helicity=(1,0))
+    qh=EvaluationConfig(.03,helicity=(1,3))
+    result=backend.evaluate_many([two,four,two,four],qa,[qa,qh,qa,qh])
+    assert preparations==[((2,2,10),2),((2,4,10),3)]
+    assert seen==[(2,2,(1,0)),(3,4,(1,3))]*2
+    assert [r['diagnostics']['independent_batch_axis']['group'] for r in result]==[0,1,0,1]
+
+
+def test_two_stage_nearby_routes_generic_coils_to_local_tensor_backend(monkeypatch):
+    from coil_eval._two_stage import local
+    observed=[]
+    monkeypatch.setitem(sys.modules,'torch',SimpleNamespace(version=SimpleNamespace(cuda='test')))
+    def nearby(backend,coils,candidates,center_raw,config):
+        observed.append((coils.nfp,coils.n_base_coils,config.helicity))
+        return [dict(status='ok') for _ in candidates]
+    monkeypatch.setattr(local,'nearby',nearby)
+    coils=make_coils()
+    cfg=EvaluationConfig(.03,psi_fit='two_stage',fast=True,flux_method='stokes',helicity=(1,0))
+    result=NativeBackend('missing.so').nearby(coils,[coils],{},cfg)
+    assert observed==[(2,2,(1,0))]
+    assert result[0]['diagnostics']['nearby_method']=='local'
+    assert result[0]['diagnostics']['nearby_backend']=='torch'
+
+
+@pytest.mark.parametrize('psi_fit',['single_stage','two_stage'])
+@pytest.mark.parametrize('mismatch',['nfp','coil_count'])
+def test_nearby_rejects_incompatible_candidates_before_backend_loading(psi_fit,mismatch):
+    coils=make_coils()
+    candidate=(CoilSet(coils.coeffs_x,coils.coeffs_y,coils.coeffs_z,coils.currents_a,3)
+               if mismatch=='nfp' else four_coils(nfp=2))
+    with pytest.raises(ValueError,match='match center shape and nfp'):
+        NativeBackend('missing.so').nearby(coils,[candidate],{},EvaluationConfig(.03,psi_fit=psi_fit))
 
 
 class BulkBackend(FakeBackend):

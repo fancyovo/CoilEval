@@ -7,11 +7,16 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.8.2 (unreleased). It improves GPU batch scheduling,
-overlaps CPU preparation with GPU work, and batches target-surface field sweeps.
-Numerical settings and physical rejection checks are retained. CPU values and
-local reverse gradients remain available. See the [GPU batch guide](docs/torch.md),
-[CPU guide](docs/cpu.md) and [release history](CHANGELOG.md).
+The source package is 0.9.0 (unreleased). CPU and GPU evaluation support different
+field-period and base-coil counts, with explicit QA or QH helicity. The tensor
+constructor accepts `nfp=coils.nfp`; its default remains 4. For QA choose
+`EvaluationConfig(..., helicity=(1,0))`; standard QH uses `(1,coils.nfp)`.
+See the [tensor guide](docs/torch.md), [CPU guide](docs/cpu.md) and
+[release history](CHANGELOG.md).
+
+The examples accept `--helicity M N`; for a QA input use
+`python examples/qs_metrics.py --coils qa.json --helicity 1 0 --volume V --radius A`.
+Replace V and A with the target volume (m³) and fitting radius (m).
 
 ## Installation
 
@@ -19,10 +24,10 @@ Install the wheel with the extra matching your backend: `[cpu]` for CPU or
 `[gpu]` for GPU. A bare wheel installs only the NumPy-based package interface.
 CPU evaluation uses PyTorch for matrix solves even when gradients are not requested.
 
-Install the supplied 0.8.2 binary wheel in a Python 3.10+ environment:
+Install the supplied 0.9.0 binary wheel in a Python 3.10+ environment:
 
 ```sh
-python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 The wheel includes CPU and GPU backends. The `gpu` extra installs NumPy and a
@@ -35,7 +40,7 @@ For a computer without an NVIDIA GPU, install CPU PyTorch and the CPU extra:
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Select `Evaluator(..., device="cpu", threads=8)` or omit `threads` to use the
@@ -96,7 +101,7 @@ surface's acceptance and quality are available separately in the Simsopt result.
 QS metrics are residual RMS quantities. `qs_volume` averages over the selected
 volume; `qs_outer` averages over its outer radial bin. Simsopt reference helpers
 also report the flux-shell RMS on a solved surface.
-Those reference helpers use QH helicity `(1,nfp)`.
+Those reference helpers default to QH helicity `(1,nfp)`; pass `helicity=(1,0)` for QA.
 
 ## Documentation
 

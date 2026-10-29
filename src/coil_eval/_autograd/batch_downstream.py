@@ -22,7 +22,7 @@ def _configs(configs, count):
               for c in configs]
     if len(result) != count or not count:
         raise ValueError('one downstream config is required per query')
-    independent = {'volume_rho_min', 'target_quality_threshold',
+    independent = {'volume_rho_min', 'target_M', 'target_N', 'target_quality_threshold',
                    'target_quality_temperature', 'target_quality_weight',
                    'stokes_validation_rtol'}
     for name in (f.name for f in fields(DownstreamConfig) if f.name not in independent):
@@ -277,6 +277,9 @@ def batch_surface_quality(geometries, levels, field, configs, *, return_arrays=F
 
 def batch_qs_metric(points, B, gradB, iota, G, config, *, volume_rho_min=None):
     """Full volume reductions over points, independently for every query."""
+    configs = _configs(config, len(B))
+    target_M = B.new_tensor([c.target_M for c in configs], dtype=torch.float64)
+    target_N = B.new_tensor([c.target_N for c in configs], dtype=torch.float64)
     magnitude = B.square().sum(-1).clamp_min(1e-30).sqrt()
     grad_magnitude = torch.einsum('bnic,bni->bnc', gradB, B) / magnitude[..., None]
     grad_flux = points['flux_derivative'].to(B.dtype)[..., None] * points['grad_s'].to(B.dtype)
@@ -286,12 +289,13 @@ def batch_qs_metric(points, B, gradB, iota, G, config, *, volume_rho_min=None):
     iv = torch.zeros_like(rho2)
     for coefficient in iota.flip(-1).unbind(-1):
         iv = iv * rho2 + coefficient[:, None]
-    residual = ((config.target_M * iv.double() - config.target_N) * aa.double()
-                - config.target_M * G.double()[:, None] * cc.double()) / magnitude.double().pow(3).clamp_min(1e-30)
+    residual = ((target_M[:, None] * iv.double() - target_N[:, None]) * aa.double()
+                - (target_M * G.double())[:, None] * cc.double()) / magnitude.double().pow(3).clamp_min(1e-30)
     weight = points['volume_weight'].to(B.dtype).double()
     rms = ((weight * residual.square()).sum(-1) / weight.sum(-1)).sqrt()
-    norm = max(math.hypot(config.target_M, config.target_N), 1.)
-    outer=outer_qs_rms(residual,weight,points['rho'],config,volume_rho_min=volume_rho_min)
+    norm = B.new_tensor([max(math.hypot(c.target_M, c.target_N), 1.) for c in configs], dtype=torch.float64)
+    lower = [c.volume_rho_min for c in configs] if volume_rho_min is None else volume_rho_min
+    outer=outer_qs_rms(residual,weight,points['rho'],configs[0],volume_rho_min=lower)
     return dict(raw_qs=rms/norm, raw_qs_outer=outer/norm,
                 qs_global_error=rms, qs_edge_error=outer, qs_vacuum_G=G,
                 qs_loss=torch.log(rms/norm+1e-8))
@@ -353,7 +357,7 @@ def batch_downstream(front, alpha_caches, field, configs, *, return_arrays=False
     G = G * flux['edge_flux'].detach().sign()
     lower_radii=[config.volume_rho_min for config in configs]
     alpha = batch_alpha_fit(points, B, cache, c, volume_rho_min=lower_radii)
-    qs = batch_qs_metric(points, B, gradB, alpha['iota_coefficients'], G, c,
+    qs = batch_qs_metric(points, B, gradB, alpha['iota_coefficients'], G, configs,
                          volume_rho_min=lower_radii)
     quality = batch_surface_quality(geometries, levels, field, configs, return_arrays=return_arrays)
     result = {**qs, **quality, **alpha, 'surface_volume': flux['surface_volume'],
@@ -363,4 +367,3 @@ def batch_downstream(front, alpha_caches, field, configs, *, return_arrays=False
     if return_arrays:
         result.update(points=points, B=B, gradB=gradB, flux_sections=flux['sections'])
     return result
-

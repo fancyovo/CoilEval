@@ -18,9 +18,8 @@ def validate_tensor_config(config):
         raise TypeError("config must be an EvaluationConfig")
     if not config.fast or config.flux_method != "stokes":
         raise ValueError('tensor evaluation requires fast=True and flux_method="stokes"')
-    if (config.segments_per_coil, config.psi_iterations, config.alpha_iterations,
-            config.helicity) != (256, 4, 4, (1, 4)):
-        raise ValueError("tensor evaluation requires 256 segments, four fit iterations and helicity (1,4)")
+    if (config.segments_per_coil, config.psi_iterations, config.alpha_iterations) != (256, 4, 4):
+        raise ValueError("tensor evaluation requires 256 segments, four fit iterations")
 
 
 def validate_tensor_batch_configs(configs, *, count=None):

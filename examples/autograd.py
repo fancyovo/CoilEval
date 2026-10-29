@@ -18,16 +18,18 @@ def main():
     parser.add_argument('--volume',type=float,default=.05,help='Target volume in m^3')
     parser.add_argument('--radius',type=float,default=.15,help='Fitting radius in metres')
     parser.add_argument('--device',type=int,default=0,help='CUDA device index')
+    parser.add_argument('--helicity',type=int,nargs=2,default=(1,4),metavar=('M','N'),
+                        help='QS helicity: QA 1 0; standard QH 1 nfp (default: 1 4)')
     args=parser.parse_args()
     if not args.two_stage and (args.sampling!='cartesian' or args.alpha_weighting!='histogram' or args.alpha_basis!='zernike'):
         parser.error('polar sampling, smooth alpha weights and flux_legendre alpha require --two-stage')
     coils=CoilSet.read_json(args.coils)
     x=pack_coils(coils,device=f'cuda:{args.device}')
-    config=EvaluationConfig(target_volume=args.volume,psi_a=args.radius,fast=True,flux_method='stokes',
+    config=EvaluationConfig(target_volume=args.volume,psi_a=args.radius,helicity=tuple(args.helicity),fast=True,flux_method='stokes',
                             psi_fit='two_stage' if args.two_stage else 'single_stage',
                             psi_refit_sampling=args.sampling,alpha_radial_weighting=args.alpha_weighting,
                             alpha_radial_basis=args.alpha_basis)
-    with TensorEvaluator(args.library,config=config,device_id=args.device) as ev:
+    with TensorEvaluator(args.library,config=config,device_id=args.device,nfp=coils.nfp) as ev:
         torch.cuda.synchronize(ev.device)
         started=perf_counter()
         if args.batch:

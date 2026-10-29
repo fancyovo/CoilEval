@@ -11,10 +11,13 @@ from coil_eval.torch import TensorEvaluator
 
 
 @pytest.mark.parametrize('method',['area','stokes'])
-def test_one_center_choice_is_shared_by_all_endpoint_chunks(monkeypatch,method):
+@pytest.mark.parametrize('nfp,coil_count',[(4,4),(2,3)])
+def test_one_center_choice_is_shared_by_all_endpoint_chunks(monkeypatch,method,nfp,coil_count):
     import coil_eval.torch as tensor_api
     import coil_eval._two_stage.native as native_api
     coils=CoilSet.read_json(Path(__file__).resolve().parents[1]/'examples/coils.json')
+    coils=CoilSet(coils.coeffs_x[:coil_count],coils.coeffs_y[:coil_count],
+                  coils.coeffs_z[:coil_count],coils.currents_a[:coil_count],nfp)
     config=EvaluationConfig(target_volume=.05,fast=True,flux_method='stokes',
                             psi_fit='two_stage',psi_fd_batch_size=2)
     center_raw=dict(status='ok',diagnostics=dict(axis_R=1.,axis_Z=0.),components={})
@@ -30,7 +33,7 @@ def test_one_center_choice_is_shared_by_all_endpoint_chunks(monkeypatch,method):
             return center_raw,snapshot
     class Evaluator:
         device=torch.device('cpu')
-        def __init__(self,*a,**k):pass
+        def __init__(self,*a,**k):assert k['nfp']==nfp
         def __enter__(self):return self
         def __exit__(self,*a):pass
         def _choose_local_flux(self,parameters,captured):

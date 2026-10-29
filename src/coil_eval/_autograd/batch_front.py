@@ -165,6 +165,8 @@ def build_batch_front(field,centers,*,config_overrides=None,dtype=torch.float32,
     if not centers or len(centers)!=field.positions.shape[0]:
         raise ValueError('one independent center snapshot required for every field query')
     cfgs=[{**c.get('config',{}),**(config_overrides or {})} for c in centers]
+    if any(int(c.get('nfp',nfp))!=nfp for c in cfgs):
+        raise ValueError('batch field and all center configs must share nfp')
     defaults=dict(axis_trace_steps=240,axis_sample_count=240,psi_poly_degree=10,psi_m_tor=12,
         psi_n_r=48,psi_n_z=48,psi_n_phi=48,psi_live_column_scale=False,surface_max_radius_scale=1.,surface_newton_iters=20,surface_newton_tolerance=1e-12)
     common={}

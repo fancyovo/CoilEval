@@ -9,12 +9,18 @@ CPU 执行使用 CPU 版 PyTorch 和 `TensorEvaluator(device='cpu', ...)`，详�
 ## 物理参数张量
 
 `pack_coils(coils, device='cuda:0', dtype=torch.float64)` 将 `CoilSet` 转为形状
-`(4, 3*(2*阶数+1)+1)` 的张量。每行依次包含该线圈的 x、y、z Fourier 系数和电流。
-4 阶对应 `(4,28)`，16 阶对应 `(4,100)`。坐标使用米，电流使用安培。
+`(nc, 3*(2*阶数+1)+1)` 的张量，`nc` 是正整数基本线圈数量。
+每行依次包含该线圈的 x、y、z Fourier 系数和电流。
+4 阶对应 `(nc,28)`，16 阶对应 `(nc,100)`。坐标使用米，电流使用安培。
 NumPy 的 `parameter_vector()` 仍使用按坐标分组的展平布局。
 
-Tensor 接口支持四条基本线圈、`nfp=4`、螺旋度 `(1,4)`、每条线圈 256 段及四次
-psi/alpha 局部拟合迭代。配置使用 `fast=True`、`flux_method='stokes'`，
+Tensor 接口支持任意正整数 `nfp`、任意正整数基本线圈数量，以及 `M` 非零的显式
+螺旋度 `(M,N)`，要求保留 stellarator symmetry。
+请设置 `TensorEvaluator(nfp=coils.nfp, ...)`：张量数值不包含场周期信息，
+`pack_coils` 也不附加这项元数据。默认仍为 `nfp=4`、螺旋度 `(1,4)`。
+QA 使用 `EvaluationConfig(helicity=(1,0), ...)`，对应场周期的 QH 使用 `(1,nfp)`；
+螺旋度不会由 `nfp` 自动推断。每条线圈仍使用 256 段及四次 psi/alpha 局部拟合迭代。
+配置使用 `fast=True`、`flux_method='stokes'`，
 `psi_fit` 可以选择 `'single_stage'` 或 `'two_stage'`。
 psi 计算使用 float64，磁场计算默认使用 float32，也可指定 `field_dtype=torch.float64`。
 
@@ -25,7 +31,7 @@ psi 计算使用 float64，磁场计算默认使用 float32，也可指定 `fiel
 field_dtype=torch.float32, batch_axis=True, share_geometry=True, device='cuda',
 threads=None, axis_grid=None, surface_qs=None, capture_pipeline=True,
 batch_surface_qs=True, synchronize_stages=False, engineering_overlap=True,
-capture_workers=1)`。
+capture_workers=1, nfp=4)`。
 安装包提供 GPU 求值库、GPU 梯度库和 CPU 库。
 显式路径可选择自定义构建；GPU 省略 `field_library` 时，从 `library` 所在目录加载，
 CPU 的两类操作则共用 CPU 库。
@@ -37,7 +43,7 @@ GPU 的 `batch_axis=True` 将不同几何的常规磁轴准备合批。
 CPU 批量独立准备每个查询；`threads` 指定单个查询的 CPU 预算，`axis_grid` 可选配磁轴初筛网格。
 CPU 的逐查询诊断和计时分别保存在 `diagnostics['queries']` 和 `timings['queries']` 中。
 
-0.8.0（未发布）加入以下 GPU 执行选项。选项控制调度方式；数值设置仍由
+GPU 提供以下执行选项。选项控制调度方式；数值设置仍由
 `EvaluationConfig` 和 `SurfaceQSConfig` 指定。
 
 | GPU 选项 | 默认值 | 执行方式 |
@@ -55,9 +61,7 @@ CPU 的逐查询诊断和计时分别保存在 `diagnostics['queries']` 和 `tim
 耗时和吞吐变化取决于批量大小、可用 CPU 资源与 GPU 工作负载。
 可将相应并行选项设为 `False`，比较其独立执行路径；设 `synchronize_stages=True`
 可比较带同步的阶段计时。
-`capture_workers=2`、`3` 或 `4` 时，各主机工作线程独立拥有一个完整几何分组及其原生上下文。
-对于包含多个不同两阶段几何分组的批次，该实验路径优先于 `capture_pipeline`。
-实际线程数受可用 CPU 配额和分组数量限制，工作区显存随实际线程数增加。
+`capture_workers=2`、`3` 或 `4` 的设计让各主机工作线程独立拥有一个完整几何分组及其原生上下文。
 目前公开的原生路径会拒绝这些取值，因为两阶段捕获内部的独立 cuSOLVER
 句柄仍需要专门的隔离实现。`capture_workers=1` 已完成验证；请配合
 `capture_pipeline=True` 使用 CPU 闭域与原生 GPU 阶段的重叠。
@@ -68,12 +72,13 @@ GPU 三角求解按查询独立执行，磁场与特征计算仍保持批量。�
 
 | 方法 | 物理参数形状 | 每个指标的形状 |
 | --- | --- | --- |
-| `evaluate(parameters)` | `(4, width)` | 标量 |
-| `evaluate_batch(parameters, configs=None)` | `(B,4,width)` | `(B,)` |
+| `evaluate(parameters)` | `(nc, width)` | 标量 |
+| `evaluate_batch(parameters, configs=None)` | `(B,nc,width)` | `(B,)` |
 
-`configs` 可为每个独立几何提供一份 `EvaluationConfig`。同一批次使用一致的 Fourier
-宽度、psi 拟合方式以及 `alpha_radial_basis`、`alpha_radial_weighting`、`alpha_weight_sigma` 和
-`alpha_count_floor`。目标体积、`psi_a` 可以逐样本变化，两阶段采样方式和行数也可不同。
+`configs` 可为每个独立几何提供一份 `EvaluationConfig`。同一批次使用一致的 `nfp`、
+基本线圈数量、Fourier 宽度、psi 拟合方式以及 `alpha_radial_basis`、`alpha_radial_weighting`、
+`alpha_weight_sigma` 和 `alpha_count_floor`。螺旋度、目标体积、`psi_a` 可以逐样本变化，
+两阶段采样方式和行数也可不同。
 接口按输入顺序返回捕获中心，GPU 再用批量算子执行磁场、追踪和拟合。
 捕获到不可用中心时抛出 `InvalidEvaluationError`，并标明相应几何。
 自 0.8.1 起，流水线异常还标明失败阶段；共享准备失败列出受影响的所有查询，
@@ -91,12 +96,13 @@ import torch
 from coil_eval import CoilSet, EvaluationConfig
 from coil_eval.torch import TensorEvaluator, pack_coils
 
-x = pack_coils(CoilSet.read_json("examples/coils.json"))
+coils = CoilSet.read_json("examples/coils.json")
+x = pack_coils(coils)
 config = EvaluationConfig(
     target_volume=0.05, fast=True, flux_method="stokes",
     psi_fit="two_stage", psi_refit_sampling="cartesian",
 )
-with TensorEvaluator(config=config) as evaluator:
+with TensorEvaluator(config=config, nfp=coils.nfp) as evaluator:
     result = evaluator.evaluate(x)
     loss = torch.log(result.metrics.qs_volume + 1e-8)
     gradient, = torch.autograd.grad(loss, result.parameters)

@@ -20,7 +20,7 @@ def nearby(backend,coils,candidates,center_raw,config):
         'iota_min':'iota_min','iota_max':'iota_max',
         'relative_normal_drift_p95':'target_quality_error','surface_volume':'surface_volume',
         'psi_fit_rms':'psi_train_rms'}
-    with TensorEvaluator(backend.library,config=config,device_id=backend.device_id) as evaluator:
+    with TensorEvaluator(backend.library,config=config,device_id=backend.device_id,nfp=coils.nfp) as evaluator:
         selection_started=perf_counter()
         choice,choice_timings=evaluator._choose_local_flux(
             pack_coils(coils,device=evaluator.device),snapshot)

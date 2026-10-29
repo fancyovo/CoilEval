@@ -44,13 +44,19 @@ def _capture_stage(query_indices, stage):
         raise CapturePipelineError(query_indices, stage, exc) from exc
 
 
-def _validated_groups(physical,configs,groups,prepared_axis):
+def _validated_groups(physical,configs,groups,prepared_axis,nfp):
+    from operator import index
+    if isinstance(nfp,(bool,np.bool_)):
+        raise ValueError('nfp must be a positive integer')
+    try:nfp=index(nfp)
+    except TypeError as exc:raise ValueError('nfp must be a positive integer') from exc
+    if nfp<1:raise ValueError('nfp must be a positive integer')
     physical=np.asarray(physical,dtype=np.float64)
     width=physical.shape[-1] if physical.ndim else 0
     ncoeff=(width-1)//3
-    if (physical.ndim!=3 or physical.shape[1]!=4 or ncoeff<3 or ncoeff%2!=1 or
+    if (physical.ndim!=3 or physical.shape[1]<1 or ncoeff<3 or ncoeff%2!=1 or
             width!=3*ncoeff+1 or not len(physical) or not np.isfinite(physical).all()):
-        raise ValueError('physical input must be finite [query,4,3*ncoeff+1] with odd ncoeff>=3')
+        raise ValueError('physical input must be finite [query,coil,3*ncoeff+1] with nonempty coils and odd ncoeff>=3')
     configs=list(configs)
     groups=[list(group) for group in groups]
     if len(configs)!=len(physical) or any(c.psi_fit!='two_stage' for c in configs):
@@ -65,21 +71,24 @@ def _validated_groups(physical,configs,groups,prepared_axis):
                 raise ValueError('each group must share physical geometry and differ only in target_volume')
     if prepared_axis is not None and prepared_axis.query_count!=len(groups):
         raise ValueError('prepared axis count must match geometry groups')
-    return physical,configs,groups,ncoeff
+    if prepared_axis is not None and any(entry.nfp!=nfp for entry in prepared_axis.entries):
+        raise ValueError('prepared axis entries must share the capture nfp')
+    return physical,configs,groups,ncoeff,nfp
 
 
 def capture_two_stage_batch(physical, configs, groups, library, *, device_id=0,
-                            prepared_axis=None):
+                            prepared_axis=None,nfp=4):
     """Return ordered ``(raw_result, snapshot)`` pairs and pipeline timings.
 
 ``groups`` is the exact-geometry/volume partition used by TensorEvaluator.
-Each group's configurations may differ only in target volume. Physical inputs
+All inputs share ``nfp`` and a rectangular basic-coil layout. Each group's
+configurations may differ only in target volume. Physical inputs
 and configuration are validated before native calls. Native work is sequential
 because its capture/QR caches are thread-local; CPU domain work is independent
 and overlaps it. At most two fields and one running CPU domain are retained.
 The ordinary ``TwoStageNative.evaluate_many`` remains the serial reference.
     """
-    physical,configs,groups,ncoeff=_validated_groups(physical,configs,groups,prepared_axis)
+    physical,configs,groups,ncoeff,nfp=_validated_groups(physical,configs,groups,prepared_axis,nfp)
 
     started=perf_counter()
     results=[None]*len(physical)
@@ -100,7 +109,7 @@ The ordinary ``TwoStageNative.evaluate_many`` remains the serial reference.
     def begin_group(group_index,executor):
         nonlocal capture_library
         group=groups[group_index];i=group[0];row=physical[i]
-        coils=CoilSet(row[:,:ncoeff],row[:,ncoeff:2*ncoeff],row[:,2*ncoeff:3*ncoeff],row[:,-1],nfp=4)
+        coils=CoilSet(row[:,:ncoeff],row[:,ncoeff:2*ncoeff],row[:,2*ncoeff:3*ncoeff],row[:,-1],nfp=nfp)
         arrays=_coil_arrays(coils)
         driver=TwoStageNative(library,device_id)
         owned.append(driver)
@@ -199,7 +208,7 @@ def _fork_axis_entry(entry):
 
 
 def capture_two_stage_workers(physical,configs,groups,library,*,device_id=0,
-                              prepared_axis=None,workers=2):
+                              prepared_axis=None,workers=2,nfp=4):
     """Experimental complete capture groups on two to four isolated host workers.
 
 Each native context, cuBLAS/cuSOLVER handle, one-shot axis slot, QR factor and
@@ -218,7 +227,7 @@ GPU work. No torch/autograd state is accessed by these workers.
         raise ValueError('concurrent capture does not support the shared SGPU_PSI_QR_SNAPSHOT output file')
     if requested>1 and os.environ.get('COIL_EVAL_CAPTURE_WORKERS_TEST') != '1':
         raise ValueError('capture_workers>1 is not enabled: concurrent two-stage cuSOLVER handles require a separate native isolation implementation')
-    physical,configs,groups,ncoeff=_validated_groups(physical,configs,groups,prepared_axis)
+    physical,configs,groups,ncoeff,nfp=_validated_groups(physical,configs,groups,prepared_axis,nfp)
     _,allowance=resolve_workers(requested)
     effective=min(allowance,len(groups))
     started=perf_counter()
@@ -229,7 +238,7 @@ GPU work. No torch/autograd state is accessed by these workers.
     def run(group_index):
         tick=perf_counter()
         group=groups[group_index];row=physical[group[0]]
-        coils=CoilSet(row[:,:ncoeff],row[:,ncoeff:2*ncoeff],row[:,2*ncoeff:3*ncoeff],row[:,-1],nfp=4)
+        coils=CoilSet(row[:,:ncoeff],row[:,ncoeff:2*ncoeff],row[:,2*ncoeff:3*ncoeff],row[:,-1],nfp=nfp)
         # CDLL binding instances are private even though their native library
         # code is shared. No utility-library global cache is used on this path.
         driver=TwoStageNative(library,device_id)

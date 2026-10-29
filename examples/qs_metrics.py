@@ -20,11 +20,13 @@ def main():
     parser.add_argument("--alpha-order", type=int, help="Override the target-surface alpha mode limit")
     parser.add_argument("--gradient", action="store_true", help="Differentiate the selected metric squared")
     parser.add_argument("--metric", choices=("f_B", "f_T"), default="f_B")
+    parser.add_argument('--helicity',type=int,nargs=2,default=(1,4),metavar=('M','N'),
+                        help='QS helicity: QA 1 0; standard QH 1 nfp (default: 1 4)')
     args = parser.parse_args()
 
     coils = CoilSet.read_json(args.coils)
     config = EvaluationConfig(
-        target_volume=args.volume, psi_a=args.radius,
+        target_volume=args.volume, psi_a=args.radius, helicity=tuple(args.helicity),
         fast=True, flux_method="stokes", psi_fit="two_stage",
         psi_refit_sampling="polar_quadrature", alpha_radial_weighting="smooth",
         alpha_radial_basis="flux_legendre",
@@ -40,7 +42,7 @@ def main():
         from coil_eval.torch import TensorEvaluator, pack_coils
         parameters = pack_coils(coils, device=f"cuda:{args.device}")
         with TensorEvaluator(args.library, config=config, surface_qs=surface_qs,
-                             device_id=args.device, field_dtype=torch.float64) as evaluator:
+                             device_id=args.device, nfp=coils.nfp, field_dtype=torch.float64) as evaluator:
             result = evaluator.evaluate(parameters)
             qs = result.surface_qs
             objective = getattr(qs, args.metric).square()
