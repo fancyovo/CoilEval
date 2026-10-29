@@ -5,6 +5,8 @@ import threading
 import time
 import json
 import numpy as np
+from ._dependencies import require_dependencies
+require_dependencies('torch')
 import torch
 
 from . import _binding as native
@@ -62,6 +64,7 @@ class TensorEvaluator:
 
     def __new__(cls,*args,device='cuda',threads=None,axis_grid=None,**kwargs):
         if device=='cpu':
+            require_dependencies('cpu')
             from ._cpu.tensor import CpuTensorEvaluator
             return CpuTensorEvaluator(*args,device=device,threads=threads,axis_grid=axis_grid,**kwargs)
         if device!='cuda':

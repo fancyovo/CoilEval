@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2 (unreleased)
+
+- Check optional CPU and PyTorch dependencies before backend loading and report missing packages together with installation commands.
+- Clarify wheel extras, CPU-only PyTorch installation and per-example requirements in English and Chinese.
+- Retain numerical kernels and evaluation settings from 0.8.1.
+
 ## 0.8.1 (unreleased)
 
 - Identify failing queries and pipeline stages in batched two-stage capture errors, while preserving the original exception and resource cleanup.

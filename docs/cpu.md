@@ -14,7 +14,7 @@ Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel:
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Replace the wheel filename with the supplied file. CPU evaluation loads

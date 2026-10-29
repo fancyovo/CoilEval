@@ -1,6 +1,6 @@
 # 安装
 
-版本 0.7.0 尚未发布。以下命令安装随附的预编译 wheel。
+版本 0.8.2 尚未发布。以下命令安装随附的预编译 wheel。
 配套源码压缩包包含示例和开发文件。
 
 [English](installation.md)
@@ -10,7 +10,7 @@
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 `gpu` 依赖组安装固定版本、配套验证过的 CUDA 12.8 运行库。
@@ -32,9 +32,12 @@ python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]
 
 ## CPU 安装
 
+在同一虚拟环境中执行下面两条安装命令。第一条选定 CPU 版 PyTorch，
+第二条自动安装 CoilEval 及其余 CPU 依赖。
+
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 python examples/cpu.py --threads 8
 ```
 
@@ -46,9 +49,35 @@ CPU 求值加载 CPU 原生库，无需 NVIDIA 驱动。
 新的 GPU 环境安装 `gpu` 依赖组，CPU 环境安装 `cpu`；同一环境也可同时安装两组。
 API 默认设备仍为 `"cuda"`。
 
+## 各功能的依赖
+
+| 用途 | 依赖组／额外安装包 |
+| --- | --- |
+| 读取输入、配置和保存结果 | NumPy，作为基础依赖安装 |
+| CPU 求值、差分或反传 | `[cpu]`：SciPy、threadpoolctl、PyTorch |
+| GPU 普通求值 | `[gpu]`：配套 NVIDIA 运行库 |
+| GPU 反传或磁面 f_B / f_T | `[gpu,torch]`，使用 CUDA 版 PyTorch |
+| Simsopt 磁面求解 | `[simsopt]`：Simsopt、SciPy；GPU 初始值准备还需要 CUDA 版 PyTorch 和 `[gpu]` |
+
+wheel 元数据已声明这些依赖，指定对应依赖组时由 pip 自动安装；安装裸 wheel
+只选择基础依赖。CPU 普通求值也使用 PyTorch 的线性代数功能。
+预编译 wheel 包含原生 CPU/GPU 库和 OpenMP 运行库，安装时无需 C++、CMake 或 nvcc。
+
+已安装的环境如果缺少 CPU 依赖，可以补齐：
+
+```sh
+python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "scipy>=1.10" "threadpoolctl>=3"
+python -m pip check
+```
+
+这同样适用于已有的 0.7.0 或 0.8.1 CPU 环境。从 0.8.2 起，CPU 入口会在加载
+计算后端前列出缺少的依赖和安装命令。请使用运行 example 的同一个 `python`，
+第三方依赖的二进制发行包也需支持所用 Python 版本。
+
 ## PyTorch
 
-在同一环境中安装 CUDA 12.8 版 PyTorch，例如：
+已验证的 GPU 配置使用 Python 3.10–3.13，在同一环境中安装 CUDA 12.8 版 PyTorch：
 
 ```sh
 python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
@@ -57,14 +86,15 @@ python examples/autograd.py --batch
 ```
 
 示例包含在源码压缩包和仓库中。`coil_eval.torch` 是可选接口，普通 `coil_eval` 导入使用 NumPy。
-较新的 PyTorch 版本也可以使用，前提是其 CUDA 构建支持宿主机驱动和 GPU。
+较新版本需同时满足 Python、CUDA 构建和运行库版本的兼容要求。
+CPU 安装从 CPU 索引选择兼容版本，无需固定为这里较早的 GPU 构建版本。
 
 ## Simsopt
 
 磁面工作流可通过安装包的 `simsopt` 可选依赖组安装：
 
 ```sh
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 该依赖组安装 Simsopt 与 SciPy。

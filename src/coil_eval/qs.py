@@ -97,6 +97,8 @@ class SurfaceQSEvaluator:
     """
     def __new__(cls,*args,device='cuda',threads=None,axis_grid=None,**kwargs):
         if device=='cpu':
+            from ._dependencies import require_dependencies
+            require_dependencies('cpu')
             from ._cpu.qs import CpuSurfaceQSEvaluator
             return CpuSurfaceQSEvaluator(*args,device=device,threads=threads,axis_grid=axis_grid,**kwargs)
         if device!='cuda':raise ValueError("device must be 'cpu' or 'cuda'")
@@ -107,6 +109,8 @@ class SurfaceQSEvaluator:
     def __init__(self, library=None, field_library=None, *, config,
                  surface_qs=None, device_id=0, batch_axis=True, share_geometry=True,
                  device='cuda',threads=None,axis_grid=None):
+        from ._dependencies import require_dependencies
+        require_dependencies('torch')
         import torch
         from .torch import TensorEvaluator
         self._evaluator=TensorEvaluator(library,field_library,config=config,

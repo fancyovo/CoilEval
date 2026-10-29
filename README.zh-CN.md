@@ -5,17 +5,20 @@
 CoilEval 使用 NVIDIA GPU 或 CPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-源码包版本为 0.8.1（尚未发布），改进 GPU 批量调度，将 CPU 准备工作与 GPU
+源码包版本为 0.8.2（尚未发布），改进 GPU 批量调度，将 CPU 准备工作与 GPU
 计算重叠，并合并目标表面的磁场采样。保留数值设置、物理拒绝检查与已有 CPU
 求值和局部反传。参见 [GPU 批量指南](docs/torch.zh-CN.md)、
 [CPU 指南](docs/cpu.zh-CN.md)和[版本记录](CHANGELOG.md)。
 
 ## 安装
 
-在 Python 3.10+ 环境中安装随附的 0.7.0 预编译 wheel：
+请按后端选择依赖组：CPU 用 `[cpu]`，GPU 用 `[gpu]`。裸 wheel 仅安装依赖 NumPy
+的基础接口。CPU 普通求值也使用 PyTorch 的矩阵求解，因此不求梯度时同样需要 PyTorch。
+
+在 Python 3.10+ 环境中安装随附的 0.8.2 预编译 wheel：
 
 ```sh
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 安装包包含 CPU 和 GPU 后端；`gpu` 依赖组会安装 NumPy 和配套的 CUDA 12.8 运行库。
@@ -27,7 +30,7 @@ python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 通过 `Evaluator(..., device="cpu", threads=8)` 选择 CPU；省略 `threads` 时使用当前可用的 CPU 配额。

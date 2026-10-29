@@ -106,6 +106,8 @@ class Evaluator:
         self.device = device
         if backend is None:
             if device == 'cpu':
+                from ._dependencies import require_dependencies
+                require_dependencies('cpu')
                 from ._cpu.backend import CpuBackend
                 backend = CpuBackend(library, threads=threads, axis_grid=axis_grid)
             else:

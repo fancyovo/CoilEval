@@ -7,7 +7,7 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.8.1 (unreleased). It improves GPU batch scheduling,
+The source package is 0.8.2 (unreleased). It improves GPU batch scheduling,
 overlaps CPU preparation with GPU work, and batches target-surface field sweeps.
 Numerical settings and physical rejection checks are retained. CPU values and
 local reverse gradients remain available. See the [GPU batch guide](docs/torch.md),
@@ -15,10 +15,14 @@ local reverse gradients remain available. See the [GPU batch guide](docs/torch.m
 
 ## Installation
 
-Install the supplied 0.7.0 binary wheel in a Python 3.10+ environment:
+Install the wheel with the extra matching your backend: `[cpu]` for CPU or
+`[gpu]` for GPU. A bare wheel installs only the NumPy-based package interface.
+CPU evaluation uses PyTorch for matrix solves even when gradients are not requested.
+
+Install the supplied 0.8.2 binary wheel in a Python 3.10+ environment:
 
 ```sh
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 The wheel includes CPU and GPU backends. The `gpu` extra installs NumPy and a
@@ -31,7 +35,7 @@ For a computer without an NVIDIA GPU, install CPU PyTorch and the CPU extra:
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.7.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.8.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Select `Evaluator(..., device="cpu", threads=8)` or omit `threads` to use the
