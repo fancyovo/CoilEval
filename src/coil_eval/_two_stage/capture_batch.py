@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import replace
 import os
@@ -21,6 +21,27 @@ import numpy as np
 from .._backend import _coil_arrays
 from ..types import CoilSet
 from .native import TwoStageNative
+from .._binding import GpuError
+
+
+class CapturePipelineError(GpuError):
+    """A capture failure with the original query indices and pipeline stage."""
+    def __init__(self, query_indices, stage, cause):
+        self.query_indices = tuple(query_indices)
+        self.stage = stage
+        identity = (f'geometry {self.query_indices[0]}' if len(self.query_indices) == 1
+                    else f'geometries {list(self.query_indices)}')
+        super().__init__(f'{identity}: {stage}: {cause}')
+
+
+@contextmanager
+def _capture_stage(query_indices, stage):
+    try:
+        yield
+    except CapturePipelineError:
+        raise
+    except Exception as exc:
+        raise CapturePipelineError(query_indices, stage, exc) from exc
 
 
 def _validated_groups(physical,configs,groups,prepared_axis):
@@ -73,6 +94,10 @@ The ordinary ``TwoStageNative.evaluate_many`` remains the serial reference.
         scheduling='S1[n+1] and S2/resume[n] overlap CPU domain construction',groups=records)
 
     def begin(group_index,executor):
+        with _capture_stage(groups[group_index], 'stage1'):
+            begin_group(group_index, executor)
+
+    def begin_group(group_index,executor):
         nonlocal capture_library
         group=groups[group_index];i=group[0];row=physical[i]
         coils=CoilSet(row[:,:ncoeff],row[:,ncoeff:2*ncoeff],row[:,2*ncoeff:3*ncoeff],row[:,-1],nfp=4)
@@ -103,15 +128,19 @@ The ordinary ``TwoStageNative.evaluate_many`` remains the serial reference.
             shared_seconds=perf_counter()-work['started']
         else:
             tick=perf_counter()
-            domain=work['future'].result()
+            with _capture_stage(group, 'domain'):
+                domain=work['future'].result()
             wait_seconds=perf_counter()-tick
-            driver._check(driver.lib.sgpu_set_reverse_capture(1))
-            prepared=driver._finish_prepare(work['configs'][0],initial,domain,True,timings)
-            driver._prepare_snapshot_arrays(prepared,'reverse',False)
+            with _capture_stage(group, 'stage2_fit'):
+                driver._check(driver.lib.sgpu_set_reverse_capture(1))
+                prepared=driver._finish_prepare(work['configs'][0],initial,domain,True,timings)
+            with _capture_stage(group, 'snapshot'):
+                driver._prepare_snapshot_arrays(prepared,'reverse',False)
             shared_seconds=perf_counter()-work['started']
-            for cfg in work['configs']:
-                pair,formal_seconds,postprocess_seconds=driver._resume(
-                    prepared,cfg,work['arrays'],'reverse',False)
+            for query_index,cfg in zip(group,work['configs']):
+                with _capture_stage([query_index], 'resume'):
+                    pair,formal_seconds,postprocess_seconds=driver._resume(
+                        prepared,cfg,work['arrays'],'reverse',False)
                 pairs.append(pair);formal.append(formal_seconds);postprocess.append(postprocess_seconds)
         driver.close()
         total=perf_counter()-work['started']

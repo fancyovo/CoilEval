@@ -7,7 +7,7 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.8.0 (unreleased). It improves GPU batch scheduling,
+The source package is 0.8.1 (unreleased). It improves GPU batch scheduling,
 overlaps CPU preparation with GPU work, and batches target-surface field sweeps.
 Numerical settings and physical rejection checks are retained. CPU values and
 local reverse gradients remain available. See the [GPU batch guide](docs/torch.md),

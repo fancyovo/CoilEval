@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1 (unreleased)
+
+- Identify failing queries and pipeline stages in batched two-stage capture errors, while preserving the original exception and resource cleanup.
+
 ## 0.8.0 (unreleased)
 
 - Overlap independent two-stage domain preparation and CPU engineering derivatives with GPU evaluation.

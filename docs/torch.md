@@ -50,7 +50,7 @@ and `SurfaceQSConfig`.
 | GPU option | Default | Execution behavior |
 | --- | --- | --- |
 | `capture_pipeline` | `True` | With `capture_workers=1`, overlap CPU closed-domain construction for distinct two-stage geometry groups with the next native first fit or a preceding second fit and formal continuation. |
-| `capture_workers` | `1` | Integer from 1 to 4. Values 2–4 select experimental independent two-stage capture workers; validation is pending. |
+| `capture_workers` | `1` | Use the validated value 1; native requests for 2–4 concurrent capture workers are currently rejected. |
 | `batch_surface_qs` | `True` | Combine corresponding magnetic-field sweeps across queries during optional target-surface f_B/f_T sampling. |
 | `synchronize_stages` | `False` | Record stage CUDA events and resolve them at the public-call boundary. `True` enables a device synchronization before and after each stage for diagnostic wall timing. |
 | `engineering_overlap` | `True` | Prepare coil metrics and their active derivatives in one CPU worker while GPU response stages execute, then attach the returned derivatives on the caller. |
@@ -88,7 +88,10 @@ and `alpha_count_floor` within a batch. Target volume and `psi_a` may vary by
 query; two-stage sampling methods and row counts may also vary. Captured centers are returned in input
 order; GPU field, tracing and fit operations then use the batch operators. An
 unusable captured center raises `InvalidEvaluationError` identifying the
-affected geometry.
+affected geometry. Since 0.8.1, pipeline exceptions also name the failing
+stage. A shared preparation failure lists the affected queries; a continuation
+failure identifies its individual target-volume query. The original exception
+is retained in the exception chain.
 
 `diagnostics['capture']` records the actual geometry groups, axis preparation
 and query count, including independent preparation when a cache is unavailable.

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from coil_eval._two_stage import native as module
-from coil_eval._two_stage.capture_batch import capture_two_stage_batch
+from coil_eval._two_stage.capture_batch import capture_two_stage_batch, CapturePipelineError
 from test_two_stage_native import factory, configurations, Function
 from _oracle import make_coils
 
@@ -127,3 +127,35 @@ def test_invalid_grouping_fails_before_native_calls(factory,kind):
     with pytest.raises(ValueError):
         capture_two_stage_batch(physical,configs,groups,'unused-native.so')
     assert not library.calls and not library.flags
+
+
+@pytest.mark.parametrize('failure,stage,indices', [
+    ('begin', 'stage1', (0, 1)), ('fit', 'stage2_fit', (0, 1)),
+    ('resume', 'resume', (1,)), ('domain', 'domain', (0, 1)),
+    ('snapshot', 'snapshot', (0, 1)),
+])
+def test_pipeline_exception_identifies_group_or_exact_volume_and_stage(
+        factory, monkeypatch, failure, stage, indices):
+    _, library, _ = factory(fail=failure if failure in {'begin', 'fit'} else None)
+    _, live, _ = track_native(library)
+    def fail(*args, **kwargs):
+        raise ValueError('injected host failure')
+    if failure == 'domain':
+        monkeypatch.setattr(module, 'max_closed_boundary', fail)
+    if failure == 'snapshot':
+        monkeypatch.setattr(module.TwoStageNative, '_prepare_snapshot_arrays', fail)
+    if failure == 'resume':
+        original = library.sgpu_two_stage_resume_v1
+        def resume(*args):
+            if abs(args[4]._obj.target_volume - .01) < 1e-10:
+                args[5]._obj.error_message = b'injected target-volume failure'
+                return 19
+            return original(*args)
+        library.sgpu_two_stage_resume_v1 = Function(resume)
+    physical, configs, groups = inputs()
+    with pytest.raises(CapturePipelineError) as caught:
+        capture_two_stage_batch(physical, configs, groups, 'unused-native.so')
+    assert caught.value.query_indices == indices
+    assert caught.value.stage == stage
+    assert caught.value.__cause__ is not None
+    assert not live and library.flags[-1] == 0

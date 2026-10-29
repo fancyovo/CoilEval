@@ -242,7 +242,7 @@ class TensorEvaluator:
             captures = [None]*len(host)
             if ((getattr(self, 'capture_pipeline', False) or getattr(self, 'capture_workers', 1)>1) and len(groups)>1
                     and all(c.psi_fit == 'two_stage' for c in configs)):
-                from ._two_stage.capture_batch import capture_two_stage_batch
+                from ._two_stage.capture_batch import capture_two_stage_batch, CapturePipelineError
                 try:
                     if getattr(self, 'capture_workers', 1)>1:
                         from ._two_stage.capture_batch import capture_two_stage_workers
@@ -252,6 +252,8 @@ class TensorEvaluator:
                     else:
                         pairs, pipeline = capture_two_stage_batch(host, configs, groups,
                             self.library_path, device_id=self.device.index, prepared_axis=prepared)
+                except CapturePipelineError as exc:
+                    raise InvalidEvaluationError(str(exc)) from exc
                 except native.GpuError as exc:
                     raise InvalidEvaluationError(f'batched center capture: {exc}') from exc
                 for i, (raw, snapshot) in enumerate(pairs):
