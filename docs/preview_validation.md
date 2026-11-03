@@ -6,7 +6,7 @@ accuracy cohort, public API latency, a reconstructed QA optimization result,
 and a simple-ring initialization experiment. Source and library hashes in
 each experiment's manifest identify the measured runtime.
 
-## Fixed accuracy cohort: review pending
+## Fixed accuracy cohort: initial snapshot
 
 The cohort contains 1024 IDs sampled uniformly without replacement from the
 371701-entry QUASR catalog, using seed `2026110201`, without restricting coil
@@ -18,21 +18,46 @@ volume is half the stored outer reference volume. The source-radius multiplier
 is 3.5 and the initializer uses the high-precision `reference` profile.
 
 Base GPU and CPU calculations have finished, including recorded failures.
-There are 145 cases awaiting independent Poincaré review for large errors and
-possible island-chain or elongated-surface behavior. Final filtering, log-scale
-R² and accuracy scatter plots remain pending. Failed evaluations and excluded
-cases retain their identities and reasons in the cohort accounting. Accuracy
-comparisons use target-surface iota and matched surface definitions and weights
-for f_B, f_C and f_T.
+Of 4096 requested tasks, 1981 have completed Simsopt references; 1336 have
+paired CoilEval/reference results and 616 of those satisfy the preregistered
+reference qualifications. The table gives the initial 2026-11-03 snapshot.
+Both populations retain large errors and pending reviews. Accuracy comparisons
+use target-surface iota and matched surface definitions and weights for
+f_B, f_C and f_T.
 
-The fixed raw inputs and Simsopt references are intended for reuse; subsequent
-CoilEval revisions can rerun against the same references after the reference
-freeze and review are complete. The protocol is
+| Population | Pairs | log₁₀ f_B R² | log₁₀ f_C R² | log₁₀ f_T R² |
+| --- | ---: | ---: | ---: | ---: |
+| All paired | 1336 | 0.928267 | 0.977176 | 0.995077 |
+| Reference-qualified | 616 | 0.927736 | 0.970397 | 0.993762 |
+
+R² is `1 - sum((prediction-reference)^2) / sum((reference-mean(reference))^2)`
+on log₁₀ QS values, without fitting a regression. Signed target-surface iota
+uses the linear scale: all-paired R² is 0.99991166 and RMSE is 0.006556.
+The zero-noise stratum has 385 pairs and f_B log₁₀ R² of 0.744453;
+the pooled QS agreement does not describe that stratum's accuracy.
+
+![Initial CoilEval versus Simsopt comparisons: 1336 all-paired and 616 reference-qualified samples, with pending reviews retained](assets/preview_validation_20261103/calibration_scatter.png)
+
+The upper row shows all pairs and the lower row shows reference-qualified
+pairs. QS axes are logarithmic; signed iota axes are linear. The diagonal
+indicates equality and outlined points await review. A [PDF copy](assets/preview_validation_20261103/calibration_scatter.pdf)
+and [figure provenance](assets/preview_validation_20261103/calibration_figure_receipt.json)
+are available.
+
+There are 145 cases awaiting independent Poincaré review for large errors and
+possible island-chain or elongated-surface behavior. Final evidence-based
+filtering remains pending; there is no error-based deletion. Failed evaluations
+and excluded cases retain their identities and reasons in the 4096-task
+accounting. Frozen raw inputs and Simsopt references are available for reuse;
+subsequent revisions verify the freeze manifest and rerun only CoilEval and
+analysis. The protocol is
 `coileval090-all-quasr-1024-four-noise-matched-surface-20261102-v1`.
 Evidence in the parent validation workspace is under
 `evaluation/coileval_preview_20261102/calibration/`: `config.template.json`,
 `frozen_inputs/{manifest,selection,input_inventory,delivery}.json`, and
-`poincare_execution_20261103/required_reviews.json`.
+`poincare_execution_20261103/required_reviews.json`. The initial statistics,
+compact 4096-row plotting input, analysis receipt and reference-freeze receipt
+are `results_20261103/{summary,paired_metrics,analysis_receipt,freeze_receipt}.json`.
 
 ## Public API timing workload
 
@@ -88,8 +113,9 @@ their recorded host differences.
 
 ## Measured latency
 
-GPU results completed on 2026-11-03: all 20 cells have three valid measured
-calls after one cold call and one warmup. CPU measurements completed in retry job 128043.
+All 30 timing cells completed on 2026-11-03: each has three valid measured
+calls after one cold call and one warmup, for 90 measured calls in total.
+CPU measurements completed in retry job 128043.
 Values below are medians in seconds for the entire call. A batch contains the
 number of independent queries shown in its row.
 
@@ -143,6 +169,8 @@ profile uses FP64, order-16 Simsopt surfaces and a GPU DESC solve with
 | DESC nested surface | true | Final DESC nesting check |
 
 The two f_C rows use different aggregation and normalization conventions.
+The QA Simsopt f_C value comes from the parent full-physical workflow's
+explicit-helicity reference; the standalone 0.9.0 `surface_fc` helper is QH-only.
 The Simsopt surface is accepted for downstream evaluation **with quality
 warnings**: dense relative L2 is `1.310671e-4` and dense normal-field p95 is
 `1.728808e-4`, both above their strict `1e-4` limits. The Simsopt LS/Newton

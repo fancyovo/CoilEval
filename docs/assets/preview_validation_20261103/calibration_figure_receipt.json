@@ -1,0 +1,18 @@
+{
+  "schema": "coileval-documentation-figure-v1",
+  "static_contract": "Explicit preview README experiment figure",
+  "review_status": "Poincare review pending; primary populations retain outliers",
+  "rows_sha256": "c7f95c9e030e5028feba833eca9d10a623a6d301429c19fceed490d0cd80961f",
+  "summary_sha256": "c7ce21c4c30d396ddd2457cdb9961d507b6a02c8eb74ccf474281e5878ca70a2",
+  "script_sha256": "370f75acf20fd6ad55f521e7bb59674d1ee2e804364b5139d8037b9a2876848f",
+  "artifacts": [
+    {
+      "path": "calibration_scatter.png",
+      "sha256": "0efe5331e8884e2b4872a0f5dffe6728bf1b8d94d7e16ad67fb0f45381b57831"
+    },
+    {
+      "path": "calibration_scatter.pdf",
+      "sha256": "55e06767270c2174ce71d9481caf89e079d5b997c4d36007b42eb1560c6097c1"
+    }
+  ]
+}

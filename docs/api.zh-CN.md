@@ -45,7 +45,7 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `alpha_radial_basis` | `'zernike'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor 磁通一致性容差；`None` 关闭检查 |
 
-0.5.0a1 默认保留单阶段设置。显式选择两阶段路径：
+0.9.0 默认保留单阶段设置。显式选择两阶段路径：
 
 ```python
 config = EvaluationConfig(
@@ -60,7 +60,7 @@ config = EvaluationConfig(
 目标体积容量检查至少覆盖 psi 拟合的环向网格，并为保留的环向模提供每周期至少两个采样点。
 磁通积分仍使用其独立配置的网格。这是采样截面上的径向分支检查；通过检查不代表全局磁面或物理精度得到认证。
 `psi_refit_sampling='polar_quadrature'` 选择可选的加权极坐标求积，
-在此开发版中属于实验性数值选项。两种采样都保留完整采样结构，因此实际训练行数可能
+在 0.9.0 中属于实验性数值选项。两种采样都保留完整采样结构，因此实际训练行数可能
 与 `psi_refit_points` 不同，可查看 `diagnostics['psi_refit_training_count']`。
 
 `alpha_radial_weighting='smooth'` 是 `psi_fit='two_stage'` 的可选实验性设置，
@@ -108,8 +108,9 @@ results = evaluator.evaluate_many(
 )
 ```
 
-批量评分仅需要 NumPy 和原生后端。兼容的四线圈输入共享磁轴追踪计算，
-每个输入仍执行原有的磁轴选别和完整正式评分。混合线圈布局和旧版原生库保留顺序求值。
+GPU 批量评分需要 NumPy 和原生后端；CPU 求值还需 [CPU 依赖](cpu.zh-CN.md)。
+场周期、系数形状和磁轴搜索设置相同的输入分组共享磁轴准备，随后恢复输入顺序。
+每个输入仍执行原有的磁轴选别和完整正式评分；只有一个输入的组及旧版原生库使用普通顺序路径。
 `timings['shared_independent_batch']` 给出准备、各输入及整批耗时；
 `python_wall_s` 将公开批量调用的总耗时分配到各结果，包含该输入的求值及其分摊的准备时间。
 
@@ -139,7 +140,9 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 详见 [Simsopt 接口](simsopt.zh-CN.md)。
 两个原生 QS 字段都除以所选螺旋度的 `max(sqrt(M*M + N*N), 1)`。
 外侧 bin 保留最后一个径向 bin 内的原生点权重；iota 剖面采样覆盖所选径向范围。
-参考接口默认使用 QH 螺旋度 `(1,nfp)`，也接受显式 QA `helicity=(1,0)`；与原生结果比较时应选择相同螺旋度。
+独立的 `surface_fc`/`analyze_arrays` 参考函数固定使用 QH 螺旋度 `(1,nfp)`，
+在 0.9.0 中没有 helicity 参数。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
+QA `helicity=(1,0)`。与原生结果比较时，应为对应参考路径选择相同螺旋度。
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` 提供可组合的标量惩罚。
 拟合与质量诊断独立于用户定义的目标函数。线圈几何指标基于采样曲线。

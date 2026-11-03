@@ -2,7 +2,7 @@
 
 [English](qs.md)
 
-CoilEval 0.6 新增傅里叶指标 `f_B` 和可选三重积指标 `f_T`，作用于目标体积对应的磁面。两者共用可导的 alpha+nu 坐标构造，包括目标磁面的 alpha 拟合与基于真空磁场势的 nu 修正。线圈求值接口使用 GPU 或 CPU 上的 PyTorch；Simsopt 用于单独计算参考磁面。
+CoilEval 0.9.0 提供傅里叶指标 `f_B` 和可选三重积指标 `f_T`，作用于目标体积对应的磁面。两者共用可导的 alpha+nu 坐标构造，包括目标磁面的 alpha 拟合与基于真空磁场势的 nu 修正。线圈求值接口使用 GPU 或 CPU 上的 PyTorch；Simsopt 用于单独计算参考磁面。
 
 ## 计算线圈指标
 
@@ -23,7 +23,12 @@ with SurfaceQSEvaluator(config=config, surface_qs=SurfaceQSConfig()) as evaluato
     print(result.diagnostics)
 ```
 
-纯求值接口接收 `CoilSet`，返回 Python 标量指标及诊断信息，磁场计算使用 float64。`library`、`field_library`、`device_id` 可选择自定义后端或 GPU。线圈接口支持 4 个基本线圈、`nfp=4`、螺旋度 `(1,4)`、每条线圈 256 段，以及四次 psi/alpha 局部拟合迭代。配置使用 `fast=True`、`flux_method='stokes'`，参数约定见 [PyTorch 接口](torch.zh-CN.md)。
+纯求值接口接收 `CoilSet`，返回 Python 标量指标及诊断信息，磁场计算使用 float64。
+`library`、`field_library`、`device_id` 可选择自定义后端或 GPU。
+线圈接口支持正整数场周期和基本线圈数，要求仿星器对称；从 `CoilSet` 读取 `nfp`。
+在 `EvaluationConfig.helicity` 中显式选择 QA `(1,0)` 或 QH `(1,coils.nfp)`，
+兼容默认值仍为 `(1,4)`。接口要求每条线圈 256 段和四次 psi/alpha 局部拟合迭代。
+配置使用 `fast=True`、`flux_method='stokes'`，参数约定见 [PyTorch 接口](torch.zh-CN.md)。
 
 默认设备为 `'cuda'`。指定 `device='cpu'` 可在 CPU 上运行，并可选配 `threads` 和 `axis_grid`；详见 [CPU 指南](cpu.zh-CN.md)。
 

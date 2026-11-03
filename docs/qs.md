@@ -2,7 +2,7 @@
 
 [简体中文](qs.zh-CN.md)
 
-CoilEval 0.6 adds Fourier (`f_B`) and optional triple-product (`f_T`)
+CoilEval 0.9.0 provides Fourier (`f_B`) and optional triple-product (`f_T`)
 quasisymmetry metrics on the target-volume surface. They share a differentiable
 alpha+nu coordinate construction, with a target-surface alpha fit and vacuum
 potential-based nu correction. The coil evaluation interface uses PyTorch on
@@ -32,8 +32,11 @@ diagnostics. Its field calculations use float64. `library`, `field_library`
 and `device_id` select a custom backend or GPU, as in the tensor interface.
 The default device is `'cuda'`. Select `device='cpu'` with optional `threads`
 and `axis_grid` settings for CPU execution; see the [CPU guide](cpu.md).
-The coil interface supports four basic coils with `nfp=4`, helicity `(1,4)`,
-256 coil segments and four psi/alpha local fit iterations. Set `fast=True`
+The coil interface supports positive field-period and base-coil counts with
+stellarator symmetry. It reads `nfp` from `CoilSet`; select QA `(1,0)` or QH
+`(1,coils.nfp)` explicitly in `EvaluationConfig.helicity` (compatibility
+default `(1,4)`). It requires 256 coil segments and four psi/alpha local fit
+iterations. Set `fast=True`
 and `flux_method='stokes'`, following the [tensor parameter conventions](torch.md).
 `f_T` is `None` by default. Select `SurfaceQSConfig(compute_f_T=True)` to compute
 both metrics using the analytic spatial field Jacobian.

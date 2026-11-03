@@ -68,12 +68,13 @@ Use `major.minor.patch` without an `a` suffix:
 - Bug fixes increment the third (patch) component, including small patches and
   obvious corrections, for example `0.7.0` to `0.7.1`.
 
-The source package is `0.7.0`, including CPU support, throughput improvements,
-surface QS features and earlier numerical fixes; its changelog entry remains unreleased until publication.
+The source package is `0.9.0`, including general field-period and coil counts,
+explicit QA/QH helicities, CPU support, GPU scheduling improvements and target-surface QS.
+Its changelog entry remains unreleased until publication.
 Update package metadata and CHANGELOG when delivering implementation changes,
 even before tagging or building release binaries. Documentation-only changes
 and diagnostic reports do not require a package bump. The next fix uses
-`0.7.1`; a new feature uses `0.8.0`. Keep historical version numbers, artifacts
+`0.9.1`; a new feature uses `0.10.0`. Keep historical version numbers, artifacts
 and tags unchanged, including `0.5.0a1` and earlier `a` versions. Release tags use `v` followed by
 the package version; retain earlier tags for reproducible installations.
 

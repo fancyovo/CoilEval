@@ -98,17 +98,23 @@ config = EvaluationConfig(
 These options are described in [the API guide](docs/api.md). A reconstructed
 surface's acceptance and quality are available separately in the Simsopt result.
 
-QS metrics are residual RMS quantities. `qs_volume` averages over the selected
+The differential f_C metrics are residual RMS quantities. `qs_volume` averages over the selected
 volume; `qs_outer` averages over its outer radial bin. Simsopt reference helpers
-also report the flux-shell RMS on a solved surface.
-Those reference helpers default to QH helicity `(1,nfp)`; pass `helicity=(1,0)` for QA.
+`surface_fc` and `analyze_arrays` report the flux-shell RMS for QH `(1,nfp)`
+and have no helicity argument in 0.9.0. The separate `surface_qs_metrics`
+reference for f_B/f_T accepts `helicity=(1,0)` for QA; see the
+[reference definitions](docs/simsopt.md#reference-qs-quantities).
 
 ## Preview validation
 
 The unreleased 0.9.0 validation campaign has completed base calculations for
 a fixed random QUASR cohort of 1024 configurations at four noise scales
-(4096 tasks, including failures). Independent Poincaré review of 145 cases
-is pending; final filtered accuracy statistics will follow that review.
+(4096 tasks, including failures). The initial snapshot has 1981 completed
+Simsopt references and 1336 paired comparisons. Log-scale R² for f_B/f_C/f_T
+is 0.928267/0.977176/0.995077 across all pairs; zero-noise f_B R² is 0.744453
+on 385 pairs. Independent Poincaré review of 145 cases remains pending, and
+large errors remain included. The [initial accuracy table and scatter plots](docs/preview_validation.md#fixed-accuracy-cohort-initial-snapshot)
+show population counts, reference qualifications and limitations.
 
 The frozen CoilEval 0.9.0 benchmark on four original order-16 QUASR coil sets
 measured scalar value/value-plus-gradient latency of 22.483/42.531 seconds on

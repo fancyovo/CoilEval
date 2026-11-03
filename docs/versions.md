@@ -18,19 +18,19 @@
 | 0.8.0 | GPU capture overlap, batch surface sweeps and fewer synchronization barriers | GPU execution controls in the [Torch guide](torch.md) |
 | 0.8.1 | Query and stage attribution for batch capture errors | Included in the GPU Tensor path |
 | 0.8.2 | Early dependency checks and complete installation guidance | Install the wheel with the extra for the chosen backend |
-
 | 0.9.0 | General field-period/coil counts and QA/QH modes | Explicit tensor nfp and configuration helicity |
 
-The source version is 0.9.0 (unreleased). It adds GPU batch scheduling improvements,
-while retaining CPU values and gradients,
-thread and axis-search options, and evaluation throughput improvements.
-It includes the surface QS features introduced in 0.6.0.
+The source version is 0.9.0 (unreleased). It generalizes field-period and
+base-coil counts and explicit QA/QH modes. It includes the GPU batch scheduling
+introduced in 0.8.0, CPU values and gradients from 0.7.0, and target-surface
+QS features from 0.6.0. The [preview validation record](preview_validation.md)
+separates completed timing and example results from pending accuracy review.
 
 The default NumPy behavior stays compatible across these versions. New numerical
 paths are selected explicitly. Use an exact version and save the configuration
 alongside results when repeating an evaluation.
 
-In 0.5.0a1, `psi_fit='single_stage'` remains the default. Two-stage fitting uses
+In 0.9.0, `psi_fit='single_stage'` remains the default. Two-stage fitting uses
 `psi_refit_sampling='cartesian'` unless selected otherwise. Weighted
 `'polar_quadrature'` is an optional experimental sampler. The Tensor API accepts
 both fitting methods and preserves physical units for every Fourier order.

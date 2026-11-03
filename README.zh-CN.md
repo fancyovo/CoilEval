@@ -87,15 +87,19 @@ config = EvaluationConfig(
 
 各选项见 [API 文档](docs/api.zh-CN.md)。Simsopt 返回结果分别提供重建磁面的接受状态与质量状态。
 
-QS 指标采用残差 RMS 定义：`qs_volume` 对所选体积求平均，`qs_outer` 对外侧径向 bin
-求平均；Simsopt 参考接口还提供求解磁面上的磁通壳层 RMS。
-该参考接口默认使用 QH 螺旋度 `(1,nfp)`；QA 请显式传入 `helicity=(1,0)`。
+微分 f_C 指标采用残差 RMS 定义：`qs_volume` 对所选体积求平均，`qs_outer` 对外侧径向 bin
+求平均。Simsopt 参考函数 `surface_fc` 和 `analyze_arrays` 在 0.9.0 中固定使用
+QH `(1,nfp)`，没有 helicity 参数。另一个 f_B/f_T 参考接口 `surface_qs_metrics`
+接受 `helicity=(1,0)` 以计算 QA，详见[参考定义](docs/simsopt.zh-CN.md#参考-qs-指标)。
 
 ## Preview 验证
 
 尚未发布的 0.9.0 验证实验已完成固定随机 QUASR 样本的基础计算：1024 个配置、
-每个四档噪声，共 4096 个任务（含失败记录）。145 个样本仍待独立庞加莱审查，
-最终筛选后的精度统计将在审查后给出。
+每个四档噪声，共 4096 个任务（含失败记录）。初步快照包含 1981 个完成的 Simsopt 参考，
+以及 1336 对可比较结果。全部配对的 f_B/f_C/f_T 对数尺度 R² 为
+0.928267/0.977176/0.995077；零噪声档 385 对的 f_B R² 为 0.744453。
+145 个样本仍待独立庞加莱审查，大误差继续保留。
+[初步精度表与散点图](docs/preview_validation.zh-CN.md#固定精度样本初步快照)列出分母、参考资格与限制。
 
 CoilEval 0.9.0 的冻结基准使用四个原始 16 阶 QUASR 线圈。标量求值/求值加梯度
 的中位耗时，8 线程 CPU 为 22.483/42.531 秒，RTX 5090 为 1.553/1.959 秒，

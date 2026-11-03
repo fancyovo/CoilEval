@@ -4,7 +4,7 @@
 实验包含固定 QUASR 精度样本、公开 API 耗时、QA 优化结果的独立重建，以及简单圆环初始化。
 各实验 manifest 的源码与库哈希标识实际测量版本。
 
-## 固定精度样本：等待审查
+## 固定精度样本：初步快照
 
 使用种子 `2026110201` 从 371701 条 QUASR 全目录中均匀无放回抽取 1024 个 ID，
 不限制线圈数、场周期数和 QS 类型。每个 ID 对应 0、0.003、0.01、0.03 decades
@@ -12,17 +12,37 @@
 `10**(sigma*z)`，其中 `z` 为标准正态变量，零系数仍为零。
 目标体积固定为原始外边界参考体积的一半，源半径倍率为 3.5，初始化采用高精度 `reference` 配置。
 
-基础 GPU 与 CPU 计算已完成，包含明确记录的失败。145 个样本仍等待独立庞加莱审查，
-以检查大误差和可能的岛链附近、细长磁面情况。最终筛选、对数尺度 R² 和精度散点图尚待完成。
-失败和剔除样本均在全样本统计中保留 ID 与原因。精度比较采用目标磁面的 iota，
-以及定义和权重一致的磁面 f_B、f_C、f_T。
+基础 GPU 与 CPU 计算已完成，包含明确记录的失败。4096 个请求中，1981 个有完成的
+Simsopt 参考，1336 个有 CoilEval/参考配对结果，其中 616 对满足预先声明的参考资格。
+下表为 2026-11-03 初步快照，两类统计均保留大误差和待审查样本。
+比较采用目标磁面的 iota，以及定义和权重一致的磁面 f_B、f_C、f_T。
 
-固定原始输入与 Simsopt 参考将复用于后续版本；参考冻结与审查完成后，后续 CoilEval
-可以针对同一参考集重新评估。协议为
+| 统计范围 | 配对数 | log₁₀ f_B R² | log₁₀ f_C R² | log₁₀ f_T R² |
+| --- | ---: | ---: | ---: | ---: |
+| 全部配对 | 1336 | 0.928267 | 0.977176 | 0.995077 |
+| 参考资格合格 | 616 | 0.927736 | 0.970397 | 0.993762 |
+
+R² 在 log₁₀ QS 值上按 `1 - sum((prediction-reference)^2) / sum((reference-mean(reference))^2)`
+计算，不拟合回归。带符号的目标磁面 iota 使用线性尺度，全部配对的 R² 为 0.99991166、
+RMSE 为 0.006556。零噪声档有 385 对，f_B 对数尺度 R² 为 0.744453；
+混合噪声统计的整体一致性不能代表零噪声档的精度。
+
+![CoilEval 与 Simsopt 初步对比：1336 对全部配对与 616 对参考资格合格样本，保留待审查点](assets/preview_validation_20261103/calibration_scatter.png)
+
+上排展示全部配对，下排展示参考资格合格的配对；QS 坐标为对数尺度，带符号的 iota 为线性尺度。
+对角线表示相等，圈出的点仍待审查。另提供 [PDF](assets/preview_validation_20261103/calibration_scatter.pdf)
+和[图表溯源记录](assets/preview_validation_20261103/calibration_figure_receipt.json)。
+
+145 个样本仍等待独立庞加莱审查，以检查大误差和可能的岛链附近、细长磁面情况。
+基于几何证据的最终筛选尚待完成，没有按误差大小删除样本；失败和剔除样本在 4096 个请求的
+统计中保留 ID 与原因。固定原始输入与 Simsopt 参考已冻结可复用；后续版本校验冻结清单，
+仅重跑 CoilEval 和分析。协议为
 `coileval090-all-quasr-1024-four-noise-matched-surface-20261102-v1`。
 原始证据位于上层验证工作区 `evaluation/coileval_preview_20261102/calibration/`：
 `config.template.json`、`frozen_inputs/{manifest,selection,input_inventory,delivery}.json`
-及 `poincare_execution_20261103/required_reviews.json`。
+及 `poincare_execution_20261103/required_reviews.json`。初步统计、4096 行紧凑绘图输入、
+分析收据和参考冻结收据分别为
+`results_20261103/{summary,paired_metrics,analysis_receipt,freeze_receipt}.json`。
 
 ## 公开 API 计时工作量
 
@@ -59,7 +79,7 @@ FP64 psi 运算，精度字段保存在原始记录中。该耗时矩阵请求�
 
 ## 测得耗时
 
-GPU 的 20 格于 2026-11-03 完成，每格均在一次冷调用和一次热身后获得三次有效测量。
+全部 30 格耗时测量于 2026-11-03 完成，每格均在一次冷调用和一次热身后获得三次有效测量，共 90 次测量调用。
 CPU 测量已在重试作业 128043 中完成。下表为整次调用的中位耗时，单位秒；批量包含对应行标出的独立查询数。
 
 <!-- BENCHMARK_WALL_TABLE -->
@@ -103,7 +123,9 @@ A100 为 1.410/1.582 秒每查询。冷调用和构造耗时另存在原始记�
 | DESC 边界 f_C | 0.007228119 | 表面 Jacobian 加权的 DESC 残差绝对值均值，除以 B₀³ |
 | DESC 磁面嵌套 | true | 最终 DESC 嵌套检查 |
 
-两行 f_C 使用不同的聚合与归一化约定。Simsopt 磁面**带质量警告接受进入下游**：
+两行 f_C 使用不同的聚合与归一化约定。这里的 QA Simsopt f_C 来自上层完整物理流程中
+显式支持 helicity 的参考实现；独立 0.9.0 `surface_fc` 函数只提供 QH。
+Simsopt 磁面**带质量警告接受进入下游**：
 致密网格相对 L2 为 `1.310671e-4`，法向场 p95 为 `1.728808e-4`，
 均超过各自严格阈值 `1e-4`。Simsopt 最小二乘和 Newton 均收敛。
 DESC 优化器在 63 步后收敛，最终边界保持嵌套；归一化力残差的绝对值均值为 0.004381、

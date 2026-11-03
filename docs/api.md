@@ -48,7 +48,7 @@ and `write_json(path)` preserve these units and conventions.
 | `alpha_radial_basis` | `'zernike'` | Original radial basis or two-stage `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-The original single-stage settings remain the default in 0.5.0a1. Select the
+The single-stage settings remain the default in 0.9.0. Select the
 two-stage path explicitly:
 
 ```python
@@ -67,7 +67,7 @@ and two samples per retained toroidal mode. Flux quadrature remains separately
 configured. This is a sampled radial-branch check; an accepted result does not
 certify a global magnetic surface or physical accuracy.
 `psi_refit_sampling='polar_quadrature'` selects optional weighted polar
-quadrature, an experimental numerical option in this development release.
+quadrature, an experimental numerical option in 0.9.0.
 Both samplers retain complete sampling structures, so the actual row count can
 differ from `psi_refit_points`; inspect `diagnostics['psi_refit_training_count']`.
 
@@ -125,10 +125,12 @@ results = evaluator.evaluate_many(
 )
 ```
 
-Value batches require NumPy and the native backend. Compatible four-coil inputs
-share magnetic-axis tracing work; each input retains its ordinary axis selection
-and complete formal score. Mixed coil layouts and older native libraries retain
-sequential evaluation. `timings['shared_independent_batch']` reports preparation,
+GPU value batches require NumPy and the native backend; CPU evaluation also
+uses the [CPU dependencies](cpu.md). Inputs sharing field periods, coefficient
+shape and axis-search settings are grouped for magnetic-axis preparation, then
+restored to input order. Each input retains its ordinary axis selection and
+complete formal score. Singleton groups and older native libraries use the
+ordinary sequential path. `timings['shared_independent_batch']` reports preparation,
 per-query and total batch time; `python_wall_s` allocates the public batch wall
 time across its results, including each query and its share of preparation.
 
@@ -161,9 +163,10 @@ Simsopt reference's flux-shell RMS describe different regions; see
 Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
 selected helicity. The outer bin uses the native point weights in the final
 radial bin; iota profile samples cover the selected radial range.
-The reference helpers default to QH helicity `(1,nfp)` and accept explicit QA
-`helicity=(1,0)`; use matching native
-helicity when comparing those results.
+The standalone `surface_fc`/`analyze_arrays` reference helpers use QH helicity
+`(1,nfp)` and have no helicity argument in 0.9.0. The separate
+`surface_qs_metrics` helper accepts explicit QA `helicity=(1,0)` for f_B/f_T.
+Use matching native helicity when comparing either reference path.
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` is a
 composable scalar helper. Fit and quality diagnostics are separate from any
