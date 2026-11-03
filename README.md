@@ -103,6 +103,17 @@ volume; `qs_outer` averages over its outer radial bin. Simsopt reference helpers
 also report the flux-shell RMS on a solved surface.
 Those reference helpers default to QH helicity `(1,nfp)`; pass `helicity=(1,0)` for QA.
 
+## Preview performance
+
+The frozen CoilEval 0.9.0 benchmark on four original order-16 QUASR coil sets
+measured scalar value/value-plus-gradient latency of 22.483/42.531 seconds on
+8 CPU threads, 1.553/1.959 seconds on RTX 5090 and 1.903/2.473 seconds on A100.
+Batch 8 whole-call latency was 245.300/385.934, 9.013/9.420 and 11.282/12.657
+seconds respectively. The [complete table and measurement contract](docs/preview_validation.md)
+include batch sizes 1, 2, 4 and 8, cold calls, hardware and the fixed workload.
+These figures cover ordinary volume f_C evaluation and an engineering-inclusive
+loss gradient; the optional target-surface f_B/f_T metrics are separate requests.
+
 ## Documentation
 
 - [Installation and GPU compatibility](docs/installation.md)
