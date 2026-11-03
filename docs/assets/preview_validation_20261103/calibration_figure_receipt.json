@@ -1,18 +1,22 @@
 {
   "schema": "coileval-documentation-figure-v1",
   "static_contract": "Explicit preview README experiment figure",
-  "review_status": "Poincare review pending; primary populations retain outliers",
-  "rows_sha256": "c7f95c9e030e5028feba833eca9d10a623a6d301429c19fceed490d0cd80961f",
-  "summary_sha256": "c7ce21c4c30d396ddd2457cdb9961d507b6a02c8eb74ccf474281e5878ca70a2",
-  "script_sha256": "370f75acf20fd6ad55f521e7bb59674d1ee2e804364b5139d8037b9a2876848f",
+  "review_status": "All 145 large-error review records complete; primary populations retain outliers and geometric findings",
+  "population_counts": {
+    "all_paired": 1336,
+    "reference_qualified": 616
+  },
+  "rows_sha256": "548e70da446ad0564e4acb2d63a93df2b19c42d8fd5c56a474e5232f7d10fade",
+  "summary_sha256": "a7f84bfb7e7d9a4bcca0151ba9b436e71a8254ad0e613dbf2863ee6323b1ec4a",
+  "script_sha256": "c42b88f1e07340763b58d238ed1bfd9be1963d842b5ba0b4c675905088246d8a",
   "artifacts": [
     {
       "path": "calibration_scatter.png",
-      "sha256": "0efe5331e8884e2b4872a0f5dffe6728bf1b8d94d7e16ad67fb0f45381b57831"
+      "sha256": "8b54a2e065bb776cf09c4c3a636d5970ce564c7699cf91f1d951ce0ce6519b06"
     },
     {
       "path": "calibration_scatter.pdf",
-      "sha256": "55e06767270c2174ce71d9481caf89e079d5b997c4d36007b42eb1560c6097c1"
+      "sha256": "694c59877388ea6f0d8b12c4b817b1ad6a9c6d01f280cf13c8097a0223193f03"
     }
   ]
 }

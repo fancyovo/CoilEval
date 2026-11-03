@@ -109,12 +109,16 @@ reference for f_B/f_T accepts `helicity=(1,0)` for QA; see the
 
 The unreleased 0.9.0 validation campaign has completed base calculations for
 a fixed random QUASR cohort of 1024 configurations at four noise scales
-(4096 tasks, including failures). The initial snapshot has 1981 completed
+(4096 tasks, including failures). The reviewed results have 1981 completed
 Simsopt references and 1336 paired comparisons. Log-scale R² for f_B/f_C/f_T
 is 0.928267/0.977176/0.995077 across all pairs; zero-noise f_B R² is 0.744453
-on 385 pairs. Independent Poincaré review of 145 cases remains pending, and
-large errors remain included. The [initial accuracy table and scatter plots](docs/preview_validation.md#fixed-accuracy-cohort-initial-snapshot)
+on 385 pairs. All 145 flagged cases have review outcomes: 144 visual reviews
+and one unavailable geometry. Both primary populations retain large errors;
+a separate geometry-evidence-filtered comparison has 612 pairs. The
+[accuracy tables and scatter plots](docs/preview_validation.md#fixed-accuracy-cohort-reviewed-results)
 show population counts, reference qualifications and limitations.
+
+The [dense Poincaré examples](docs/preview_validation.md#poincaré-geometry-checks) illustrate an unexplained large error, nearby islands and an elongated section.
 
 The frozen CoilEval 0.9.0 benchmark on four original order-16 QUASR coil sets
 measured scalar value/value-plus-gradient latency of 22.483/42.531 seconds on

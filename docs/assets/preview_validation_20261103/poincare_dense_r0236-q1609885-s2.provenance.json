@@ -1,0 +1,20 @@
+{
+  "geometry": {
+    "bytes": 82301,
+    "path": "/home/scc/pb24511935/local_surface_evaluator_runs/abi12_target_volume_20260927/coileval-preview-validation-20261102/dense_execution_20261103/samples/r0236-q1609885-s2/geometry_and_seeds.npz",
+    "sha256": "da36a5787b791d0050eda22b6c02eecb8ae55efd43b59a9223f7e9175e4af4f3"
+  },
+  "image": {
+    "bytes": 2435294,
+    "path": "/home/scc/pb24511935/local_surface_evaluator_runs/abi12_target_volume_20260927/coileval-preview-validation-20261102/dense_execution_20261103/docsfig-r3/poincare_dense_r0236-q1609885-s2.png",
+    "sha256": "39f5f86d054cc203002d834cca7bb30c6c887fd53f2d6232e89f6a9bfe6f2a45"
+  },
+  "new_field_evaluation": false,
+  "protocol": "coileval-dense-full-style-poincare-20261103-v1",
+  "raw": {
+    "bytes": 5140987,
+    "path": "/home/scc/pb24511935/local_surface_evaluator_runs/abi12_target_volume_20260927/coileval-preview-validation-20261102/dense_execution_20261103/samples/r0236-q1609885-s2/poincare.npz",
+    "sha256": "56d5155bd31a6f066e703cad54193ad28e2442ff2d86d49a588c3289978d3afe"
+  },
+  "static_documentation_exception": true
+}

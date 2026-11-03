@@ -6,7 +6,7 @@ accuracy cohort, public API latency, a reconstructed QA optimization result,
 and a simple-ring initialization experiment. Source and library hashes in
 each experiment's manifest identify the measured runtime.
 
-## Fixed accuracy cohort: initial snapshot
+## Fixed accuracy cohort: reviewed results
 
 The cohort contains 1024 IDs sampled uniformly without replacement from the
 371701-entry QUASR catalog, using seed `2026110201`, without restricting coil
@@ -20,44 +20,144 @@ is 3.5 and the initializer uses the high-precision `reference` profile.
 Base GPU and CPU calculations have finished, including recorded failures.
 Of 4096 requested tasks, 1981 have completed Simsopt references; 1336 have
 paired CoilEval/reference results and 616 of those satisfy the preregistered
-reference qualifications. The table gives the initial 2026-11-03 snapshot.
-Both populations retain large errors and pending reviews. Accuracy comparisons
+reference qualifications. The table gives the reviewed 2026-11-03 results.
+Both primary populations retain every large error. The secondary
+evidence-filtered population removes four confirmed nearby-island cases from
+the reference-qualified set. Accuracy comparisons
 use target-surface iota and matched surface definitions and weights for
-f_B, f_C and f_T.
+f_B, f_C and f_T. The shared comparison kernel uses the RMS asymmetric
+Boozer Fourier-energy fraction for f_B and `|G|/B²` flux-shell RMS weighting
+for f_C and f_T. f_C uses the declared vacuum local residual with each
+sample's explicit helicity; f_T uses the same `R²*T/B⁴` normalization length
+on both surfaces. This validates CoilEval surfaces and fields against the
+independent Simsopt solve and field calculation; it does not independently
+validate two separately implemented QS formulas.
 
 | Population | Pairs | log₁₀ f_B R² | log₁₀ f_C R² | log₁₀ f_T R² |
 | --- | ---: | ---: | ---: | ---: |
 | All paired | 1336 | 0.928267 | 0.977176 | 0.995077 |
 | Reference-qualified | 616 | 0.927736 | 0.970397 | 0.993762 |
+| Geometry-evidence-filtered (secondary) | 612 | 0.927790 | 0.970548 | 0.994189 |
+
+
+Reference qualification requires strict Simsopt residual quality, resolved
+geometric sections with maximum arc-length-weighted covariance axis ratio at
+most 5, and target iota at least 0.01 from rationals with denominator at most 8.
+All three QS metrics must pass the 97-to-129 surface-grid check (absolute
+tolerance 1e-10 plus 2% relative tolerance), and the 512-to-1024 coil-quadrature
+field check requires relative vector L2 at most 1e-3. Surface order remains
+fixed at 16; convergence with surface order was not established. Rational
+proximity is a qualification rule and alone does not establish an island chain.
 
 R² is `1 - sum((prediction-reference)^2) / sum((reference-mean(reference))^2)`
 on log₁₀ QS values, without fitting a regression. Signed target-surface iota
 uses the linear scale: all-paired R² is 0.99991166 and RMSE is 0.006556.
+The secondary population's signed-iota RMSE is 0.005758.
 The zero-noise stratum has 385 pairs and f_B log₁₀ R² of 0.744453;
 the pooled QS agreement does not describe that stratum's accuracy.
 
-![Initial CoilEval versus Simsopt comparisons: 1336 all-paired and 616 reference-qualified samples, with pending reviews retained](assets/preview_validation_20261103/calibration_scatter.png)
+![Reviewed CoilEval versus Simsopt comparisons: 1336 all-paired and 616 reference-qualified samples, with geometric findings retained](assets/preview_validation_20261103/calibration_scatter.png)
 
-The upper row shows all pairs and the lower row shows reference-qualified
-pairs. QS axes are logarithmic; signed iota axes are linear. The diagonal
-indicates equality and outlined points await review. A [PDF copy](assets/preview_validation_20261103/calibration_scatter.pdf)
+The upper row shows all 1336 pairs and the lower row shows the 616
+reference-qualified pairs. QS axes are logarithmic and signed iota axes are
+linear; the diagonal indicates equality. Outlined points mark large errors and
+purple crosses mark confirmed island or elongation findings. Both plotted
+populations retain these points; the 612-pair secondary result is in the table. A [PDF copy](assets/preview_validation_20261103/calibration_scatter.pdf)
 and [figure provenance](assets/preview_validation_20261103/calibration_figure_receipt.json)
 are available.
 
-There are 145 cases awaiting independent Poincaré review for large errors and
-possible island-chain or elongated-surface behavior. Final evidence-based
-filtering remains pending; there is no error-based deletion. Failed evaluations
-and excluded cases retain their identities and reasons in the 4096-task
-accounting. Frozen raw inputs and Simsopt references are available for reuse;
-subsequent revisions verify the freeze manifest and rerun only CoilEval and
-analysis. The protocol is
+All 145 flagged cases have review outcomes: 144 received four-cut visual
+inspection and one failed the geometric-section guard before tracing. Of the
+visual cases, 130 show no resolved island chain, seven show nearby islands,
+two have elongated sections, four have insufficient trace coverage and one
+has unresolved outer morphology. The six unresolved cases, including the
+unavailable geometry, receive no geometry exclusion. Four of the seven
+nearby-island cases belonged to the 616 reference-qualified pairs; only these
+four are removed from the secondary comparison. The two elongated cases
+already failed the preregistered reference qualification. A completed review
+does not certify valid geometry or uniquely explain a metric error.
+
+The requested denominator remains 4096: 1981 completed Simsopt references,
+181 reference rejections, 16 reference timeouts and 1918 native failures
+without a reference. The 2115 tasks without completed references cannot enter
+accuracy comparisons. Failures, qualifications and geometry labels retain
+their task identities and reasons; no point is removed solely for its error.
+Frozen raw inputs and completed Simsopt references are available for reuse.
+Subsequent revisions verify the freeze manifest and rerun CoilEval and
+analysis. New references for previously uncovered tasks require a separately
+versioned extension rather than silently changing the frozen baseline.
+
+The protocol is
 `coileval090-all-quasr-1024-four-noise-matched-surface-20261102-v1`.
 Evidence in the parent validation workspace is under
 `evaluation/coileval_preview_20261102/calibration/`: `config.template.json`,
 `frozen_inputs/{manifest,selection,input_inventory,delivery}.json`, and
-`poincare_execution_20261103/required_reviews.json`. The initial statistics,
-compact 4096-row plotting input, analysis receipt and reference-freeze receipt
-are `results_20261103/{summary,paired_metrics,analysis_receipt,freeze_receipt}.json`.
+`poincare_execution_20261103/required_reviews.json`. Reviewed statistics,
+compact 4096-row plotting input, visual-review accounting and analysis/reference
+receipts are in
+`results_20261103/{summary,paired_metrics,review_summary,analysis_receipt,freeze_receipt}.json`.
+The finalizer verified all 39671 frozen-file hashes before and after analysis;
+Simsopt was not rerun. The dated initial statistics remain under
+`results_20261103/attempts/before_final_geometry_review/`.
+
+## Poincaré geometry checks
+
+The frozen anomaly review traces eight poloidal starts at each of radial
+fractions 0.9, 1.0 and 1.1. This is a **target-neighborhood diagnostic**. Its
+review queue contains QS discrepancies above a factor of 2 or iota absolute
+errors above `max(0.01, 0.02*abs(reference_iota))`. These triggers request
+inspection; every such point remains in the primary accuracy populations.
+A nearby island-chain label requires resolved separated closed lobes, and an
+elongated-surface label requires the declared covariance axis ratio above 5.
+Incomplete coverage and unresolved outer morphology remain inconclusive.
+
+The following general illustrations use separate dense traces from the
+interior through the selected surface to the outer region. Each uses 352
+starts: 32 on the reference boundary and 40 radial fractions from 0.05 to 2.0
+on eight rays. The FP64 coil-field tracer follows 256 field periods with
+256 RK steps per period and 512 coil segments. Four geometric cuts use equal
+physical R/Z scale and a viewport extending 20% beyond the reference boundary
+span on each side. Black curves mark the selected reference surface; crosses
+mark the stored source initializer axis. Turbo colors encode seed radius,
+saturating above 1.4. All finite raw traces are retained; the viewport only
+limits the displayed region.
+
+![Dense four-cut Poincaré plot for r0320-q0783386-s0, with continuous contours near the selected reference boundary](assets/preview_validation_20261103/poincare_dense_r0320-q0783386-s0.png)
+
+`r0320-q0783386-s0` has continuous contours around the selected boundary,
+while CoilEval f_B is about 13.1 times the matched Simsopt reference. The
+geometric review does not explain this error, and the sample remains in the
+accuracy populations. All 352 dense traces complete the requested interval.
+[Figure provenance](assets/preview_validation_20261103/poincare_dense_r0320-q0783386-s0.provenance.json).
+
+![Dense four-cut Poincaré plot for r0236-q1609885-s2, resolving multiple island lobes near the selected reference boundary](assets/preview_validation_20261103/poincare_dense_r0236-q1609885-s2.png)
+
+`r0236-q1609885-s2` resolves multiple island lobes near the selected boundary.
+Of 352 dense traces, 330 complete and 22 leave the diagnostic bounds. Its
+reference also carries rational-proximity and residual-quality flags. Nearby
+islands do not uniquely attribute the metric discrepancy.
+[Figure provenance](assets/preview_validation_20261103/poincare_dense_r0236-q1609885-s2.provenance.json).
+
+![Dense four-cut Poincaré plot for r0402-q1861100-s0, including an elongated section at geometric phi 0.6283 radians](assets/preview_validation_20261103/poincare_dense_r0402-q1861100-s0.png)
+
+`r0402-q1861100-s0` has a boundary covariance axis ratio of 5.907882 at its
+most elongated cut, above the declared threshold 5. All 352 dense traces
+complete. The case illustrates a shape limitation even though nested contours
+are visible in this finite diagnostic.
+[Figure provenance](assets/preview_validation_20261103/poincare_dense_r0402-q1861100-s0.provenance.json).
+
+The dense protocol is `coileval-dense-full-style-poincare-20261103-v1`.
+Its same-quadrature Simsopt field comparisons have relative vector L2 below
+6e-16 at 32 test points. Controls trace 24 starts for 32 periods while doubling
+RK resolution and coil segments. In the island case, RK refinement has a
+maximum common-finite point difference of 0.246551 m despite a p95 of
+4.38e-9 m; individual outer trajectories are sensitive to integration
+resolution. These finite diagnostics do not certify global nested topology.
+The frozen references are unchanged. Raw traces, controls and provenance
+remain in the parent workspace's
+`calibration/dense_execution_20261103/` manifest and registered remote root.
+The static figures here are the requested documentation exception to the
+ordinary raw-data/on-demand report policy.
 
 ## Public API timing workload
 
