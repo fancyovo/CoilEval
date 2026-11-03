@@ -103,7 +103,12 @@ volume; `qs_outer` averages over its outer radial bin. Simsopt reference helpers
 also report the flux-shell RMS on a solved surface.
 Those reference helpers default to QH helicity `(1,nfp)`; pass `helicity=(1,0)` for QA.
 
-## Preview performance
+## Preview validation
+
+The unreleased 0.9.0 validation campaign has completed base calculations for
+a fixed random QUASR cohort of 1024 configurations at four noise scales
+(4096 tasks, including failures). Independent Poincaré review of 145 cases
+is pending; final filtered accuracy statistics will follow that review.
 
 The frozen CoilEval 0.9.0 benchmark on four original order-16 QUASR coil sets
 measured scalar value/value-plus-gradient latency of 22.483/42.531 seconds on
@@ -113,6 +118,18 @@ seconds respectively. The [complete table and measurement contract](docs/preview
 include batch sizes 1, 2, 4 and 8, cold calls, hardware and the fixed workload.
 These figures cover ordinary volume f_C evaluation and an engineering-inclusive
 loss gradient; the optional target-surface f_B/f_T metrics are separate requests.
+
+A selected QA BFGS result (`n3-QA-i0-l5-s2-v5`) completed the full independent
+reference workflow: volume-equivalent Ap 8.4326, Simsopt target-surface iota
+0.469986, Simsopt flux-shell RMS f_C 0.00816269 and DESC boundary f_C 0.00722812.
+DESC's f_C uses a surface-weighted mean absolute residual with its own
+normalization. The final DESC surface is nested; the Simsopt surface retains
+two dense-grid quality warnings. A second experiment screened 32 simple-ring
+seeds at each of three volumes and found no valid start, so BFGS did not begin.
+The [validation record](docs/preview_validation.md) gives definitions,
+parameters and limitations. Raw example evidence is retained in the parent
+validation workspace at
+`evaluation/coileval_preview_20261102/examples/results_20261103/`.
 
 ## Documentation
 
