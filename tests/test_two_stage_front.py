@@ -179,7 +179,8 @@ def test_section_operator_rejects_missing_or_invalid_phi_membership():
         SectionPsiOperator(field,axis(),rz,torch.tensor([0.,.1]),torch.tensor([0,3]),dtype=DT)
 
 
-def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis():
+@pytest.mark.parametrize('refit_ridge',[None,1e-3])
+def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis(refit_ridge):
     # A smooth integrable toy field supplies an exact periodic axis and an
     # elliptical psi. Both coefficient and axis parameters are perturbed.
     samples=torch.zeros((8,4),dtype=DT);samples[:,0]=1.
@@ -197,11 +198,11 @@ def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis():
                 return rz[None].expand(steps+1,-1,-1)
             return .2*rz+.8*root[None]
         return trace
-    def factors(op):
+    def factors(op,ridge=1e-6):
         identity=torch.eye(op.coefficient_count,dtype=DT)
         A=torch.stack([op.apply(column).reshape(-1) for column in identity],-1)
         scale=torch.linalg.vector_norm(A,dim=0).clamp_min(1e-10)
-        upper=torch.linalg.qr(torch.cat((A/scale,math.sqrt(1e-6)*identity)),mode='r').R
+        upper=torch.linalg.qr(torch.cat((A/scale,math.sqrt(ridge)*identity)),mode='r').R
         return scale.detach(),upper.detach()
     zero=torch.zeros(2,dtype=DT)
     op1=TensorProductPsiOperator(magnetic(zero),samples,a=.15,degree=2,mtor=0,
@@ -215,7 +216,8 @@ def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis():
     op2=SectionPsiOperator(magnetic(zero),samples,torch.tensor(sampling['rz']),
                            torch.tensor(boundary['phis']),sampling['section_index'],a=.15,
                            degree=2,mtor=0,dtype=DT)
-    scale2,upper2=factors(op2)
+    ridge2=1e-6 if refit_ridge is None else refit_ridge
+    scale2,upper2=factors(op2,ridge2)
     phi=torch.tensor(boundary['phis'])
     center=dict(axis_samples=samples,psi_coefficients=zero,psi_scale=scale2,psi_upper=upper2,
         two_stage=metadata,target_level=.2,target_dVds=.3,target_adjoint_residual=0.,
@@ -223,6 +225,13 @@ def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis():
         target_phi=phi,target_axis_R=torch.ones(5,dtype=DT),
         config=dict(nfp=4,psi_a=.15,psi_poly_degree=2,psi_m_tor=0,psi_n_r=7,psi_n_z=8,
                     psi_n_phi=5,axis_trace_steps=8,axis_sample_count=8))
+    center['config']['psi_refit_ridge']=refit_ridge
+    built=build_two_stage_front(magnetic(zero),tracing(zero),center,dtype=DT)
+    A=torch.stack([op2.apply(column).reshape(-1) for column in torch.eye(2,dtype=DT)],-1)
+    scaled=A/scale2
+    expected_coefficients=torch.linalg.solve(scaled.T@scaled+ridge2*torch.eye(2,dtype=DT),
+        scaled.T@op2.rhs.reshape(-1))/scale2
+    torch.testing.assert_close(built.geometry.coefficients,expected_coefficients,rtol=2e-8,atol=2e-9)
     def value(parameters,local=False):
         out=build_two_stage_front(magnetic(parameters),tracing(parameters),center,dtype=DT,local_value=local)
         return out.geometry.coefficients.square().sum()+.4*out.level+3*out.domain['spacing']+.02*out.geometry.axis_samples[:,0].mean()

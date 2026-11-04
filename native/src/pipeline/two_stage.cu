@@ -341,3 +341,12 @@ extern "C" int sgpu_two_stage_set_alpha_radial_basis_v1(void* context,int basis)
     ctx->alpha_radial_basis=basis;
     return 0;
 }
+
+// S1 and its frozen training boundary have already been constructed. Change
+// only the subsequent S2 objective; do not silently rebuild S1 with this ridge.
+extern "C" int sgpu_two_stage_set_refit_ridge_v1(void* context,double ridge) {
+    auto* ctx=static_cast<TwoStageNativeContextV1*>(context);
+    if (!ctx || !std::isfinite(ridge) || ridge<0.) return 1;
+    ctx->config.psi_ridge=ridge;
+    return 0;
+}

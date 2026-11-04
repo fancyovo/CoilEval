@@ -75,6 +75,8 @@ class CpuBackend:
             alpha_iterations=config.alpha_iterations,alpha_radial_weighting=config.alpha_radial_weighting,
             alpha_weight_sigma=config.alpha_weight_sigma,alpha_count_floor=config.alpha_count_floor,
             alpha_radial_basis=config.alpha_radial_basis)
+        if config.psi_refit_ridge is not None:
+            options['psi_refit_ridge']=config.psi_refit_ridge
         field=CpuField(coils,cfg.segments_per_coil,self.threads,self.library)
         def stage(name,fn):
             t=perf_counter();out=fn();timing[name]=perf_counter()-t;return out
@@ -110,10 +112,13 @@ class CpuBackend:
                         target_count=config.psi_refit_points,nfp=coils.nfp))
                 two=dict(stage1_coefficients=coefficients,stage1_scale=factor['scale'],
                     stage1_upper=factor['upper'],boundary=boundary,sampling=sample)
+                refit_cfg=type(cfg).from_buffer_copy(bytes(cfg))
+                if config.psi_refit_ridge is not None:
+                    refit_cfg.psi_ridge=config.psi_refit_ridge
                 coefficients,factor=stage('psi_refit',lambda:fit_psi(field,axis,sample['rz'],sample['phi'],
-                    cfg,coils.nfp,sample.get('row_weights')))
+                    refit_cfg,coils.nfp,sample.get('row_weights')))
                 diagnostics.update(psi_refit_domain_volume=boundary['volume_m3'],
-                    psi_refit_training_count=len(sample['rz']))
+                    psi_refit_training_count=len(sample['rz']),psi_refit_ridge=refit_cfg.psi_ridge)
             geometry=PsiGeometry(torch.from_numpy(axis),torch.from_numpy(coefficients),coils.nfp,
                 cfg.psi_a,cfg.psi_poly_degree,cfg.psi_m_tor,
                 maximum_radius_scale=cfg.surface_max_radius_scale,root_iterations=cfg.surface_newton_iters,

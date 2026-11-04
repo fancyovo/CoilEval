@@ -165,3 +165,19 @@ def test_cuda_explicit_old_library_and_tensor_scale_fallback(cuda_library):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
     actual = _RadialRoot.apply(p, level, p.new_tensor(.15), 1., 20, 1e-12, cuda_library)
     torch.testing.assert_close(actual, solve(p, level), rtol=0, atol=0)
+
+
+@pytest.mark.gpu
+def test_fused_candidate_and_torch_select_same_first_branch(cuda_library):
+    # The old kernel returns r=1 with positive derivative. The shared wrapper
+    # must instead select the axis-connected root sqrt(.5), with its VJP.
+    p=torch.tensor([0.,0.,1.,0.,8.,0.,-16.,0.,8.],device='cuda',dtype=torch.float64,
+                   requires_grad=True)
+    level=p.new_tensor(1.,requires_grad=True)
+    outputs=[]
+    for library in (None,cuda_library):
+        root=_RadialRoot.apply(p,level,1.,1.,20,1e-12,library)
+        outputs.append((root,*torch.autograd.grad(root,(p,level))))
+    torch.testing.assert_close(outputs[0][0],p.new_tensor(2**-.5),rtol=1e-10,atol=1e-12)
+    for a,b in zip(*outputs):
+        torch.testing.assert_close(a,b,rtol=1e-12,atol=1e-12)

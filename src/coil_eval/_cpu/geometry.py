@@ -8,7 +8,9 @@ from .._autograd.downstream import polynomial
 
 
 def target_surface(geometry, cfg, library):
-    n=cfg.flux_phi_count; guard=max(cfg.psi_n_phi,2*cfg.psi_m_tor+1)
+    # Match the native sampled guard; a resolved psi Fourier series does not
+    # make the nonlinear radial-capacity envelope band limited to that order.
+    n=cfg.flux_phi_count; guard=max(2*cfg.psi_n_phi,4*cfg.psi_m_tor+1)
     phi=np.concatenate((np.arange(n)/n,np.arange(guard)/guard))*2*np.pi/geometry.nfp
     theta=np.arange(cfg.flux_theta_count)*2*np.pi/cfg.flux_theta_count
     pp=torch.from_numpy(phi)[:,None];tt=torch.from_numpy(theta)[None,:]
@@ -42,6 +44,35 @@ def target_surface(geometry, cfg, library):
         target_capacity_volume=out[0],target_capacity_level=out[1],target_surface_volume=out[3])
 
 
+def _formal_boundary_radii(geometry,polynomial,level):
+    """Use the local first-branch solver without rejecting other valid rays.
+
+    Ordinary batches solve together. A failed batch is split until unavailable
+    rays are isolated; their residual remains infinite, so formal filtering
+    removes their candidates before the existing ordered stratification.
+    """
+    shape=polynomial.shape[:-1]
+    rays=polynomial.reshape(-1,polynomial.shape[-1])
+    radii=polynomial.new_zeros(len(rays))
+    valid=torch.zeros(len(rays),dtype=torch.bool,device=polynomial.device)
+    pending=[(0,len(rays))]
+    while pending:
+        start,end=pending.pop()
+        try:
+            roots=geometry.solve_rays(rays[start:end],level)
+        except ValueError:
+            if end-start>1:
+                mid=(start+end)//2
+                pending.extend(((mid,end),(start,mid)))
+            continue
+        radii[start:end]=roots
+        valid[start:end]=True
+    powers=torch.arange(polynomial.shape[-1],device=polynomial.device,dtype=polynomial.dtype)
+    residual=((rays*radii[:,None]**powers).sum(-1)-level).abs()
+    residual=torch.where(valid,residual,torch.full_like(residual,float('inf')))
+    return radii.reshape(shape),residual.reshape(shape)
+
+
 def formal_volume_points(geometry,level,flux,c,cfg):
     rays=c.volume_phi_count*c.volume_theta_count
     nr=(math.ceil(c.volume_point_count*1.25)+rays-1)//rays
@@ -52,17 +83,7 @@ def formal_volume_points(geometry,level,flux,c,cfg):
     theta=(it+.613+.217*ip).remainder(c.volume_theta_count)*float(2*math.pi/c.volume_theta_count)
     # The formal sampler retains valid rays individually before stratification.
     p=geometry.rays(phi.double(),theta.double())
-    r=(level/p[...,2]).clamp_min(0).sqrt().clamp(1e-12*geometry.a,geometry.a*geometry.maximum_radius_scale)
-    powers=torch.arange(p.shape[-1],dtype=torch.float64)
-    for _ in range(geometry.root_iterations):
-        value=(p*r[...,None]**powers).sum(-1)
-        derivative=(p[...,1:]*powers[1:]*r[...,None]**(powers[1:]-1)).sum(-1)
-        denom=torch.where(derivative.abs()>1e-14,derivative,torch.where(derivative<0,-1e-14,1e-14))
-        limit=.45*r.abs().clamp_min(1e-8*geometry.a)
-        step=((value-level)/denom).clamp(-limit,limit)
-        r=torch.where((value-level).abs()<=geometry.root_tolerance,r,
-            (r-step).clamp(1e-12*geometry.a,geometry.maximum_radius_scale*geometry.a))
-    error=((p*r[...,None]**powers).sum(-1)-level).abs()
+    r,error=_formal_boundary_radii(geometry,p,level)
     boundary=r.float().flatten().repeat_interleave(nr)
     phi=phi.flatten().repeat_interleave(nr);theta=theta.flatten().repeat_interleave(nr)
     radial=torch.arange(nr,dtype=torch.float32).repeat(rays)

@@ -71,6 +71,10 @@ class TwoStageNative:
         if weighted_fit is not None:
             weighted_fit.argtypes=[ct.c_void_p,_D,_D,_D,ct.c_int,_D,_D,_D,_D,ct.c_int]
             weighted_fit.restype=ct.c_int
+        refit_ridge=getattr(self.lib,'sgpu_two_stage_set_refit_ridge_v1',None)
+        if refit_ridge is not None:
+            refit_ridge.argtypes=[ct.c_void_p,ct.c_double]
+            refit_ridge.restype=ct.c_int
         self.lib.sgpu_two_stage_resume_v1.argtypes=[ct.c_void_p,_D,ct.c_int,ct.c_double,
             ct.POINTER(native._SgpuScoreConfig),ct.POINTER(native._SgpuScoreResult),
             _D,ct.c_int,_I,_D,ct.c_char_p]
@@ -157,6 +161,13 @@ class TwoStageNative:
             if setter is None:
                 raise RuntimeError('native library does not provide smooth alpha weighting; rebuild the library')
             self._check(setter(context,1,alpha_options['alpha_weight_sigma'],alpha_options['alpha_count_floor']))
+        refit_ridge=getattr(config,'psi_refit_ridge',None)
+        if refit_ridge is not None:
+            setter=getattr(self.lib,'sgpu_two_stage_set_refit_ridge_v1',None)
+            if setter is None:
+                raise RuntimeError('native library does not support psi_refit_ridge; rebuild the library')
+            self._check(setter(context,refit_ridge))
+            alpha_options['psi_refit_ridge']=float(refit_ridge)
         axis=axes[:4*count.value].reshape(4,count.value).T.copy()
         first=first[:npsi.value].copy()
         s1_scale,s1_upper=self._factor(len(first)) if capture else (None,None)

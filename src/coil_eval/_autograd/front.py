@@ -192,6 +192,90 @@ def differentiable_axis(field: Callable, trace: Callable, captured_start, *,
     return torch.cat((rz, rhs), -1), diagnostics
 
 
+@lru_cache(maxsize=32)
+def _radial_bernstein_matrix(degree, device):
+    # q(r)=psi'(r)/r is expressed on [0, candidate]. Positive Bernstein
+    # coefficients certify its sign throughout that interval, not just at r.
+    with torch.inference_mode(False):
+        return torch.tensor([[math.comb(k,j)/math.comb(degree,j) if j<=k else 0.
+                              for j in range(degree+1)] for k in range(degree+1)],
+                            dtype=torch.float64, device=device)
+
+
+def _connected_radial_root(p, level, candidate, radius_scale, maximum_scale,
+                           iterations, tolerance):
+    """Retain certified roots; resolve ambiguous rays on their first branch.
+
+    A positive derivative at a root alone is insufficient: a later positive
+    branch can follow two folds. Most rays certify entirely on-device. Only
+    unresolved intervals use the same derivative-root isolation as S2 domain
+    construction, including its exact treatment of near-multiple roots.
+    """
+    powers = torch.arange(p.shape[-1], device=p.device, dtype=p.dtype)
+    rp = candidate[..., None]**powers
+    derivative = (p[..., 1:]*powers[1:]*candidate[..., None]**(powers[1:]-1)).sum(-1)
+    residual = (p*rp).sum(-1)-level
+    valid = (torch.isfinite(candidate) & (candidate > 0) &
+             (residual.abs() < max(1e-8, 100*tolerance)) & (derivative > 1e-12))
+    degree = p.shape[-1]-3
+    scaled_q = p[..., 2:]*powers[2:]*candidate[..., None]**powers[:degree+1]
+    matrix = _radial_bernstein_matrix(degree, p.device)
+    bernstein = scaled_q@matrix.T
+    rounding = 64*torch.finfo(p.dtype).eps*(scaled_q.abs()@matrix.T).amax(-1)
+    certified = (bernstein > rounding[..., None]).all(-1)
+    uncertain = ~(valid & certified)
+    if not bool(uncertain.any()):
+        return candidate, rp, derivative
+
+    import numpy as np
+    from .._two_stage.branches import branch_limits
+    from .._two_stage.boundary import first_connected_branch
+    scale = float(radius_scale)
+    indices = torch.nonzero(uncertain.reshape(-1), as_tuple=False)[:, 0]
+    selected = p.reshape(-1, p.shape[-1]).index_select(0, indices)
+    normalized = (selected*scale**powers).cpu().numpy()
+    caps, _, _, _ = branch_limits(normalized, float(maximum_scale), first_connected_branch)
+    capacities = np.polynomial.polynomial.polyval(caps, normalized.T, tensor=False)
+    targets = level.reshape(-1).index_select(0, indices)
+    target_host = targets.cpu().numpy()
+    unavailable = (~np.isfinite(target_host)) | (target_host <= 0) | (target_host > capacities)
+    if np.any(unavailable):
+        bad = int(np.flatnonzero(unavailable)[0])
+        raise ValueError('radial root target exceeds axis-connected capacity or is nonpositive '
+                         f'(ray {int(indices[bad])}, target={target_host[bad]:.17g}, '
+                         f'capacity={capacities[bad]:.17g})')
+    cap = torch.as_tensor(caps*scale, device=p.device, dtype=p.dtype)
+    current = candidate.reshape(-1).index_select(0, indices)
+    keep = valid.reshape(-1).index_select(0, indices) & (current < cap)
+    if bool(keep.all()):
+        return candidate, rp, derivative
+    repair = ~keep
+    selected, targets, cap, indices = (value[repair] for value in (selected, targets, cap, indices))
+    lower = torch.zeros_like(cap)
+    upper = cap
+    r = torch.minimum((targets/selected[:, 2]).sqrt(), cap*.5)
+    previous = torch.full_like(r, float('inf'))
+    for _ in range(iterations):
+        values = (selected*r[:, None]**powers).sum(-1)-targets
+        slopes = (selected[:, 1:]*powers[1:]*r[:, None]**(powers[1:]-1)).sum(-1)
+        done = values.abs() <= tolerance
+        lower = torch.where(values < 0, r, lower)
+        upper = torch.where(values > 0, r, upper)
+        newton = r-values/slopes
+        use_newton = ((slopes > 0) & (newton >= lower) & (newton <= upper)
+                      & (values.abs() < .5*previous))
+        r = torch.where(done, r, torch.where(use_newton, newton, (lower+upper)*.5))
+        previous = values.abs()
+    candidate = candidate.reshape(-1).clone().index_copy(0, indices, r).reshape(level.shape)
+    rp = candidate[..., None]**powers
+    derivative = (p[..., 1:]*powers[1:]*candidate[..., None]**(powers[1:]-1)).sum(-1)
+    residual = (p*rp).sum(-1)-level
+    if not bool(torch.isfinite(candidate).all() & (candidate > 0).all() &
+                (residual.abs() < max(1e-8, 100*tolerance)).all() & (derivative > 1e-12).all()):
+        raise ValueError('radial root is unavailable, inaccurate, or singular')
+    return candidate, rp, derivative
+
+
 class _RadialRoot(torch.autograd.Function):
     @staticmethod
     def forward(ctx, polynomial, level, radius_scale, maximum_scale, iterations, tolerance, library=None):
@@ -202,23 +286,26 @@ class _RadialRoot(torch.autograd.Function):
         shape = torch.broadcast_shapes(p.shape[:-1], level64.shape)
         p = p.expand(*shape, p.shape[-1])
         level64 = level64.expand(shape)
-        if (p.is_cuda and getattr(library, 'has_radial_root', False) and
-                3 <= p.shape[-1] <= 33 and
-                isinstance(radius_scale, (int, float)) and isinstance(maximum_scale, (int, float))):
-            r, rp, derivative = library.radial_root(p, level64, radius_scale,
-                                                   maximum_scale, iterations, tolerance)
-            ctx.save_for_backward(rp, derivative)
-            ctx.poly_shape, ctx.level_shape = polynomial.shape, level.shape
-            ctx.poly_dtype, ctx.level_dtype = polynomial.dtype, level.dtype
-            return r.to(polynomial.dtype)
         quadratic = p[..., 2]
         if not bool((quadratic > 0).all()):
             raise ValueError('radial root has nonpositive quadratic coefficient')
+        native_result = None
+        if (p.is_cuda and getattr(library, 'has_radial_root', False) and
+                3 <= p.shape[-1] <= 33 and
+                isinstance(radius_scale, (int, float)) and isinstance(maximum_scale, (int, float))):
+            try:
+                native_result = library.radial_root(p, level64, radius_scale,
+                                                    maximum_scale, iterations, tolerance)
+            except ValueError as error:
+                if str(error) != 'radial root is unavailable, inaccurate, or singular':
+                    raise
+                # An old fused solver can miss the first root. Reconstruct its
+                # candidate for the shared branch resolver below.
         minimum = 1e-12*radius_scale
         maximum = maximum_scale*radius_scale
         r = torch.sqrt(level64.clamp_min(0)/quadratic).clamp(minimum, maximum)
         powers = torch.arange(p.shape[-1], device=p.device, dtype=p.dtype)
-        for _ in range(iterations):
+        for _ in range(iterations if native_result is None else 0):
             rp = r[..., None]**powers
             value = (p*rp).sum(-1)
             derivative = (p[..., 1:]*powers[1:]*r[..., None]**(powers[1:]-1)).sum(-1)
@@ -228,13 +315,10 @@ class _RadialRoot(torch.autograd.Function):
             step = ((value-level64)/denom).clamp(-limit, limit)
             r = torch.where((value-level64).abs() <= tolerance, r,
                             (r-step).clamp(minimum, maximum))
-        rp = r[..., None]**powers
-        derivative = (p[..., 1:]*powers[1:]*r[..., None]**(powers[1:]-1)).sum(-1)
-        residual = (p*rp).sum(-1)-level64
-        if not bool(torch.isfinite(r).all() & (r > 0).all() &
-                    (residual.abs() < max(1e-8, 100*tolerance)).all() &
-                    (derivative.abs() > 1e-12).all()):
-            raise ValueError('radial root is unavailable, inaccurate, or singular')
+        if native_result is not None:
+            r = native_result[0]
+        r, rp, derivative = _connected_radial_root(
+            p, level64, r, radius_scale, maximum_scale, iterations, tolerance)
         ctx.save_for_backward(rp, derivative)
         ctx.poly_shape, ctx.level_shape = polynomial.shape, level.shape
         ctx.poly_dtype, ctx.level_dtype = polynomial.dtype, level.dtype

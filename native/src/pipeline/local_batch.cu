@@ -184,6 +184,7 @@ bool score_local_batch_impl(
             std::array<double, 25> polynomial;
             ray_polynomial_phi0(psis[query], config, theta, polynomial);
             const double radius = solve_ray_radius(polynomial, edge_level, config);
+            if (!(radius > 0)) return false;
             surface_radius[index] = radius;
             surface_R[index] = axes[query].R[0] + radius * std::cos(theta);
             surface_Z[index] = axes[query].Z[0] + radius * std::sin(theta);
@@ -625,6 +626,24 @@ bool score_local_batch_impl(
             static_cast<float>(config.surface_max_radius_scale),
             d_volume_boundary.data(), d_volume_boundary_residual.data()
         );
+        // The inherited active set is fixed for local derivatives. If one of
+        // its rays has no first-branch root, reject the endpoint instead of
+        // silently sampling the magnetic axis or switching to another branch.
+        std::vector<float> boundary_residuals(d_volume_boundary_residual.size());
+        if (cudaMemcpy(boundary_residuals.data(), d_volume_boundary_residual.data(),
+                boundary_residuals.size() * sizeof(float), cudaMemcpyDeviceToHost)
+                != cudaSuccess) return false;
+        for (int query = 0; query < query_count; ++query) {
+            for (int source_index : volume_branch.volume_source_indices) {
+                const int ray = source_index / volume_radial;
+                if (ray < 0 || ray >= volume_rays ||
+                    !(boundary_residuals[static_cast<size_t>(query) * volume_rays + ray]
+                        <= config.flux_boundary_tolerance)) {
+                    sgpu_internal_set_error("local volume active ray has no valid axis-connected root");
+                    return false;
+                }
+            }
+        }
         local_batch_generate_volume_points_kernel<<<
             static_cast<unsigned int>((volume_total + threads - 1) / threads), threads
         >>>(

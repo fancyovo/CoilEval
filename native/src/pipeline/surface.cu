@@ -5,6 +5,7 @@
 #include "pipeline/psi.cuh"
 #include "pipeline/surface.cuh"
 #include "nvtx_profile.h"
+#include "radial_first_branch.h"
 
 namespace coil_eval::pipeline {
 
@@ -65,7 +66,11 @@ double solve_ray_radius(
         const double step = std::min(limit, std::max(-limit, residual / denominator));
         radius = std::min(max_radius, std::max(1.0e-12 * config.psi_a, radius - step));
     }
-    return radius;
+    double connected = radius / config.psi_a;
+    if (!coil_eval_radial::first_root(polynomial.data(), config.psi_poly_degree,
+            level, config.surface_max_radius_scale,
+            config.surface_newton_tolerance, connected)) return 0.0;
+    return connected * config.psi_a;
 }
 
 bool screen_surfaces_native(
@@ -81,6 +86,7 @@ bool screen_surfaces_native(
     const int theta_count = config.surface_theta_count;
     const size_t count = static_cast<size_t>(levels) * theta_count;
     std::vector<double> R(count), Z(count), radii(count), theta(count), R_end, Z_end;
+    std::vector<bool> valid_roots(levels, true);
     auto substage_started = Clock::now();
     for (int level_index = 0; level_index < levels; ++level_index) {
         for (int theta_index = 0; theta_index < theta_count; ++theta_index) {
@@ -89,6 +95,7 @@ bool screen_surfaces_native(
             std::array<double, 25> polynomial;
             ray_polynomial_phi0(psi, config, theta[index], polynomial);
             radii[index] = solve_ray_radius(polynomial, config.surface_levels[level_index], config);
+            if (!(radii[index] > 0)) valid_roots[level_index] = false;
             R[index] = axis.R[0] + radii[index] * std::cos(theta[index]);
             Z[index] = axis.Z[0] + radii[index] * std::sin(theta[index]);
         }
@@ -124,7 +131,8 @@ bool screen_surfaces_native(
         screen.radius_max = radius_max;
         screen.relative_drift_p95 = screen.drift_p95 / std::max(screen.radius_mean, 1.0e-14);
         screen.one_period_relative_drift_p95 = screen.relative_drift_p95;
-        screen.stable = screen.drift_p95 <= config.surface_drift_absolute_tolerance &&
+        screen.stable = valid_roots[level_index] &&
+                        screen.drift_p95 <= config.surface_drift_absolute_tolerance &&
                         screen.relative_drift_p95 <= 0.30 &&
                         screen.radius_max < config.surface_max_radius_scale * config.psi_a * 0.999;
         screen.strict = screen.stable &&
@@ -256,6 +264,7 @@ bool screen_surface_confidence_native(
     const size_t count = static_cast<size_t>(levels) * theta_count;
     std::vector<double> R(count), Z(count), radii(count), radius_mean(levels, 0.0);
     std::vector<double> radius_max(levels, 0.0), R_end, Z_end;
+    std::vector<bool> valid_roots(levels, true);
     auto substage_started = Clock::now();
     {
         SGPU_NVTX_RANGE("surface.ray_roots.cpu");
@@ -268,6 +277,7 @@ bool screen_surface_confidence_native(
                 radii[index] = solve_ray_radius(
                     polynomial, config.surface_levels[level_index], config
                 );
+                if (!(radii[index] > 0)) valid_roots[level_index] = false;
                 radius_mean[level_index] += radii[index] / theta_count;
                 radius_max[level_index] = std::max(radius_max[level_index], radii[index]);
                 R[index] = axis.R[0] + radii[index] * std::cos(theta);
@@ -338,6 +348,10 @@ bool screen_surface_confidence_native(
                 : 1.0 / (1.0 + std::exp(-radius_margin));
         confidence[level_index] = logistic_confidence(risk[level_index], config) *
             radius_confidence;
+        if (!valid_roots[level_index]) {
+            risk[level_index] = std::numeric_limits<double>::infinity();
+            confidence[level_index] = 0.0;
+        }
     }
     project_nonincreasing_confidence(confidence, config);
 
@@ -384,6 +398,7 @@ bool screen_surface_confidence_native(
         std::array<double, 25> polynomial;
         ray_polynomial_phi0(psi, config, theta, polynomial);
         const double radius = solve_ray_radius(polynomial, screen.level, config);
+        if (!(radius > 0)) return false;
         mean_radius += radius / theta_count;
         maximum_radius = std::max(maximum_radius, radius);
     }
@@ -423,6 +438,10 @@ bool verify_surface_long_horizon(
         std::array<double, 25> polynomial;
         ray_polynomial_phi0(psi, config, theta, polynomial);
         const double radius = solve_ray_radius(polynomial, screen.level, config);
+        if (!(radius > 0)) {
+            screen.stable = screen.strict = false;
+            return true;
+        }
         R[theta_index] = axis.R[0] + radius * std::cos(theta);
         Z[theta_index] = axis.Z[0] + radius * std::sin(theta);
     }

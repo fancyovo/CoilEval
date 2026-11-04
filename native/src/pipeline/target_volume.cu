@@ -56,9 +56,11 @@ bool screen_target_volume_native(void* field,const AxisData& axis,const PsiData&
     // Flux quadrature may use fewer toroidal sections than the fitted psi
     // representation. Certifying only those sections can miss a radial fold
     // between them. Keep the volume quadrature/adjoint unchanged, but limit
-    // its admissible level using the psi fitting grid and at least two samples
-    // per toroidal mode. This remains a sampled, not global, certificate.
-    const int guard_phi=std::max(config.psi_n_phi,2*config.psi_m_tor+1);
+    // its admissible level using twice the psi fitting grid and at least four
+    // samples per toroidal mode. The radial-capacity envelope is nonlinear in
+    // those modes and can have a minimum between fitting sections. This remains
+    // a sampled, not global, certificate.
+    const int guard_phi=sgpu_target::capacity_guard_phi_count(config.psi_n_phi,config.psi_m_tor);
     if(guard_phi>config.flux_phi_count){
         CoilEvalHostProfile guard_profile("target.capacity_guard");
         SgpuScoreConfig guard_config=config;
@@ -91,6 +93,11 @@ bool screen_target_volume_native(void* field,const AxisData& axis,const PsiData&
     for(size_t j=0;j<R.size();++j){
         const double theta=TWOPI*j/R.size();std::array<double,25> p;
         ray_polynomial_phi0(psi,config,theta,p);r[j]=solve_ray_radius(p,level,config);
+        if(!(r[j]>0)){
+            std::snprintf(result.error_message,sizeof(result.error_message),
+                "target surface ray exceeds axis-connected radial capacity");
+            return true;
+        }
         if(std::abs(sgpu_target::value(p,config.psi_poly_degree,r[j]/config.psi_a)-level)>config.flux_boundary_tolerance)return true;
         R[j]=axis.R[0]+r[j]*std::cos(theta);Z[j]=axis.Z[0]+r[j]*std::sin(theta);
     }

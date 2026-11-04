@@ -7,12 +7,16 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.9.0 (unreleased). CPU and GPU evaluation support different
+The source package is 0.9.1 (unreleased). CPU and GPU evaluation support different
 field-period and base-coil counts, with explicit QA or QH helicity. The tensor
 constructor accepts `nfp=coils.nfp`; its default remains 4. For QA choose
 `EvaluationConfig(..., helicity=(1,0))`; standard QH uses `(1,coils.nfp)`.
 See the [tensor guide](docs/torch.md), [CPU guide](docs/cpu.md) and
 [release history](CHANGELOG.md).
+
+Version 0.9.1 repairs angle inversion and axis-connected radial sampling, and
+adds an explicit second-fit regularization setting. The frozen 0.9.0 calibration
+wheel below predates these repairs; use a source build for the 0.9.1 changes.
 
 The examples accept `--helicity M N`; for a QA input use
 `python examples/qs_metrics.py --coils qa.json --helicity 1 0 --volume V --radius A`.
@@ -24,7 +28,7 @@ Install the wheel with the extra matching your backend: `[cpu]` for CPU or
 `[gpu]` for GPU. A bare wheel installs only the NumPy-based package interface.
 CPU evaluation uses PyTorch for matrix solves even when gradients are not requested.
 
-Install the supplied 0.9.0 binary wheel in a Python 3.10+ environment:
+Install the supplied frozen 0.9.0 binary wheel in a Python 3.10+ environment:
 
 ```sh
 python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"

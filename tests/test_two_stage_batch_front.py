@@ -116,8 +116,11 @@ def losses(front):
     return front.coefficients.square().sum(-1)+.4*front.levels+3*spacing+.02*front.axis_samples[:,:,0].mean(-1)
 
 
-def test_batched_two_fit_builder_matches_single_values_vjps_and_zero_cross_query_response():
+@pytest.mark.parametrize('refit_ridges',[None,(1e-3,1e-5)])
+def test_batched_two_fit_builder_matches_single_values_vjps_and_zero_cross_query_response(refit_ridges):
     centers=toy_centers()
+    if refit_ridges is not None:
+        for center,ridge in zip(centers,refit_ridges):center['config']['psi_refit_ridge']=ridge
     parameters=torch.zeros((2,2),dtype=DT,requires_grad=True)
     batch_field=ToyField(parameters)
     out=build_batch_two_stage_front(batch_field,centers,dtype=DT)
@@ -141,8 +144,11 @@ def test_batched_two_fit_builder_matches_single_values_vjps_and_zero_cross_query
     assert out.axis_diagnostics['second_fit_point_count'].shape==(2,)
 
 
-def test_batched_local_value_fd_retains_both_moving_axes_and_domain_spacing():
+@pytest.mark.parametrize('refit_ridges',[None,(1e-3,1e-5)])
+def test_batched_local_value_fd_retains_both_moving_axes_and_domain_spacing(refit_ridges):
     centers=toy_centers()
+    if refit_ridges is not None:
+        for center,ridge in zip(centers,refit_ridges):center['config']['psi_refit_ridge']=ridge
     parameters=torch.zeros((2,2),dtype=DT,requires_grad=True)
     out=build_batch_two_stage_front(ToyField(parameters),centers,dtype=DT)
     actual,=torch.autograd.grad(losses(out).sum(),parameters)

@@ -44,12 +44,12 @@ void section_equivalence() {
  }
 }
 
-double limit(int count) {
+double limit(int count,int mode=8,double phase=0.) {
  double level=1e100;
  for(int j=0;j<count;++j) {
-  const double coefficients[]={-1.,1.};
-  const int a[]={4,4},b[]={0,0},m[]={0,8},kind[]={0,0};
-  const auto section=sgpu_target::collapse_section(coefficients,a,b,m,kind,2,
+  const double coefficients[]={-1.,std::cos(phase),-std::sin(phase)};
+  const int a[]={4,4,4},b[]={0,0,0},m[]={0,mode,mode},kind[]={0,0,1};
+  const auto section=sgpu_target::collapse_section(coefficients,a,b,m,kind,3,
       2.*3.141592653589793*j/count);
   const auto p=sgpu_target::radial_polynomial(section,4,1.,0.);
   double lo=0.,hi=1.;
@@ -59,4 +59,10 @@ double limit(int count) {
  }return level;
 }
 int main(){section_equivalence();assert(limit(8)>.99);assert(limit(48)<.13);
+ // The order-12 polynomial is resolved on 48 sections, yet its capacity
+ // minimum lies halfway between them. A .135 level is falsely admitted.
+ const int dense=sgpu_target::capacity_guard_phi_count(48,12);
+ assert(dense==96);
+ assert(limit(48,12,3.141592653589793/4.)>.135);
+ assert(limit(dense,12,3.141592653589793/4.)<.135);
  std::cout<<"section polynomial equivalence and toroidal capacity aliasing passed\n";}

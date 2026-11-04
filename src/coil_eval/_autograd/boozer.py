@@ -70,22 +70,55 @@ def fourier_values(data, theta, phi):
     return angular_fourier_values(data, theta, phi)
 
 
+def _angular_correction_bound(data):
+    """A global absolute-value bound, including composed periodic maps."""
+    if isinstance(data, ComposedAngularCorrection):
+        return (_angular_correction_bound(data.base)
+                + _angular_correction_bound(data.correction))
+    return torch.hypot(data[2], data[3]).sum()
+
+
 def invert_alpha(data, theta_star, phi, *, max_iterations=30,
                  tolerance=1e-11, min_jacobian=1e-6):
-    """Solve theta+lambda(theta,phi)=theta_star with its implicit derivative."""
+    """Invert the unchanged alpha map with safeguarded Newton and implicit AD.
+
+    Clipping Newton's step alone can produce a persistent two-cycle even for
+    a strictly increasing Fourier map. The coefficient bound brackets every
+    root; reject steps outside the current sign bracket or after insufficient
+    residual reduction in favor of bisection.
+    This changes only the scalar root solver, never the fitted correction.
+    """
     with torch.no_grad():
-        theta = theta_star.clone()
+        theta = torch.broadcast_tensors(theta_star, phi)[0]
+        bound = _angular_correction_bound(data)
+        lower, upper = theta - bound, theta + bound
+        theta = theta.clone()
+        previous_residual = torch.full_like(theta, float('inf'))
         for iteration in range(max_iterations):
             lam, lt, _ = fourier_values(data, theta, phi)
             residual = theta + lam - theta_star
             jacobian = 1 + lt
             if not bool(torch.isfinite(jacobian).all() & (jacobian > min_jacobian).all()):
                 raise ValueError('noninvertible alpha coordinate map')
-            theta = theta - (residual / jacobian).clamp(-.5, .5)
-            if float(residual.abs().max()) <= tolerance:
+            converged = residual.abs() <= tolerance
+            if bool(converged.all()):
                 break
+            lower = torch.where(residual < 0, theta, lower)
+            upper = torch.where(residual > 0, theta, upper)
+            candidate = theta - residual / jacobian
+            use_newton = ((candidate >= lower) & (candidate <= upper)
+                          & (residual.abs() < .5 * previous_residual))
+            candidate = torch.where(use_newton,
+                                    candidate, (lower + upper) * .5)
+            # Keep solved points fixed: their rounded Newton step can equal a
+            # bracket endpoint, which must not send them back to its midpoint.
+            theta = torch.where(converged, theta, candidate)
+            previous_residual = residual.abs()
         lam, lt, _ = fourier_values(data, theta, phi)
         residual = theta + lam - theta_star
+        jacobian = 1 + lt
+        if not bool(torch.isfinite(jacobian).all() & (jacobian > min_jacobian).all()):
+            raise ValueError('noninvertible alpha coordinate map')
         if not bool(torch.isfinite(residual).all()) or float(residual.abs().max()) > tolerance * 10:
             raise ValueError('alpha coordinate inversion did not converge')
     lam, lt, _ = fourier_values(data, theta, phi)

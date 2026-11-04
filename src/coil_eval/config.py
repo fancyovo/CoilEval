@@ -24,8 +24,16 @@ class EvaluationConfig:
     alpha_count_floor: float = 32.0
     alpha_radial_basis: str = "zernike"
     stokes_validation_rtol: float | None = 1e-3
+    psi_refit_ridge: float | None = None
 
     def __post_init__(self):
+        if self.psi_refit_ridge is not None:
+            value = self.psi_refit_ridge
+            if isinstance(value, bool) or not math.isfinite(float(value)) or float(value) < 0:
+                raise ValueError("psi_refit_ridge must be finite and nonnegative, or None")
+            if self.psi_fit != 'two_stage':
+                raise ValueError("psi_refit_ridge requires psi_fit='two_stage'")
+            object.__setattr__(self, "psi_refit_ridge", float(value))
         if self.stokes_validation_rtol is not None:
             tolerance = float(self.stokes_validation_rtol)
             if not math.isfinite(tolerance) or tolerance <= 0:

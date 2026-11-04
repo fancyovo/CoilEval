@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.1 (unreleased)
+
+- Safeguard alpha-angle inversion with a root bracket and residual-decrease checks, eliminating clipped-Newton cycles on invertible maps while retaining fold rejection and implicit derivatives.
+- Keep radial inversion on the first axis-connected monotone branch in target-surface replay, CPU formal volume sampling, native flux/surface sampling and local batches. Preserve selected sample indices and reject unavailable active rays instead of sampling another branch.
+- Increase the toroidal capacity-guard grid to catch between-plane scalar folds. This remains a sampled capacity check, with the original geometric acceptance thresholds.
+- Expose optional `psi_refit_ridge` for the second scalar fit without changing the first fit or its training boundary. Preserve the original setting when omitted; retain separate regularization in CPU, scalar and batched local gradients.
+- Explain legacy target-volume capacity and axis-search failures separately, preserving their native messages and numerical status. Include the actual near-axis polynomial coefficients in source-domain rejection diagnostics.
+- Distinguish target-volume forward-precision validation from magnetic-flux rejection in diagnostics while preserving the legacy `flux_rejected` status for compatibility.
+
 ## 0.9.0 (unreleased)
 
 - Support positive field-period counts and arbitrary nonempty base-coil counts in CPU and GPU tensor evaluation, source capture, neighborhoods and target-surface QS. Tensor evaluators accept an explicit `nfp` (default 4).

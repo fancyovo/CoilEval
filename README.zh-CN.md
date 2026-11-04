@@ -5,10 +5,13 @@
 CoilEval 使用 NVIDIA GPU 或 CPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
 获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
 
-源码包版本为 0.9.0（尚未发布）。CPU 与 GPU 评估支持不同场周期数、基本线圈数，
+源码包版本为 0.9.1（尚未发布）。CPU 与 GPU 评估支持不同场周期数、基本线圈数，
 以及显式指定的 QA/QH 螺旋度。张量构造器传入 `nfp=coils.nfp`，兼容默认值仍为 4。
 QA 设置 `EvaluationConfig(..., helicity=(1,0))`，标准 QH 设置 `(1,coils.nfp)`。
 参见 [张量接口](docs/torch.zh-CN.md)、[CPU 指南](docs/cpu.zh-CN.md)与[版本历史](CHANGELOG.md)。
+
+0.9.1 修复角度反解和轴连通径向首支采样，并提供显式的第二次拟合正则化设置。
+下方冻结的 0.9.0 标定 wheel 早于这些修复；使用 0.9.1 改动需要从源码构建。
 
 示例支持 `--helicity M N`。对 QA 输入可运行
 `python examples/qs_metrics.py --coils qa.json --helicity 1 0 --volume V --radius A`，
@@ -19,7 +22,7 @@ QA 设置 `EvaluationConfig(..., helicity=(1,0))`，标准 QH 设置 `(1,coils.n
 请按后端选择依赖组：CPU 用 `[cpu]`，GPU 用 `[gpu]`。裸 wheel 仅安装依赖 NumPy
 的基础接口。CPU 普通求值也使用 PyTorch 的矩阵求解，因此不求梯度时同样需要 PyTorch。
 
-在 Python 3.10+ 环境中安装随附的 0.9.0 预编译 wheel：
+在 Python 3.10+ 环境中安装随附的冻结 0.9.0 预编译 wheel：
 
 ```sh
 python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"

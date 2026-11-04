@@ -425,7 +425,8 @@ def build_two_stage_front(field,trace,center: Mapping,*,config=None,
     op2=SectionPsiOperator(field,axis,domain['rz'],domain['phis'],domain['section_index'],
         nfp=nfp,a=a,degree=degree,mtor=mtor,dtype=dtype,row_weights=domain['row_weights'])
     coefficients,_=four_step_pcgls(op2,center['psi_coefficients'],center['psi_scale'],center['psi_upper'],
-        ridge=float(cfg.get('psi_ridge',1e-6)),iterations=int(cfg.get('psi_iterations',4)),
+        ridge=float(cfg['psi_refit_ridge'] if cfg.get('psi_refit_ridge') is not None else cfg.get('psi_ridge',1e-6)),
+        iterations=int(cfg.get('psi_iterations',4)),
         live_column_scale=bool(cfg.get('psi_live_column_scale',True)))
     geometry=PsiGeometry(axis,coefficients,nfp,a,degree,mtor,
         maximum_radius_scale=float(cfg.get('surface_max_radius_scale',1.)),
@@ -536,7 +537,8 @@ def build_batch_two_stage_front(field,centers,*,config_overrides=None,
         [d['section_index'] for d in domains],radii,nfp=nfp,degree=degree,mtor=mtor,dtype=dtype,
         row_weights=[d['row_weights'] for d in domains])
     coefficients,_=batch_four_step_pcgls(op2,stack('psi_coefficients'),stack('psi_scale'),stack('psi_upper'),
-        ridge=ridge,iterations=int(common['psi_iterations']),
+        ridge=[float(c['psi_refit_ridge'] if c.get('psi_refit_ridge') is not None else c.get('psi_ridge',1e-6)) for c in cfgs],
+        iterations=int(common['psi_iterations']),
         live_column_scale=bool(common['psi_live_column_scale']))
     geometries=[PsiGeometry(axes[i],coefficients[i],nfp,radii[i],degree,mtor,
         maximum_radius_scale=float(common['surface_max_radius_scale']),

@@ -562,6 +562,7 @@ def _score_result_dict(result: _SgpuScoreResult) -> dict:
         if name not in {"components", "timings", "error_message"}
     }
     diagnostics["error_message"] = bytes(result.error_message).split(b"\0", 1)[0].decode("utf-8", "replace")
+    _explain_score_failure(diagnostics)
     return {
         "score": float(result.score),
         "status": SGPU_SCORE_STATUS_NAMES.get(int(result.status), f"unknown_{result.status}"),
@@ -575,6 +576,50 @@ def _score_result_dict(result: _SgpuScoreResult) -> dict:
         },
         "diagnostics": diagnostics,
     }
+
+
+def _explain_score_failure(diagnostics):
+    """Disambiguate legacy native failures using their recorded stage values.
+
+    Keep the original native text separately. A failed axis search is not a
+    claim that no magnetic axis exists anywhere outside the sampled search.
+    """
+    message = diagnostics.get("error_message", "")
+    status = int(diagnostics.get("status", -1))
+    if status == 1 and not message:
+        diagnostics["native_error_message"] = message
+        diagnostics["failure_reason"] = "axis_search_no_accepted_elliptic_root"
+        diagnostics["error_message"] = (
+            "axis search found no elliptic fixed point meeting the configured "
+            "residual tolerance; verified candidate count="
+            + str(diagnostics.get("axis_candidate_count", 0))
+        )
+    elif status == 2 and message == "target volume outside certified geometry domain or inverse solve failed":
+        target = diagnostics.get("target_volume_requested", 0.)
+        maximum = diagnostics.get("target_volume_maximum", 0.)
+        if np.isfinite(target) and np.isfinite(maximum) and target > 0 and maximum > 0:
+            diagnostics["native_error_message"] = message
+            diagnostics["capacity_scope"] = "radial monotonicity certified on sampled angular rays"
+            if target > maximum:
+                diagnostics["failure_reason"] = "target_volume_exceeds_certified_capacity"
+                diagnostics["error_message"] = (
+                    f"target volume {target:.17g} m^3 exceeds the fitted psi "
+                    f"branch's sampled certified capacity {maximum:.17g} m^3"
+                )
+            else:
+                diagnostics["failure_reason"] = "target_volume_inverse_failed_within_capacity"
+                diagnostics["error_message"] = (
+                    "target-volume inverse solve failed within the fitted psi "
+                    "branch's sampled certified capacity"
+                )
+    elif status == 4 and message == "target-volume forward precision tolerance exceeded":
+        diagnostics["native_error_message"] = message
+        diagnostics["failure_reason"] = "target_volume_forward_precision_exceeded"
+        diagnostics["failure_stage"] = "target_volume_forward_validation"
+        diagnostics["error_message"] = (
+            "target-volume forward validation exceeded the configured precision "
+            "tolerance; legacy native status is flux_rejected"
+        )
 
 
 def _with_boundary_iota(lib, result, query=-1):
@@ -641,6 +686,7 @@ def score_coils_native(
         if name not in {"components", "timings", "error_message"}
     }
     diagnostics["error_message"] = bytes(result.error_message).split(b"\0", 1)[0].decode("utf-8", "replace")
+    _explain_score_failure(diagnostics)
     return _with_torsion(lib, _with_boundary_iota(lib, {
         "score": float(result.score),
         "status": SGPU_SCORE_STATUS_NAMES.get(int(result.status), f"unknown_{result.status}"),

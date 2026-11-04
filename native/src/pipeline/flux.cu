@@ -6,6 +6,7 @@
 #include "pipeline/psi.cuh"
 #include "pipeline/axis.cuh"
 #include "coil_field_internal.h"
+#include "radial_first_branch.h"
 
 namespace coil_eval::pipeline {
 
@@ -116,6 +117,15 @@ __global__ void solve_boundary_radii_kernel(
         const float step = fminf(limit, fmaxf(-limit, final_residual / denominator));
         radius = fminf(maximum, fmaxf(1.0e-12f * a_scale, radius - step));
     }
+    // Newton can converge exactly to a later branch, even with positive slope.
+    double connected = static_cast<double>(radius) / a_scale;
+    if (!coil_eval_radial::first_root(polynomial, degree, level,
+            max_radius_scale, tolerance, connected)) {
+        radii[index] = 0.0f;
+        residuals[index] = INFINITY;
+        return;
+    }
+    radius = static_cast<float>(connected * a_scale);
     {
         const float u = radius / a_scale;
         float value = 0.0f;

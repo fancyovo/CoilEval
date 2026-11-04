@@ -42,7 +42,10 @@ def _floating_first_connected_branch(polynomial, maximum_u):
     if p.ndim != 1 or len(p) < 3 or not np.isfinite(p).all() or not maximum_u > 0:
         raise ValueError('finite radial polynomial and positive maximum_u required')
     if p[0] != 0 or p[1] != 0 or p[2] <= 0:
-        raise MaxClosedBoundaryError('axis-connected positive s branch requires zero constant/linear terms and positive near-axis quadratic')
+        raise MaxClosedBoundaryError('axis-connected positive s branch requires zero constant/linear terms and positive near-axis quadratic',
+            dict(failure_reason='invalid_near_axis_radial_polynomial',
+                 constant=float(p[0]),linear=float(p[1]),quadratic=float(p[2]),
+                 maximum_u=float(maximum_u)))
     q = np.arange(2, len(p))*p[2:]
     q = np.trim_zeros(q, trim='b')
     roots = np.polynomial.polynomial.polyroots(q) if len(q) > 1 else np.empty(0, dtype=complex)

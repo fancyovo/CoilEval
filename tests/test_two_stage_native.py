@@ -222,6 +222,27 @@ def test_optional_alpha_basis_setter_records_the_selected_basis(factory):
     assert snapshot['config']['alpha_radial_basis']=='flux_legendre'
 
 
+def test_refit_ridge_set_after_s1_and_retained_for_gradients(factory):
+    driver,library,_=factory()
+    def set_ridge(context,ridge):
+        library.calls.append(('refit_ridge',ridge));return 0
+    library.sgpu_two_stage_set_refit_ridge_v1=Function(set_ridge)
+    config=replace(configurations()[0],psi_refit_ridge=1e-10)
+    result,snapshot=driver.evaluate(make_coils(),config,capture=True)
+    names=[name for name,value in library.calls]
+    assert names.index('begin')<names.index('refit_ridge')<names.index('fit')
+    assert snapshot['config']['psi_refit_ridge']==1e-10
+    assert result['diagnostics']['psi_refit_ridge']==1e-10
+
+
+def test_refit_ridge_requires_capability_and_releases_context(factory):
+    driver,library,_=factory()
+    with pytest.raises(RuntimeError,match='psi_refit_ridge; rebuild'):
+        driver.evaluate(make_coils(),replace(configurations()[0],psi_refit_ridge=1e-10))
+    assert driver._context is None
+    assert ('close',37) in library.calls
+
+
 def test_new_alpha_basis_explains_missing_native_support_and_closes(factory):
     driver,library,_=factory();base=configurations()[0]
     config=SimpleNamespace(**{**base.to_dict(),'alpha_radial_basis':'flux_legendre'},

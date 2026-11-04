@@ -8,6 +8,9 @@
 namespace sgpu_target {
 using Polynomial = std::array<double,25>;
 using SectionCoefficients = std::array<Polynomial,25>;
+inline int capacity_guard_phi_count(int fitting_count,int toroidal_order) {
+    return std::max(2*fitting_count,4*toroidal_order+1);
+}
 // Collapse the toroidal series once per section. The subsequent ray expansion
 // then visits each Cartesian monomial once, independently of toroidal order.
 inline SectionCoefficients collapse_section(const double* coefficients,

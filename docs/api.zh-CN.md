@@ -36,6 +36,7 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `flux_method` | `'area'` | `'area'` 或 fast 近邻路径的 `'stokes'` 边界积分 |
 | `psi_fit` | `'single_stage'` | `'single_stage'` 或 `'two_stage'` |
 | `psi_refit_points` | `82368` | 第二次拟合的目标训练行数 |
+| `psi_refit_ridge` | `None` | 可选的 S2 列归一化正则系数，须非负；`None` 保留原生设置 |
 | `psi_refit_sampling` | `'cartesian'` | 两阶段拟合的 `'cartesian'` 或 `'polar_quadrature'` 采样 |
 | `psi_nearby_method` | `'local'` | 两阶段局部响应，或 `'formal'` 端点重建 |
 | `psi_fd_batch_size` | `8` | 两阶段局部差分端点的批量大小 |
@@ -57,6 +58,10 @@ config = EvaluationConfig(
 
 两阶段求值先在初始区域拟合 psi，再构造与磁轴相连的闭合训练区域，并在该区域重新拟合。
 目标体积磁面与 QS 指标使用第二次拟合结果。
+`psi_refit_ridge` 可用于减小很低 QS 误差下的正则化偏差。它只作用于 S2，
+包括对应的局部梯度；S1 及其训练区域保持原设置。GPU 路径需要提供 0.9.1
+设置函数的原生库。减小正则并不保证磁面更准确，应同时检查法向磁场误差、
+坐标收敛与几何容量。针对目标附近区域的第三次拟合是另一项诊断策略，不属于此选项。
 目标体积容量检查至少覆盖 psi 拟合的环向网格，并为保留的环向模提供每周期至少两个采样点。
 磁通积分仍使用其独立配置的网格。这是采样截面上的径向分支检查；通过检查不代表全局磁面或物理精度得到认证。
 `psi_refit_sampling='polar_quadrature'` 选择可选的加权极坐标求积，
@@ -175,6 +180,16 @@ QA `helicity=(1,0)`。与原生结果比较时，应为对应参考路径选择�
 原生求值、Tensor 反向与 Simsopt 初始化中的 flux-Legendre 径向函数均采用 Legendre 三项递推，避免 FP32 展开单项式的消减误差。该修复不增加有限基空间，也不消除 alpha/psi 拟合误差。切换原生库或基函数实现时，应重新生成 source capture。
 
 可选指标与精度档位见[目标磁面的 f_B 和 f_T](qs.zh-CN.md)。
+
+0.9.1 的失败诊断区分搜索范围内未找到可接受椭圆磁轴，以及目标体积超出拟合标量的
+可用容量。`native_error_message` 保留原生错误文本，`failure_reason` 记录分类。
+`capacity_scope` 说明径向证书采用的角向采样射线；容量检查不保证这些射线之间的所有角度。
+角度反解与径向采样保留折叠拒绝，并选择轴连通首支；后支上的小残差不足以接受该根。
+原生 Bernstein 证书会保守拒绝部分不翻号的平坦点，多项式根隔离路径可能解析这些点。
+两条路径在共同可用域上保持首支一致。
+原生目标体积的正向精度校验也沿用 `flux_rejected` 状态。此时 `failure_reason`
+为 `target_volume_forward_precision_exceeded`，`failure_stage` 为
+`target_volume_forward_validation`；数值状态保持兼容。
 
 ## CPU 后端
 

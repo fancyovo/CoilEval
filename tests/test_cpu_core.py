@@ -140,9 +140,9 @@ def test_tensor_and_surface_cpu_dispatch_do_not_resolve_cuda(monkeypatch):
         with pytest.raises(ValueError,match='threads'):factory(config=config,threads=2)
 
 
-@pytest.mark.parametrize('two_stage',[False,True])
+@pytest.mark.parametrize('two_stage,refit_ridge',[(False,None),(True,None),(True,1e-10)])
 @pytest.mark.parametrize('nfp,ncoils,helicity',[(4,4,(1,4)),(2,1,(1,0)),(3,2,(1,-3)),(5,6,(1,5))])
-def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage,nfp,ncoils,helicity):
+def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage,refit_ridge,nfp,ncoils,helicity):
     """Exercise all stage interfaces against a known circular flux foliation."""
     from pathlib import Path
     from coil_eval import CoilSet,EvaluationConfig
@@ -186,7 +186,7 @@ def test_complete_cpu_pipeline_on_exact_nested_field(monkeypatch,two_stage,nfp,n
     coils=CoilSet(*(a[selection] for a in (example.coeffs_x,example.coeffs_y,
         example.coeffs_z,example.currents_a)),nfp=nfp)
     config=EvaluationConfig(.01,fast=True,helicity=helicity,psi_fit='two_stage' if two_stage else 'single_stage',
-        psi_refit_points=1024,psi_refit_sampling='polar_quadrature')
+        psi_refit_points=1024,psi_refit_sampling='polar_quadrature',psi_refit_ridge=refit_ridge)
     raw,snapshot=backend.capture(coils,config)
     assert raw['status']=='ok',raw
     assert raw['diagnostics']['iota_target_surface']==pytest.approx(-.3,abs=2e-4)

@@ -39,6 +39,7 @@ and `write_json(path)` preserve these units and conventions.
 | `flux_method` | `'area'` | `'area'` or fast local `'stokes'` boundary integration |
 | `psi_fit` | `'single_stage'` | `'single_stage'` or `'two_stage'` |
 | `psi_refit_points` | `82368` | Target training-row count for the second fit |
+| `psi_refit_ridge` | `None` | Optional nonnegative column-scaled ridge for S2 only; `None` retains the native setting |
 | `psi_refit_sampling` | `'cartesian'` | Two-stage `'cartesian'` or `'polar_quadrature'` sampling |
 | `psi_nearby_method` | `'local'` | Two-stage local response or `'formal'` endpoint reconstruction |
 | `psi_fd_batch_size` | `8` | Two-stage local finite-difference endpoint batch size |
@@ -62,6 +63,12 @@ config = EvaluationConfig(
 Two-stage evaluation first fits psi in the initial domain, constructs an
 axis-connected closed training domain, and fits psi again in that domain.
 The target-volume surface and QS metrics use the second fit.
+`psi_refit_ridge` can reduce regularization bias when resolving very small QS
+errors. It applies to S2 only, including local gradients; S1 and its domain stay
+fixed. The GPU option requires a native library exposing the 0.9.1 setter.
+Smaller ridge does not guarantee a more accurate magnetic surface: compare
+normal-field error, coordinate convergence and geometric capacity. Target-local
+third-fit experiments are a separate diagnostic strategy, not this option.
 The target-volume capacity guard checks at least the psi fitting toroidal grid
 and two samples per retained toroidal mode. Flux quadrature remains separately
 configured. This is a sampled radial-branch check; an accepted result does not
@@ -204,6 +211,21 @@ contains available results. An expired or cross-session center raises
 Flux-Legendre radial values use a three-term Legendre recurrence in the native, tensor and Simsopt initialization paths. This avoids cancellation from an expanded FP32 monomial polynomial; it does not increase the finite basis or remove alpha/psi fitting error. Regenerate source captures when changing the native library or basis implementation.
 
 See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.
+
+In 0.9.1, failure diagnostics distinguish a bounded axis search with no accepted
+elliptic root from a requested volume above the fitted scalar's usable capacity.
+`native_error_message` retains the original native text; `failure_reason` records
+the classification. `capacity_scope` identifies the sampled angular rays used
+for the radial certificate. The capacity check does not certify every angle
+between those rays. Alpha inversion and radial sampling reject folds and select
+the axis-connected first branch; a small residual at a later root is insufficient.
+Native Bernstein certificates can conservatively reject a non-sign-changing
+flat point that the polynomial root-isolation path can resolve. First-branch
+agreement applies on their common usable domain.
+The legacy `flux_rejected` status is also used by native target-volume forward
+validation. For that condition, `failure_reason` is
+`target_volume_forward_precision_exceeded` and `failure_stage` is
+`target_volume_forward_validation`; the numerical status remains unchanged.
 
 ## CPU backend
 

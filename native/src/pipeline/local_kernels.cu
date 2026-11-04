@@ -2,6 +2,7 @@
 #include "pipeline/types.cuh"
 #include "pipeline/device_helpers.cuh"
 #include "pipeline/local_kernels.cuh"
+#include "radial_first_branch.h"
 
 namespace coil_eval::pipeline {
 
@@ -117,6 +118,14 @@ __global__ void local_batch_solve_boundary_radii_kernel(
             radius - fminf(limit, fmaxf(-limit, final_residual / denominator))
         ));
     }
+    double connected = static_cast<double>(radius) / radius_scale;
+    if (!coil_eval_radial::first_root(polynomial, degree, level,
+            max_radius_scale, tolerance, connected)) {
+        radii[flat] = 0.0f;
+        residuals[flat] = INFINITY;
+        return;
+    }
+    radius = static_cast<float>(connected * radius_scale);
     const float u = radius / radius_scale;
     float value = 0.0f, power = u * u;
     for (int current_degree = 2; current_degree <= degree; ++current_degree) {
