@@ -2,64 +2,27 @@
 
 [简体中文](README.zh-CN.md)
 
-CoilEval evaluates stellarator coils on NVIDIA GPUs and CPUs. Supply Fourier coefficients,
-coil currents, field periods and a target volume to obtain quasi-symmetry,
-rotational transform, surface quality and coil geometry metrics. Compose these
-metrics into a scalar objective and compute its local parameter gradient.
+CoilEval evaluates stellarator Fourier coils on NVIDIA GPUs and CPUs. Supply
+coefficients, currents, field periods and a target volume to obtain quasi-symmetry,
+rotational transform, surface quality and coil geometry metrics. Compose a scalar
+objective and compute its local parameter gradient.
 
-The source package is 0.10.0 (unreleased). CPU and GPU evaluation support different
-field-period and base-coil counts, with explicit QA or QH helicity. The tensor
-constructor accepts `nfp=coils.nfp`; its default remains 4. For QA choose
-`EvaluationConfig(..., helicity=(1,0))`; standard QH uses `(1,coils.nfp)`.
-See the [tensor guide](docs/torch.md), [CPU guide](docs/cpu.md) and
-[release history](CHANGELOG.md).
+The **0.11.0 preview candidate** defaults to validated S2: two scalar fits,
+fast/Stokes, polar quadrature, smooth volume-alpha weights and flux-Legendre
+volume-alpha basis. Angle-inverse and first-radial-branch repairs are included.
+S3 remains optional through `psi_target_refit=True`, disabled by default.
 
-Version 0.9.1 repairs angle inversion and axis-connected radial sampling, and
-adds an explicit second-fit regularization setting. The frozen 0.9.0 calibration
-wheel below predates these repairs; use a source build for the 0.9.1 changes.
+## Installation and quick start
 
-The 0.10.0 candidate adds `psi_target_refit=True` to the two-stage configuration.
-It fits the scalar a third time over a target-specific interior, with separate
-regularization and an unchanged target volume. It remains opt-in (`False` by
-default): the fixed 4096 comparison with geometric surface-alpha32 scored 1821
-inputs versus 2127 for repaired S2, with 314 lost successes and 8 recoveries.
-Among 699 originally quality-qualified pairs without an error alarm, 31 became
-unscorable and one crossed the error threshold. The option improves many scored
-cases but does not meet the normal-path preservation condition for promotion.
-
-The examples accept `--helicity M N`; for a QA input use
-`python examples/qs_metrics.py --coils qa.json --helicity 1 0 --volume V --radius A`.
-Replace V and A with the target volume (m³) and fitting radius (m).
-
-## Installation
-
-Install the wheel with the extra matching your backend: `[cpu]` for CPU or
-`[gpu]` for GPU. A bare wheel installs only the NumPy-based package interface.
-CPU evaluation uses PyTorch for matrix solves even when gradients are not requested.
-
-Install the supplied frozen 0.9.0 binary wheel in a Python 3.10+ environment:
+Use Linux x86-64 with glibc 2.28+ and Python 3.10+. Install the candidate wheel:
 
 ```sh
-python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
-The wheel includes CPU and GPU backends. The `gpu` extra installs NumPy and a
-matched CUDA 12.8 runtime set. Use Linux with glibc 2.28+ and an NVIDIA driver supporting CUDA 12.8
-and your GPU; driver 570.169 supports the RTX 5090 configuration.
-See [installation and GPU compatibility](docs/installation.md) for supported
-architectures, PyTorch setup and source builds.
-
-For a computer without an NVIDIA GPU, install CPU PyTorch and the CPU extra:
-
-```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
-```
-
-Select `Evaluator(..., device="cpu", threads=8)` or omit `threads` to use the
-available CPU allocation. See the [CPU example](examples/cpu.py).
-
-## Quick start
+The GPU extra uses the validated CUDA 12.8 runtime set. The driver must support
+CUDA 12.8 and the GPU. For CPU, install CPU PyTorch and the wheel's `[cpu]` extra.
+See [installation](docs/installation.md) for dependencies, architectures and source builds.
 
 ```python
 from coil_eval import CoilSet, EvaluationConfig, Evaluator
@@ -74,96 +37,96 @@ with Evaluator(config=config) as evaluator:
         print(result.status)
 ```
 
-The source archive includes example scripts and inputs. From its extracted
-project directory, run:
+For CPU use `Evaluator(config=config, device="cpu", threads=8)`.
+QA requires `helicity=(1,0)`; standard QH uses `(1,coils.nfp)`. The compatibility
+helicity default remains `(1,4)`. Tensor inputs carry no field-period metadata;
+pass `nfp=coils.nfp` to `TensorEvaluator`.
+
+Install CUDA-enabled PyTorch before running the autograd and target-surface QS examples.
+From the extracted source archive:
 
 ```sh
 python examples/evaluate.py
-python examples/custom_loss.py
-python examples/two_stage.py
+python examples/autograd.py --batch
+python examples/qs_metrics.py --gradient --metric f_B
 ```
 
-After installing CUDA-enabled PyTorch, run `python examples/autograd.py` for
-evaluation plus one objective gradient. `TensorEvaluator.evaluate_batch`
-accepts independent parameter tensors; `capture_sources` shares two-stage fits
-when preparing one geometry at several target volumes.
-Run `python examples/qs_metrics.py --gradient --metric f_B` for the target-surface
-Fourier metric; choose `--metric f_T` for the triple-product metric.
+`qs_volume` and `qs_outer` are differential f_C RMS quantities averaged over
+their volume and outer radial bin. Target-surface Fourier f_B, triple-product f_T,
+Simsopt and DESC references have explicitly different measures and normalizations;
+see [QS](docs/qs.md) and [reference definitions](docs/simsopt.md).
 
-Use `psi_fit="two_stage"` to refit psi in a closed training domain. The optional
-PyTorch interface computes local reverse gradients and accepts independent
-batches, including order-16 coils. For standard surface reconstruction,
-`coil_eval.simsopt` prepares alpha+nu seeds on GPU and runs Simsopt on CPU.
-The [asynchronous example](examples/simsopt_async.py) separates those phases.
-Install the `simsopt` extra for the surface workflow; GPU preparation also uses
-the optional CUDA-enabled PyTorch installation described in the guide.
+## S2 accuracy and speed
 
-Select the two-stage path and flux-polynomial alpha fitting with:
+The fixed cohort contains **4096** tasks: 1024 QUASR inputs at four noise scales.
+Repaired S2 produces **2127** complete scores, **1944** matches to frozen Simsopt
+references, and **817** pairs meeting the original reference-quality rules.
+All large errors remain. The 1981 completed references are reused unchanged;
+tasks without references contribute to success counts only.
 
-```python
-config = EvaluationConfig(
-    target_volume=0.05, psi_a=0.15, fast=True, flux_method="stokes",
-    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
-    alpha_radial_weighting="smooth", alpha_radial_basis="flux_legendre",
-)
-```
+![CoilEval S2 versus Simsopt QS and iota, with measured P90 bands for each population](docs/assets/preview_s2_20261105/calibration_p90.png)
 
-These options are described in [the API guide](docs/api.md). A reconstructed
-surface's acceptance and quality are available separately in the Simsopt result.
+QS bands use `exp(±P90(abs(ln(prediction/reference))))`; iota bands use
+`±P90(abs(prediction-reference))`. They describe empirical error coverage.
+All-paired QS factors are 1.986, 1.368 and 1.157; reference-qualified factors are
+1.926, 1.304 and 1.122. The table separately reports P90 relative error.
 
-The differential f_C metrics are residual RMS quantities. `qs_volume` averages over the selected
-volume; `qs_outer` averages over its outer radial bin. Simsopt reference helpers
-`surface_fc` and `analyze_arrays` report the flux-shell RMS for QH `(1,nfp)`
-and have no helicity argument in 0.9.0. The separate `surface_qs_metrics`
-reference for f_B/f_T accepts `helicity=(1,0)` for QA; see the
-[reference definitions](docs/simsopt.md#reference-qs-quantities).
+| Population | Pairs | f_B P90 relative error | f_C P90 relative error | f_T P90 relative error | ι P90 absolute error |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| All paired | 1944 | 93.86% | 34.67% | 15.20% | 0.01270 |
+| Reference-qualified | 817 | 87.04% | 30.17% | 12.17% | 0.01015 |
 
-## Preview validation
+Every entry below is **seconds per sample**: the median of three warm complete
+calls, divided by batch size. Gradient mode includes one complete objective
+reverse. Batch amortization measures throughput; scalar rows give single-query latency.
 
-The unreleased 0.9.0 validation campaign has completed base calculations for
-a fixed random QUASR cohort of 1024 configurations at four noise scales
-(4096 tasks, including failures). The reviewed results have 1981 completed
-Simsopt references and 1336 paired comparisons. Log-scale R² for f_B/f_C/f_T
-is 0.928267/0.977176/0.995077 across all pairs; zero-noise f_B R² is 0.744453
-on 385 pairs. All 145 flagged cases have review outcomes: 144 visual reviews
-and one unavailable geometry. Both primary populations retain large errors;
-a separate geometry-evidence-filtered comparison has 612 pairs. The
-[accuracy tables and scatter plots](docs/preview_validation.md#fixed-accuracy-cohort-reviewed-results)
-show population counts, reference qualifications and limitations.
+| Interface / metric | Mode | CPU 8 threads | RTX 5090 | A100 |
+| --- | --- | ---: | ---: | ---: |
+| scalar / volume f_C | value | 22.922 | 1.775 | 1.911 |
+| scalar / volume f_C | value + gradient | 40.000 | 2.168 | 2.397 |
+| batch 1 / volume f_C | value | 22.843 | 1.785 | 1.915 |
+| batch 1 / volume f_C | value + gradient | 42.364 | 2.159 | 2.410 |
+| batch 2 / volume f_C | value | 31.186 | 1.502 | 1.606 |
+| batch 2 / volume f_C | value + gradient | 50.412 | 1.572 | 1.823 |
+| batch 4 / volume f_C | value | 30.449 | 1.347 | 1.453 |
+| batch 4 / volume f_C | value + gradient | 47.093 | 1.418 | 1.633 |
+| batch 8 / volume f_C | value | 30.669 | 1.296 | 1.396 |
+| batch 8 / volume f_C | value + gradient | 47.288 | 1.375 | 1.547 |
+| scalar / surface f_T | value | 36.701 | 2.024 | 2.057 |
+| scalar / surface f_T | value + gradient | 56.714 | 2.585 | 2.584 |
 
-The [dense Poincaré examples](docs/preview_validation.md#poincaré-geometry-checks) illustrate an unexplained large error, nearby islands and an elongated section.
+These are the 2026-11-05 measurements of the same S2 recipe and native library:
+four original order-16 coil sets, eight fixed queries, and eight assigned logical
+CPUs per hardware allocation. Volume f_C and optional surface f_T are separate
+workloads. Cold calls, whole-batch latency, hardware and hashes remain in the
+[raw timing evidence](docs/assets/preview_s2_20261105/timings.json). See the [validation record](docs/preview_validation.md)
+for cohort definitions, failures, reference qualifications and numerical limitations.
 
-The frozen CoilEval 0.9.0 benchmark on four original order-16 QUASR coil sets
-measured scalar value/value-plus-gradient latency of 22.483/42.531 seconds on
-8 CPU threads, 1.553/1.959 seconds on RTX 5090 and 1.903/2.473 seconds on A100.
-Batch 8 whole-call latency was 245.300/385.934, 9.013/9.420 and 11.282/12.657
-seconds respectively. The [complete table and measurement contract](docs/preview_validation.md)
-include batch sizes 1, 2, 4 and 8, cold calls, hardware and the fixed workload.
-These figures cover ordinary volume f_C evaluation and an engineering-inclusive
-loss gradient; the optional target-surface f_B/f_T metrics are separate requests.
+## Examples and limitations
 
-A selected QA BFGS result (`n3-QA-i0-l5-s2-v5`) completed the full independent
-reference workflow: volume-equivalent Ap 8.4326, Simsopt target-surface iota
-0.469986, Simsopt flux-shell RMS f_C 0.00816269 and DESC boundary f_C 0.00722812.
-DESC's f_C uses a surface-weighted mean absolute residual with its own
-normalization. The final DESC surface is nested; the Simsopt surface retains
-two dense-grid quality warnings. A second experiment screened 32 simple-ring
-seeds at each of three volumes and found no valid start, so BFGS did not begin.
-The [validation record](docs/preview_validation.md) gives definitions,
-parameters and limitations. Raw example evidence is retained in the parent
-validation workspace at
-`evaluation/coileval_preview_20261102/examples/results_20261103/`.
+Example1 reruns the original QA coils at V=0.3 m³ and a=√0.06 m through fresh
+S2 source→alpha→nu→Simsopt→DESC. The workflow completes, DESC reaches gtol and
+the final surface is nested. Residual forces remain visible; equilibrium certification
+is false. Example2 independently perturbs example1 coefficients as
+`c*exp(log(1.01)*z)`, keeps screening currents unchanged, selects the best full
+objective among 32 candidates, and enters analytic-gradient BFGS. At 1% noise,
+25/32 score successfully; 116 updates reduce the objective from −3.6904 to
+−5.4891. The final full reference workflow completes. See the
+[validation record](docs/preview_validation.md) for residual-force limits and stopping reasons.
+
+The fixed 4096 S3 comparison scores 1821 inputs, losing 314 S2 successes and
+recovering 8; S3 remains optional. Remaining S2 errors include the full-volume
+scalar-fit objective and ridge bias, angular-equation discretization, resonant
+error amplification and coordinate representation limits. Smooth Poincaré
+contours alone do not guarantee accurate small-QS estimates. Finite diagnostics
+do not certify global magnetic topology.
 
 ## Documentation
 
-- [Installation and GPU compatibility](docs/installation.md)
-- [API and parameter conventions](docs/api.md)
+- [API and defaults](docs/api.md)
 - [PyTorch gradients and batches](docs/torch.md)
-- [Target-surface f_B and f_T](docs/qs.md)
-- [Simsopt surfaces and reference QS](docs/simsopt.md)
-- [Version selection](docs/versions.md)
-- [Examples](examples/README.md)
-- [Development and source layout](docs/development.md)
-- [Release history](CHANGELOG.md)
+- [CPU](docs/cpu.md) and [Simsopt](docs/simsopt.md)
+- [Examples](examples/README.md), [versions](docs/versions.md), [changelog](CHANGELOG.md)
+- [Development](docs/development.md)
 
-CoilEval is available under the [MIT license](LICENSE).
+License: [MIT](LICENSE).

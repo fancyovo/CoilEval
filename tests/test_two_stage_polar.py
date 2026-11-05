@@ -50,7 +50,7 @@ def test_polar_quadrature_integrates_cartesian_area_moments_and_keeps_section_we
 
 
 def test_sampling_config_default_and_input_guards():
-    config=EvaluationConfig(.05)
+    config=EvaluationConfig(.05,psi_refit_sampling='cartesian')
     assert config.psi_refit_sampling=='cartesian'
     assert replace(config,psi_refit_sampling='polar_quadrature').to_dict()['psi_refit_sampling']=='polar_quadrature'
     with pytest.raises(ValueError,match='psi_refit_sampling'):

@@ -1,4 +1,4 @@
-"""Evaluate a coil set with the optional two-stage psi fit."""
+"""Evaluate a coil set with the default two-stage psi fit."""
 import argparse
 from pathlib import Path
 
@@ -11,9 +11,9 @@ def main():
     parser.add_argument("--library", help="Optional custom native library")
     parser.add_argument("--volume", type=float, default=.05, help="Target volume in m^3")
     parser.add_argument("--radius", type=float, default=.15, help="Fitting radius in metres")
-    parser.add_argument("--sampling", choices=("cartesian", "polar_quadrature"), default="cartesian")
-    parser.add_argument("--alpha-weighting", choices=("histogram", "smooth"), default="histogram")
-    parser.add_argument("--alpha-basis", choices=("zernike", "flux_legendre"), default="zernike")
+    parser.add_argument("--sampling", choices=("cartesian", "polar_quadrature"), default="polar_quadrature")
+    parser.add_argument("--alpha-weighting", choices=("histogram", "smooth"), default="smooth")
+    parser.add_argument("--alpha-basis", choices=("zernike", "flux_legendre"), default="flux_legendre")
     parser.add_argument("--device", type=int, default=0, help="CUDA device index")
     parser.add_argument("--output", type=Path, help="Save EvaluationResult as JSON")
     args = parser.parse_args()

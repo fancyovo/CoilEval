@@ -2,7 +2,7 @@
 
 [English](qs.md)
 
-CoilEval 0.9.0 提供傅里叶指标 `f_B` 和可选三重积指标 `f_T`，作用于目标体积对应的磁面。两者共用可导的 alpha+nu 坐标构造，包括目标磁面的 alpha 拟合与基于真空磁场势的 nu 修正。线圈求值接口使用 GPU 或 CPU 上的 PyTorch；Simsopt 用于单独计算参考磁面。
+CoilEval 0.11.0 提供傅里叶指标 `f_B` 和可选三重积指标 `f_T`，作用于目标体积对应的磁面。两者共用可导的 alpha+nu 坐标构造，包括目标磁面的 alpha 拟合与基于真空磁场势的 nu 修正。线圈求值接口使用 GPU 或 CPU 上的 PyTorch；Simsopt 用于单独计算参考磁面。
 
 ## 计算线圈指标
 

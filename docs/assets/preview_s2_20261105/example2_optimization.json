@@ -1,0 +1,123 @@
+{
+  "protocol": "coileval-S2-example1-perturb32-BFGS-20261105-v1",
+  "status": "completed",
+  "version": "0.11.0",
+  "fraction": 0.01,
+  "selected_start": {
+    "index": 4,
+    "physical_sha256": "68c542e7bd1e8fdcdbdd12011abf011767952764a0d19f868a73a13c8db0c41b",
+    "value": {
+      "valid": true,
+      "status": "ok",
+      "loss": -3.6903622898576747,
+      "qs": 0.01786091467286222,
+      "metrics": [
+        0.452063724398613,
+        0.0944339627882001,
+        6.22308450928467,
+        3.5334953073303383,
+        0.29999998042344583
+      ],
+      "condition_terms": [
+        0.09275422147303687,
+        0.1982769295561042,
+        0.009953339656556369,
+        0.011656653377925949,
+        0.0
+      ],
+      "quality_penalty": 0.01363175862018704,
+      "radius_penalty": 0.00850473893595465,
+      "radius": 1.020873968219827
+    }
+  },
+  "valid_candidates": 25,
+  "initial": {
+    "valid": true,
+    "status": "ok",
+    "loss": -3.6903622898576693,
+    "qs": 0.017860914672862306,
+    "metrics": [
+      0.452063724398613,
+      0.0944339627882001,
+      6.22308450928467,
+      3.5334953073303383,
+      0.29999998042344583
+    ],
+    "condition_terms": [
+      0.09275422147303687,
+      0.1982769295561042,
+      0.009953339656556369,
+      0.011656653377925949,
+      0.0
+    ],
+    "quality_penalty": 0.01363175862018704,
+    "radius_penalty": 0.00850473893595465,
+    "radius": 1.020873968219827
+  },
+  "best": {
+    "valid": true,
+    "status": "ok",
+    "loss": -5.489093628346951,
+    "qs": 0.00389682810210771,
+    "metrics": [
+      0.4658517837524414,
+      0.09911960660262598,
+      6.124939083267976,
+      3.5349337806447565,
+      0.3000000038957387
+    ],
+    "condition_terms": [
+      0.002454768037659864,
+      0.004960592218494631,
+      0.0031219549055684468,
+      0.013420748829945144,
+      0.0
+    ],
+    "quality_penalty": 0.018144434031263732,
+    "radius_penalty": 0.016393671355847177,
+    "radius": 1.025795701531698
+  },
+  "accepted_updates": 116,
+  "iterations": 164,
+  "formal_calls": 770,
+  "physical_array_sha256": "4954c4ae620d3c9a02ee4fd39a765f0feb358f31b8b9c8fe068c895f0ef4a8b1",
+  "config": {
+    "target_volume": 0.3,
+    "psi_a": 0.2449489742783178,
+    "helicity": [
+      1,
+      0
+    ],
+    "h": 0.0001,
+    "psi_iterations": 4,
+    "alpha_iterations": 4,
+    "segments_per_coil": 256,
+    "fast": true,
+    "flux_method": "stokes",
+    "psi_fit": "two_stage",
+    "psi_refit_points": 82368,
+    "psi_nearby_method": "local",
+    "psi_fd_batch_size": 8,
+    "psi_refit_sampling": "polar_quadrature",
+    "alpha_radial_weighting": "smooth",
+    "alpha_weight_sigma": 0.05,
+    "alpha_count_floor": 32.0,
+    "alpha_radial_basis": "flux_legendre",
+    "stokes_validation_rtol": 0.001,
+    "psi_refit_ridge": null,
+    "psi_target_refit": false,
+    "psi_target_refit_factor": 1.2,
+    "psi_target_refit_ridge": 1e-10
+  },
+  "stop_reason": "consecutive_rejection_limit",
+  "convergence_claim": false,
+  "max_steps": 400,
+  "targets": [
+    0.47,
+    0.1,
+    6.0,
+    3.5,
+    0.3
+  ],
+  "optimizer": "dense inverse BFGS / Powell damping / analytic one reverse / formal Armijo"
+}

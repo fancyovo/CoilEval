@@ -6,8 +6,7 @@
 `--help` 显示参数。
 
 [cpu.py](cpu.py) 在 CPU 上求值。按 [CPU 指南](../docs/cpu.zh-CN.md) 安装 `cpu` 依赖组和 CPU 版 PyTorch 后，
-运行 `python examples/cpu.py --threads 8`。添加 `--two-stage` 使用二次 psi 拟合，
-或用 `--axis-grid 32` 选择较小的磁轴初筛网格。
+运行 `python examples/cpu.py --threads 8`。S2 已是默认；使用 `--axis-grid 32` 选择较小的磁轴初筛网格。
 
 [autograd.py](autograd.py) 在 GPU 上计算 PyTorch 目标与梯度，添加 `--batch` 使用独立几何批次。运行前安装 CUDA 版 PyTorch 和 `gpu` 依赖组。
 
@@ -15,21 +14,18 @@
 `--metric f_T` 同时计算三重积指标，`--accuracy high|balanced|fast` 选择角向分辨率。
 CUDA 版 PyTorch 的配置见[安装文档](../docs/installation.zh-CN.md)。
 
-[two_stage.py](two_stage.py) 选择可选的两阶段 psi 拟合。
-使用 `--coils`、`--volume`、`--radius` 和 `--output` 指定输入与输出。
-`--sampling polar_quadrature` 选择实验性的加权采样。
-`--alpha-weighting smooth` 选择平滑的径向 alpha 权重；两阶段、autograd 和异步准备
-三个示例均提供这两个选项。`autograd.py` 还支持 `--volume`、`--radius` 和 `--device`。
-三个示例还支持 `--alpha-basis flux_legendre`，选择开发源码中的磁通多项式 alpha 基函数；
-默认仍为 `zernike`。autograd 示例应同时使用 `--two-stage`。
-它打印的一次求值加梯度时间覆盖完整调用与一次目标反传，首次运行可能包含冷启动成本。
+[two_stage.py](two_stage.py) 展示默认 S2 拟合。所有求值示例统一采用极坐标求积、
+平滑体 α 权重和 flux-Legendre 体 α 基。使用 `--coils`、`--volume`、`--radius` 指定输入。
+CPU/autograd 示例保留 `--two-stage` 兼容标志。`autograd.py --batch` 输出秒/样本，
+包含完整调用及一次目标反传；首次调用包含冷启动。
 
 ```sh
 python examples/two_stage.py --output output/metrics.json
-python examples/autograd.py --two-stage --batch
-python examples/autograd.py --two-stage --sampling polar_quadrature --alpha-weighting smooth
-python examples/autograd.py --two-stage --sampling polar_quadrature --alpha-weighting smooth --alpha-basis flux_legendre
+python examples/autograd.py --batch
 ```
+
+[预发布示例](preview/README.zh-CN.md)提供冻结的 QA example1 线圈，以及 example2 的
+1% 指数高斯扰动、32 选 1 和解析梯度 BFGS；固定目标体积 V=0.3 m³。
 
 [simsopt_async.py](simsopt_async.py) 将 GPU 源捕获和 alpha+nu 准备，与 CPU 标准 Simsopt
 求解分开运行。准备阶段需要 Simsopt 和 CUDA 版 PyTorch。

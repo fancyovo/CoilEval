@@ -121,7 +121,7 @@ def test_validation_precedes_native_construction(driver, coils):
     with pytest.raises(TypeError):
         capture_sources(coils, [object()])
     with pytest.raises(ValueError, match="two_stage"):
-        capture_sources(coils, EvaluationConfig(.05))
+        capture_sources(coils, EvaluationConfig(.05,psi_fit='single_stage',alpha_radial_weighting='histogram',alpha_radial_basis='zernike'))
     with pytest.raises(ValueError, match="target_volume"):
         capture_sources(coils, [config, replace(config, psi_a=.2)])
     assert capture_sources(coils, []) == []

@@ -138,7 +138,7 @@ def test_nearby_rejects_incompatible_candidates_before_backend_loading(psi_fit,m
     candidate=(CoilSet(coils.coeffs_x,coils.coeffs_y,coils.coeffs_z,coils.currents_a,3)
                if mismatch=='nfp' else four_coils(nfp=2))
     with pytest.raises(ValueError,match='match center shape and nfp'):
-        NativeBackend('missing.so').nearby(coils,[candidate],{},EvaluationConfig(.03,psi_fit=psi_fit))
+        NativeBackend('missing.so').nearby(coils,[candidate],{},EvaluationConfig(.03,psi_fit=psi_fit,alpha_radial_weighting='histogram',alpha_radial_basis='zernike'))
 
 
 class BulkBackend(FakeBackend):
@@ -216,8 +216,8 @@ def test_trace_layout_groups_allow_different_target_and_radius(monkeypatch):
     monkeypatch.setattr(axis_batch,'prepare_axis_batch',prepare)
     backend=NativeBackend('missing.so')
     backend.evaluate=lambda c,cfg:seen.append(cfg) or dict(status='ok',diagnostics={})
-    configs=[EvaluationConfig(.03,psi_a=.15,fast=True),EvaluationConfig(.03,fast=False),
-             EvaluationConfig(.08,psi_a=.18,fast=True),EvaluationConfig(.08,fast=False)]
+    configs=[EvaluationConfig(.03,psi_a=.15,fast=True),EvaluationConfig(.03,fast=False,flux_method='area'),
+             EvaluationConfig(.08,psi_a=.18,fast=True),EvaluationConfig(.08,fast=False,flux_method='area')]
     backend.evaluate_many([four_coils(shift=i) for i in range(4)],configs[0],configs)
     assert prepared==[[configs[0],configs[2]],[configs[1],configs[3]]]
     assert seen==configs

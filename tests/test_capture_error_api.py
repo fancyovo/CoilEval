@@ -38,7 +38,8 @@ def test_native_error_query_identity(tensor_api, factory, monkeypatch, pipeline)
     tokens = torch.ones((2, 4, 10), dtype=torch.float64)
     tokens[1, 0, 0] += .01
     with evaluator(capture_pipeline=pipeline, share_geometry=False) as engine:
-        engine.config = replace(engine.config, psi_fit='two_stage', psi_refit_points=4)
+        engine.config = replace(engine.config, psi_fit='two_stage', psi_refit_points=4,
+                                psi_refit_sampling='cartesian')
 
         def scalar_capture(row, config):
             coils = CoilSet(*split_tokens(row), nfp=4)

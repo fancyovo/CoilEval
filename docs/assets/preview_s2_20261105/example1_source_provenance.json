@@ -1,0 +1,39 @@
+{
+  "protocol": "coileval-s2-preview-example1-20261105-v1",
+  "job": "139015",
+  "package": "0.11.0",
+  "package_path": "/home/scc/pb24511935/local_surface_evaluator_runs/abi12_target_volume_20260927/coileval-preview-validation-20261102/prerelease_s2_20261105/example1_v1/coil-eval/src/coil_eval/__init__.py",
+  "library_sha256": "4949d2f1f07e681e0718312626abf1f5545a1c8b1da7cb2225fba6ed52c7d9e9",
+  "evaluation": {
+    "target_volume": 0.3,
+    "psi_a": 0.2449489742783178,
+    "helicity": [
+      1,
+      0
+    ],
+    "h": 0.0001,
+    "psi_iterations": 4,
+    "alpha_iterations": 4,
+    "segments_per_coil": 256,
+    "fast": true,
+    "flux_method": "stokes",
+    "psi_fit": "two_stage",
+    "psi_refit_points": 82368,
+    "psi_nearby_method": "local",
+    "psi_fd_batch_size": 8,
+    "psi_refit_sampling": "polar_quadrature",
+    "alpha_radial_weighting": "smooth",
+    "alpha_weight_sigma": 0.05,
+    "alpha_count_floor": 32.0,
+    "alpha_radial_basis": "flux_legendre",
+    "stokes_validation_rtol": 0.001,
+    "psi_refit_ridge": null,
+    "psi_target_refit": false,
+    "psi_target_refit_factor": 1.2,
+    "psi_target_refit_ridge": 1e-10
+  },
+  "physical_array_sha256": "aebf705719b77ad064624362f5d90601dc4b8a2cfbaf3f8240b427faf8e1eaf7",
+  "old_example_manifest_sha256": "de40eb0e9df8ed4338fa530705ecfd3ec4a72dba8360d8bbed97aa395d8d50bb",
+  "new_capture": true,
+  "original_reference_reused": false
+}

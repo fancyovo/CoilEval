@@ -15,7 +15,7 @@ from coil_eval.simsopt.geometry import _alpha_dense_theta_derivative
 
 
 def test_basis_is_explicit_two_stage_option_without_legacy_abi_change():
-    original=EvaluationConfig(.05)
+    original=EvaluationConfig(.05,psi_fit='single_stage',alpha_radial_weighting='histogram',alpha_radial_basis='zernike')
     assert original.alpha_radial_basis=='zernike'
     with pytest.raises(ValueError,match='two_stage'):replace(original,alpha_radial_basis='flux_legendre')
     cfg=replace(original,psi_fit='two_stage',alpha_radial_basis='flux_legendre')

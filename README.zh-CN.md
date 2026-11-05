@@ -2,54 +2,24 @@
 
 [English](README.md)
 
-CoilEval 使用 NVIDIA GPU 或 CPU 评估仿星器线圈。输入 Fourier 系数、电流、场周期数和目标体积，
-获得准对称性、旋转变换、磁面质量及线圈几何指标。用户可以组合指标定义标量目标，并计算局部参数梯度。
+CoilEval 根据仿星器线圈的 Fourier 系数、电流、场周期数和目标体积，在 NVIDIA GPU 或 CPU
+上计算准对称性、旋转变换、磁面质量与线圈几何指标，并支持自定义目标的局部参数梯度。
 
-源码包版本为 0.10.0（尚未发布）。CPU 与 GPU 评估支持不同场周期数、基本线圈数，
-以及显式指定的 QA/QH 螺旋度。张量构造器传入 `nfp=coils.nfp`，兼容默认值仍为 4。
-QA 设置 `EvaluationConfig(..., helicity=(1,0))`，标准 QH 设置 `(1,coils.nfp)`。
-参见 [张量接口](docs/torch.zh-CN.md)、[CPU 指南](docs/cpu.zh-CN.md)与[版本历史](CHANGELOG.md)。
+**0.11.0 预发布候选版**统一采用已验证的 S2 默认配方：两次 s 拟合、fast/Stokes、
+极坐标求积、平滑体 α 权重及 flux-Legendre 体 α 基。保留已有角反解和径向首支求根修复。
+S3 通过 `psi_target_refit=True` 显式开启，默认关闭。
 
-0.9.1 修复角度反解和轴连通径向首支采样，并提供显式的第二次拟合正则化设置。
-下方冻结的 0.9.0 标定 wheel 早于这些修复；使用 0.9.1 改动需要从源码构建。
+## 安装与运行
 
-0.10.0 候选在两阶段配置中增加 `psi_target_refit=True`，按目标体积选择内部训练区域，
-使用独立正则系数进行第三次标量拟合，目标体积保持不变。该选项保留显式开启（默认 `False`）：
-固定 4096、几何面 α32 对照中可评分数由修复后的 S2 的 2127 降至 1821，314 例退化、8 例恢复。
-原质量合格且无误差报警的 699 个配对样本中，31 例变成不可评分、1 例越过误差阈值。
-第三次拟合改善了许多可评分样本，但未满足推广时保全正常路径的条件。
-
-示例支持 `--helicity M N`。对 QA 输入可运行
-`python examples/qs_metrics.py --coils qa.json --helicity 1 0 --volume V --radius A`，
-其中 V、A 分别替换为目标体积（m³）和拟合半径（m）。
-
-## 安装
-
-请按后端选择依赖组：CPU 用 `[cpu]`，GPU 用 `[gpu]`。裸 wheel 仅安装依赖 NumPy
-的基础接口。CPU 普通求值也使用 PyTorch 的矩阵求解，因此不求梯度时同样需要 PyTorch。
-
-在 Python 3.10+ 环境中安装随附的冻结 0.9.0 预编译 wheel：
+Linux x86-64、glibc 2.28+，Python 3.10+。从候选发行包安装：
 
 ```sh
-python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
-安装包包含 CPU 和 GPU 后端；`gpu` 依赖组会安装 NumPy 和配套的 CUDA 12.8 运行库。
-需要 glibc 2.28+ 的 Linux，以及支持 CUDA 12.8 和所用显卡的 NVIDIA 驱动；
-570.169 驱动满足 RTX 5090 的这一要求。
-支持的 GPU 架构、PyTorch 配置和源码构建方式见[安装与兼容性](docs/installation.zh-CN.md)。
-
-没有 NVIDIA GPU 的电脑可以安装 CPU 版 PyTorch 和 CPU 依赖组：
-
-```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.9.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
-```
-
-通过 `Evaluator(..., device="cpu", threads=8)` 选择 CPU；省略 `threads` 时使用当前可用的 CPU 配额。
-完整用法见 [CPU 示例](examples/cpu.py)。
-
-## 快速开始
+GPU 依赖组使用已验证的 CUDA 12.8 运行库；驱动须支持 GPU 和 CUDA 12.8。
+CPU 用户先安装 CPU PyTorch，再安装 wheel 的 `[cpu]` 依赖组。
+详细依赖、GPU 架构及源码构建见[安装指南](docs/installation.zh-CN.md)。
 
 ```python
 from coil_eval import CoilSet, EvaluationConfig, Evaluator
@@ -64,81 +34,81 @@ with Evaluator(config=config) as evaluator:
         print(result.status)
 ```
 
-源码压缩包包含示例脚本和输入。在解压后的项目目录运行：
+CPU 使用 `Evaluator(config=config, device="cpu", threads=8)`。
+QA 显式指定 `helicity=(1,0)`，常见 QH 使用 `(1,coils.nfp)`；兼容默认值仍为 `(1,4)`。
+张量输入不携带场周期元数据，`TensorEvaluator` 需传入 `nfp=coils.nfp`。
+
+运行 autograd 和目标面 QS 示例前，还需安装 CUDA 版 PyTorch。源码包中的入口：
 
 ```sh
 python examples/evaluate.py
-python examples/custom_loss.py
-python examples/two_stage.py
+python examples/autograd.py --batch
+python examples/qs_metrics.py --gradient --metric f_B
 ```
 
-配置 CUDA 版 PyTorch 后，可运行 `python examples/autograd.py` 完成求值和一次目标反传。
-`TensorEvaluator.evaluate_batch` 接收独立参数张量；`capture_sources` 在同一几何的多个目标体积之间
-共享两阶段拟合。
-运行 `python examples/qs_metrics.py --gradient --metric f_B` 可计算目标磁面的傅里叶指标及梯度；
-选择 `--metric f_T` 则计算三重积指标。
+体积 `qs_volume` 与最外径向层 `qs_outer` 是各自区域的微分 f_C RMS。
+目标面 Fourier f_B、三重积 f_T、Simsopt 参考及 DESC 结果使用各自明确的平均和归一化，
+见[QS 指南](docs/qs.zh-CN.md)和[参考定义](docs/simsopt.zh-CN.md)。
 
-`psi_fit="two_stage"` 在闭合训练区域重新拟合 psi。
-可选的 PyTorch 接口提供局部反传梯度和独立批量求值，支持 16 阶线圈。
-`coil_eval.simsopt` 可在 GPU 上准备 alpha+nu 初始值，再在 CPU 上运行标准磁面重建；
-[异步示例](examples/simsopt_async.py) 将两个阶段分开运行。
-磁面工作流使用 `simsopt` 可选依赖组；GPU 准备阶段还需要按安装文档配置 CUDA 版 PyTorch。
+## S2 精度与速度
 
-通过以下配置选择两阶段路径与磁通多项式 alpha 拟合：
+固定 1024 个 QUASR 输入、四个噪声尺度，共 **4096** 个任务。保留已有修复的 S2
+得到 **2127** 个完整评分；与冻结 Simsopt 参考可配对 **1944** 个，其中 **817** 个满足
+原定参考质量门槛。所有大误差点均保留。1981 个完成的参考不重算；无参考样本只计成功率。
 
-```python
-config = EvaluationConfig(
-    target_volume=0.05, psi_a=0.15, fast=True, flux_method="stokes",
-    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
-    alpha_radial_weighting="smooth", alpha_radial_basis="flux_legendre",
-)
-```
+![CoilEval S2 与 Simsopt 的 QS、ι 散点及各样本集实测 P90 条带](docs/assets/preview_s2_20261105/calibration_p90.png)
 
-各选项见 [API 文档](docs/api.zh-CN.md)。Simsopt 返回结果分别提供重建磁面的接受状态与质量状态。
+图中 QS 条带为 `exp(±P90(|ln(预测/参考)|))`，ι 条带为 `±P90(|预测−参考|)`。
+它描述本样本集的误差覆盖范围。QS 全配对的实测倍数依次为 1.986、1.368、1.157；
+参考质量合格集为 1.926、1.304、1.122。表格另列易读的相对误差 P90，两者定义不同。
 
-微分 f_C 指标采用残差 RMS 定义：`qs_volume` 对所选体积求平均，`qs_outer` 对外侧径向 bin
-求平均。Simsopt 参考函数 `surface_fc` 和 `analyze_arrays` 在 0.9.0 中固定使用
-QH `(1,nfp)`，没有 helicity 参数。另一个 f_B/f_T 参考接口 `surface_qs_metrics`
-接受 `helicity=(1,0)` 以计算 QA，详见[参考定义](docs/simsopt.zh-CN.md#参考-qs-指标)。
+| 样本集 | 数量 | f_B P90 相对误差 | f_C P90 相对误差 | f_T P90 相对误差 | ι P90 绝对误差 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 全部配对 | 1944 | 93.86% | 34.67% | 15.20% | 0.01270 |
+| 参考质量合格 | 817 | 87.04% | 30.17% | 12.17% | 0.01015 |
 
-## Preview 验证
+以下全部单位为 **秒/样本**：一次预热后计时三次完整调用，取中位数，batch 再除以批大小。
+“求值＋梯度”包含完整目标的一次反传。batch 均摊耗时反映吞吐，单样本响应延迟见 scalar。
 
-尚未发布的 0.9.0 验证实验已完成固定随机 QUASR 样本的基础计算：1024 个配置、
-每个四档噪声，共 4096 个任务（含失败记录）。完成复核的结果包含 1981 个完成的 Simsopt 参考，
-以及 1336 对可比较结果。全部配对的 f_B/f_C/f_T 对数尺度 R² 为
-0.928267/0.977176/0.995077；零噪声档 385 对的 f_B R² 为 0.744453。
-145 个异常样本均有复核结果：144 个完成视觉检查，一个无可用几何。两类主统计继续
-保留大误差，另列 612 对的几何证据筛选辅助统计。
-[精度表与散点图](docs/preview_validation.zh-CN.md#固定精度样本完成复核的结果)列出分母、参考资格与限制。
+| 接口 / 指标 | 模式 | CPU 8 线程 | RTX 5090 | A100 |
+| --- | --- | ---: | ---: | ---: |
+| scalar / volume f_C | 求值 | 22.922 | 1.775 | 1.911 |
+| scalar / volume f_C | 求值＋梯度 | 40.000 | 2.168 | 2.397 |
+| batch 1 / volume f_C | 求值 | 22.843 | 1.785 | 1.915 |
+| batch 1 / volume f_C | 求值＋梯度 | 42.364 | 2.159 | 2.410 |
+| batch 2 / volume f_C | 求值 | 31.186 | 1.502 | 1.606 |
+| batch 2 / volume f_C | 求值＋梯度 | 50.412 | 1.572 | 1.823 |
+| batch 4 / volume f_C | 求值 | 30.449 | 1.347 | 1.453 |
+| batch 4 / volume f_C | 求值＋梯度 | 47.093 | 1.418 | 1.633 |
+| batch 8 / volume f_C | 求值 | 30.669 | 1.296 | 1.396 |
+| batch 8 / volume f_C | 求值＋梯度 | 47.288 | 1.375 | 1.547 |
+| scalar / surface f_T | 求值 | 36.701 | 2.024 | 2.057 |
+| scalar / surface f_T | 求值＋梯度 | 56.714 | 2.585 | 2.584 |
 
-[密集庞加莱示例](docs/preview_validation.zh-CN.md#庞加莱几何检查)展示几何尚不能解释的大误差、岛链邻近及细长截面。
+计时复用 2026-11-05 的同一 S2 配方和原生库实测，四个原始 order-16 线圈组构成固定八查询任务，
+每个硬件分配八个逻辑 CPU。普通体积 f_C 和附加目标面 f_T 分开列出；
+冷启动、整批总时间、硬件及哈希保留在[计时原始证据](docs/assets/preview_s2_20261105/timings.json)。
+样本定义、失败分母、参考质量与数值限制见[完整验证记录](docs/preview_validation.zh-CN.md)。
 
-CoilEval 0.9.0 的冻结基准使用四个原始 16 阶 QUASR 线圈。标量求值/求值加梯度
-的中位耗时，8 线程 CPU 为 22.483/42.531 秒，RTX 5090 为 1.553/1.959 秒，
-A100 为 1.903/2.473 秒。批量 8 的整批耗时分别为 245.300/385.934、9.013/9.420
-和 11.282/12.657 秒。[完整表格与测量口径](docs/preview_validation.zh-CN.md)
-列出批量 1、2、4、8、冷调用、硬件与固定工作量。
-这些数字对应常规体积 f_C 求值和含工程指标的损失梯度；目标磁面 f_B/f_T 为单独请求。
+## 示例与使用边界
 
-选中的 QA BFGS 结果 `n3-QA-i0-l5-s2-v5` 已完成完整独立参考流程：体积等效
-Ap 为 8.4326、Simsopt 目标磁面 iota 为 0.469986、Simsopt 磁通壳层 RMS f_C
-为 0.00816269、DESC 边界 f_C 为 0.00722812。DESC f_C 使用表面加权的绝对残差均值
-及其自身归一化。最终 DESC 磁面嵌套；Simsopt 磁面保留两项致密网格质量警告。
-另一实验在三个体积下分别筛选同一组 32 个简单圆环种子，均未得到有效初始值，BFGS 因而未启动。
-[验证记录](docs/preview_validation.zh-CN.md)给出定义、参数和限制。
-原始示例证据保存在上层验证工作区
-`evaluation/coileval_preview_20261102/examples/results_20261103/`。
+Example1 在原 QA 线圈、V=0.3 m³、a=√0.06 m 下，用 S2 重新跑通了完整 source→α→ν→Simsopt→DESC
+流程。DESC 优化器达到 gtol，最终面保持嵌套；残余力仍有可见误差，平衡解认证为 false。
+Example2 从 example1 的系数取 `c·exp(ln(1.01)z)` 独立扰动，筛选时固定电流，抽样 32 个，
+选完整目标最优的有效样本进入解析梯度 BFGS。1% 下 25/32 可评分，接受 116 次更新后目标
+从 −3.6904 降到 −5.4891，并完成最终完整参考流程。DESC 残余力警告及停止原因见
+[验证记录](docs/preview_validation.zh-CN.md)。
+
+S3 的固定 4096 对照得到 1821 个评分，相对 S2 丢失 314 个、恢复 8 个，因此保留可选。
+S2 的剩余误差包括全域 s 拟合目标和正则偏差、角方程离散误差、共振附近误差放大，以及坐标表示限制。
+光滑的庞加莱图不足以保证低 QS 误差；有限诊断通过也不构成全局磁面认证。
 
 ## 文档
 
-- [安装与 GPU 兼容性](docs/installation.zh-CN.md)
-- [API 与参数约定](docs/api.zh-CN.md)
-- [PyTorch 梯度和批量求值](docs/torch.zh-CN.md)
-- [目标磁面的 f_B 与 f_T](docs/qs.zh-CN.md)
-- [Simsopt 磁面与参考 QS](docs/simsopt.zh-CN.md)
-- [版本选择](docs/versions.zh-CN.md)
-- [示例](examples/README.zh-CN.md)
-- [开发与源码结构](docs/development.zh-CN.md)
-- [版本记录](docs/changelog.zh-CN.md)
+- [API 与默认配置](docs/api.zh-CN.md)
+- [PyTorch 梯度与批次](docs/torch.zh-CN.md)
+- [CPU](docs/cpu.zh-CN.md)及 [Simsopt](docs/simsopt.zh-CN.md)
+- [运行示例](examples/README.zh-CN.md)、[版本](docs/versions.zh-CN.md)、[更新日志](docs/changelog.zh-CN.md)
+- [开发说明](docs/development.zh-CN.md)
 
-CoilEval 使用 [MIT 许可证](LICENSE)。
+许可证：[MIT](LICENSE)。

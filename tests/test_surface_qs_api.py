@@ -182,6 +182,7 @@ def tensor_api(monkeypatch):
 
     def evaluator(surface_qs=None, **execution_options):
         config = EvaluationConfig(target_volume=.05, fast=True, flux_method='stokes',
+                                  psi_fit='single_stage',alpha_radial_weighting='histogram',alpha_radial_basis='zernike',
             stokes_validation_rtol=None)
         # Native execution and CUDA timers are separately mocked in the tests
         # that exercise their switches; this general API fixture stays on CPU.
@@ -366,7 +367,7 @@ def test_value_wrapper_enables_explicit_or_default_config(monkeypatch):
             closed.append(True)
 
     monkeypatch.setattr(api, 'TensorEvaluator', FakeTensorEvaluator)
-    config = EvaluationConfig(target_volume=.05, fast=True, flux_method='stokes')
+    config = EvaluationConfig(target_volume=.05, fast=True, flux_method='stokes',psi_fit='single_stage',alpha_radial_weighting='histogram',alpha_radial_basis='zernike')
     explicit = SurfaceQSConfig(nphi=129, ntheta=131)
     with SurfaceQSEvaluator('native.so', 'field.so', config=config,
                             surface_qs=explicit, device_id=2):

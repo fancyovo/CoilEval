@@ -14,7 +14,7 @@ def test_physical_tensor_layout_and_configuration():
     np.testing.assert_array_equal(x[:,18:27],coils.coeffs_z)
     np.testing.assert_array_equal(x[:,27],coils.currents_a)
     with pytest.raises(ValueError,match='fast=True'):
-        TensorEvaluator('unused',config=EvaluationConfig(target_volume=.05))
+        TensorEvaluator('unused',config=EvaluationConfig(target_volume=.05,fast=False,flux_method='area'))
     with pytest.raises(ValueError,match='256 segments'):
         TensorEvaluator('unused',config=EvaluationConfig(target_volume=.05,fast=True,
                          flux_method='stokes',segments_per_coil=128))

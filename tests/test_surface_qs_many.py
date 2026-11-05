@@ -21,7 +21,7 @@ def coil(marker, width=3, nfp=4, nc=4):
 def environment(monkeypatch):
     import coil_eval._autograd.axis_batch as axis
     import coil_eval.simsopt.capture as capture
-    config=EvaluationConfig(.05,fast=True,flux_method='stokes',psi_fit='two_stage')
+    config=EvaluationConfig(.05,fast=True,flux_method='stokes',psi_fit='two_stage',alpha_radial_weighting='histogram',alpha_radial_basis='zernike')
     engine=SimpleNamespace(config=config,device=torch.device('cpu',0),library_path='native.so',
         surface_qs=SurfaceQSConfig(),share_geometry=True,batch_axis=True,_check=lambda:None)
     evaluator=SurfaceQSEvaluator.__new__(SurfaceQSEvaluator);evaluator._evaluator=engine
@@ -122,7 +122,7 @@ def test_mixed_fourier_orders_use_compatible_axis_batches(environment):
 @pytest.mark.parametrize('inputs,configs,error', [
     ([coil(1)],[],ValueError), ([coil(1)],[object()],ValueError),
     ([object()],None,TypeError),
-    ([coil(1)],[EvaluationConfig(.05)],ValueError),
+    ([coil(1)],[EvaluationConfig(.05,fast=False,flux_method='area')],ValueError),
 ])
 def test_malformed_requests_fail_before_preparation(environment,inputs,configs,error):
     e=environment

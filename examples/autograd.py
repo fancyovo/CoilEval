@@ -11,10 +11,10 @@ def main():
     parser.add_argument('--library',help='Optional path to a custom native backend')
     parser.add_argument('--batch',action='store_true')
     parser.add_argument('--coils',type=Path,default=Path(__file__).with_name('coils.json'))
-    parser.add_argument('--two-stage',action='store_true')
-    parser.add_argument('--sampling',choices=('cartesian','polar_quadrature'),default='cartesian')
-    parser.add_argument('--alpha-weighting',choices=('histogram','smooth'),default='histogram')
-    parser.add_argument('--alpha-basis',choices=('zernike','flux_legendre'),default='zernike')
+    parser.add_argument('--two-stage',action='store_true',default=True,help='S2 is the default; retained compatibility flag')
+    parser.add_argument('--sampling',choices=('cartesian','polar_quadrature'),default='polar_quadrature')
+    parser.add_argument('--alpha-weighting',choices=('histogram','smooth'),default='smooth')
+    parser.add_argument('--alpha-basis',choices=('zernike','flux_legendre'),default='flux_legendre')
     parser.add_argument('--volume',type=float,default=.05,help='Target volume in m^3')
     parser.add_argument('--radius',type=float,default=.15,help='Fitting radius in metres')
     parser.add_argument('--device',type=int,default=0,help='CUDA device index')
@@ -44,7 +44,7 @@ def main():
         elapsed=perf_counter()-started
         print('Objective:',loss.detach().cpu())
         print('Physical gradient:',gradient.cpu())
-        print('Value + one gradient wall time (s):',elapsed)
+        print('Value + one gradient seconds/sample:',elapsed/(2 if args.batch else 1))
 
 if __name__=='__main__':
     main()

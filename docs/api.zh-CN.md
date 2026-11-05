@@ -32,30 +32,31 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `h` | `1e-4` | 归一化中心差分步长 |
 | `segments_per_coil` | `256` | 每条线圈的离散段数 |
 | `psi_iterations`、`alpha_iterations` | `4`、`4` | 局部迭代拟合设置 |
-| `fast` | `False` | 使用 240 步磁轴积分和 100 步磁面追踪 |
-| `flux_method` | `'area'` | `'area'` 或 fast 近邻路径的 `'stokes'` 边界积分 |
-| `psi_fit` | `'single_stage'` | `'single_stage'` 或 `'two_stage'` |
+| `fast` | `True` | 使用 240 步磁轴积分和 100 步磁面追踪 |
+| `flux_method` | `'stokes'` | `'area'` 或 fast 近邻路径的 `'stokes'` 边界积分 |
+| `psi_fit` | `'two_stage'` | `'single_stage'` 或 `'two_stage'` |
 | `psi_refit_points` | `82368` | 第二次拟合的目标训练行数 |
 | `psi_refit_ridge` | `None` | 可选的 S2 列归一化正则系数，须非负；`None` 保留原生设置 |
 | `psi_target_refit` | `False` | `psi_fit='two_stage'` 后增加目标内部 S3 拟合的候选选项 |
 | `psi_target_refit_factor` | `1.2` | S3 请求训练体积与目标体积的比值，须大于 1 |
 | `psi_target_refit_ridge` | `1e-10` | 仅用于 S3 的非负列归一化正则系数 |
-| `psi_refit_sampling` | `'cartesian'` | 两阶段拟合的 `'cartesian'` 或 `'polar_quadrature'` 采样 |
+| `psi_refit_sampling` | `'polar_quadrature'` | 两阶段拟合的 `'cartesian'` 或 `'polar_quadrature'` 采样 |
 | `psi_nearby_method` | `'local'` | 两阶段局部响应，或 `'formal'` 端点重建 |
 | `psi_fd_batch_size` | `8` | 两阶段局部差分端点的批量大小 |
-| `alpha_radial_weighting` | `'histogram'` | `'histogram'` 或两阶段实验性的 `'smooth'` 径向密度权重 |
+| `alpha_radial_weighting` | `'smooth'` | `'histogram'` 或两阶段的 `'smooth'` 径向密度权重 |
 | `alpha_weight_sigma` | `0.05` | 平滑权重在归一化 rho 上的 Gaussian 宽度 |
 | `alpha_count_floor` | `32.0` | 平滑密度分母中的正加性伪计数 |
-| `alpha_radial_basis` | `'zernike'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
+| `alpha_radial_basis` | `'flux_legendre'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor 磁通一致性容差；`None` 关闭检查 |
 
-0.10.0 默认保留单阶段设置。显式选择两阶段路径：
+0.11.0 默认采用已验证的 S2 配方。下面的显式配置与
+`EvaluationConfig(target_volume=0.05, psi_a=0.15)` 等价：
 
 ```python
 config = EvaluationConfig(
     target_volume=0.05, psi_a=0.15,
     fast=True, flux_method="stokes",
-    psi_fit="two_stage", psi_refit_sampling="cartesian",
+    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
 )
 ```
 
@@ -79,18 +80,20 @@ S3 在该边界包围的整个内部进行加权极坐标求积拟合，沿用�
 多体积捕获共享 S1、S2，每个目标独立保存 S3 系数、QR 因子和下游状态。
 局部梯度包含 S2 训练边界运动、S3 体积方程、容量裁剪及极坐标面积权重的响应，
 适用于已选定的离散分支。面 α 与原生体 α 保留各自独立的配置含义。
-目标体积容量检查至少覆盖 psi 拟合的环向网格，并为保留的环向模提供每周期至少两个采样点。
+目标体积容量检查使用 `max(2*psi_n_phi, 4*psi_m_tor+1)` 个环向截面。
 磁通积分仍使用其独立配置的网格。这是采样截面上的径向分支检查；通过检查不代表全局磁面或物理精度得到认证。
-`psi_refit_sampling='polar_quadrature'` 选择可选的加权极坐标求积，
-在 0.9.0 中属于实验性数值选项。两种采样都保留完整采样结构，因此实际训练行数可能
+`psi_refit_sampling='polar_quadrature'` 选择默认的加权极坐标求积；Cartesian 采样仍可显式选择。两种采样都保留完整采样结构，因此实际训练行数可能
 与 `psi_refit_points` 不同，可查看 `diagnostics['psi_refit_training_count']`。
 
-`alpha_radial_weighting='smooth'` 是 `psi_fit='two_stage'` 的可选实验性设置，
-使用正的 sigma 与伪计数参数控制平滑密度权重。默认仍采用 histogram 权重。
+`alpha_radial_weighting='smooth'` 是 `psi_fit='two_stage'` 的默认设置，
+使用正的 sigma 与伪计数参数控制平滑密度权重。histogram 权重仍可显式选择。
 
 `alpha_radial_basis='flux_legendre'` 使用归一化磁通的多项式拟合角度修正。
 此选项要求 `psi_fit='two_stage'`，同时作用于标量求值、局部梯度与捕获的 alpha 数据。
-默认仍使用原始的 `'zernike'` 基。
+默认采用 `'flux_legendre'`，原始的 `'zernike'` 基仍可选择。
+使用历史 S1 时同时指定 `psi_fit='single_stage'`、`alpha_radial_weighting='histogram'`
+和 `alpha_radial_basis='zernike'`。若需恢复 0.11 之前的标准追踪配置，另设
+`fast=False`、`flux_method='area'`、`psi_refit_sampling='cartesian'`。
 
 `flux_method='stokes'` 要求 `fast=True`，为局部近邻和差分端点选择边界积分。
 独立中心调用保留其中心积分规则。结果的 `diagnostics['configuration']` 保存所选设置。
@@ -163,7 +166,7 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 两个原生 QS 字段都除以所选螺旋度的 `max(sqrt(M*M + N*N), 1)`。
 外侧 bin 保留最后一个径向 bin 内的原生点权重；iota 剖面采样覆盖所选径向范围。
 独立的 `surface_fc`/`analyze_arrays` 参考函数固定使用 QH 螺旋度 `(1,nfp)`，
-在 0.9.0 中没有 helicity 参数。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
+在 0.11.0 中没有 helicity 参数。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
 QA `helicity=(1,0)`。与原生结果比较时，应为对应参考路径选择相同螺旋度。
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` 提供可组合的标量惩罚。

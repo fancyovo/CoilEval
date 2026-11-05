@@ -1,0 +1,266 @@
+{
+  "schema": "qh-grid-desc-boundary-metrics-v1",
+  "status": "completed",
+  "reason": null,
+  "metrics": {
+    "qs": 0.007507885570647887,
+    "fb": 0.0026997518789970603,
+    "k": 3.720238164423594
+  },
+  "diagnostic_values": {
+    "qs": 0.007507885570647887,
+    "fb": 0.0026997518789970603
+  },
+  "metric_available": {
+    "qs": true,
+    "fb": true,
+    "k": true
+  },
+  "eligible_for_pooling": true,
+  "warnings": [],
+  "convergence": {
+    "solve_call_success": true,
+    "optimizer_success": true,
+    "optimizer_message": "`gtol` condition satisfied. (gtol=1.00e-10)",
+    "optimizer_nit": 110.0,
+    "nested_initial": true,
+    "nested_final": true,
+    "final_force_compute_success": true,
+    "final_force_mean_abs_normalized": 0.005614239416034019,
+    "final_force_p95_abs_normalized": 0.01405266211177548,
+    "final_force_max_abs_normalized": 0.14672194436281652,
+    "reference_valid": true,
+    "require_converged": false,
+    "certified_equilibrium": false
+  },
+  "geometry": {
+    "volume_m3": 0.29995523653278766,
+    "major_radius_m": 1.0505472337985955,
+    "coil_length_mean_m": 3.5349337806447565,
+    "volume_source": "DESC equilibrium V",
+    "major_radius_source": "DESC report equilibrium R0",
+    "coil_length_source": "same saved coil geometry; explicit caller measurement"
+  },
+  "provenance": {
+    "source": "DESC",
+    "radial_selector": "rho=1 only; no interior-radius minimization",
+    "helicity": [
+      1,
+      0
+    ],
+    "qs_definition": "DESC official surface-Jacobian mean(abs(raw f_C))/B0^3 at rho=1",
+    "fb_definition": "DESC normalized non-QA Boozer Fourier amplitude at rho=1; unsquared",
+    "k_definition": "DESC boundary f_C * actual_mean_coil_length^4 / (DESC_volume * DESC_major_radius)",
+    "k_uses_native_qs": false,
+    "same_measure_as_native_rms": false,
+    "case_id": "example2-S2-perturb32-QA",
+    "surface_npz_sha256": "bd730d5de00bb4fcac2a9de1d314c6a1af38b9fb3731c12cf8e4fe7087bae3ed",
+    "case_file_sha256": "b9d3c0472080cee2329b2244313200cd73c33a3daf742c4c5e9e87beb56ebbf2",
+    "DESC_version": "0.16.0",
+    "source_summary_status": "completed",
+    "reported_definitions": {
+      "f_B": "sqrt(sum of non-QA Boozer |B| Fourier coefficients squared) / sqrt(sum of all Boozer |B| coefficients squared)",
+      "f_C": "surface-Jacobian-weighted mean(abs(raw f_C)) / B0^3, exactly as DESC 0.16 plot_qs_error",
+      "f_T": "surface-Jacobian-weighted mean(abs(raw f_T)) * R0^2 / B0^4, exactly as DESC 0.16 plot_qs_error"
+    },
+    "reported_normalization": "DESC plot_qs_error: B0 is its equilibrium-volume mean |B|; R0 is DESC major radius. These three measures are not the native differential volume RMS or Simsopt macro-QS squared.",
+    "summary_path": "/home/scc/pb24511935/local_surface_evaluator_runs/abi12_target_volume_20260927/coileval-preview-validation-20261102/prerelease_s2_20261105/example2_physical_v1/results/reports/example2-S2-perturb32-QA/desc_report/summary.json"
+  },
+  "task_id": "example2-S2-perturb32-QA",
+  "selected": {
+    "trajectory_id": "example2-S2-perturb32-QA",
+    "worker_id": 0,
+    "selected_point": {
+      "iteration": 132,
+      "accepted_updates": 116,
+      "valid": true,
+      "status": "ok",
+      "qs": 0.0038968455140610293,
+      "loss": -5.4890666641569545,
+      "metrics": [
+        0.4658554345369339,
+        0.09911960660262598,
+        6.124939083267976,
+        3.5349337806447565,
+        0.299999981257739
+      ],
+      "condition_loss": [
+        0.0024469444223596073,
+        0.004960592218494631,
+        0.0031219549055684468,
+        0.013420748829945144,
+        0.0
+      ],
+      "quality_loss": 0.018174753620544704,
+      "radius_penalty": 0.016393671355847177,
+      "major_radius_actual": 1.025795701531698,
+      "target_quality_error": 0.009160370695760795,
+      "k": 1.9772255649391697,
+      "physical_array_sha256": "4954c4ae620d3c9a02ee4fd39a765f0feb358f31b8b9c8fe068c895f0ef4a8b1",
+      "target_volume_m3": 0.3,
+      "psi_a_m": 0.2449489742783178,
+      "targets": [
+        0.47,
+        0.1,
+        6.0,
+        3.5,
+        0.3
+      ]
+    },
+    "best_k": {
+      "iteration": 132,
+      "accepted_updates": 116,
+      "valid": true,
+      "status": "ok",
+      "qs": 0.0038968455140610293,
+      "loss": -5.4890666641569545,
+      "metrics": [
+        0.4658554345369339,
+        0.09911960660262598,
+        6.124939083267976,
+        3.5349337806447565,
+        0.299999981257739
+      ],
+      "condition_loss": [
+        0.0024469444223596073,
+        0.004960592218494631,
+        0.0031219549055684468,
+        0.013420748829945144,
+        0.0
+      ],
+      "quality_loss": 0.018174753620544704,
+      "radius_penalty": 0.016393671355847177,
+      "major_radius_actual": 1.025795701531698,
+      "target_quality_error": 0.009160370695760795,
+      "k": 1.9772255649391697,
+      "physical_array_sha256": "4954c4ae620d3c9a02ee4fd39a765f0feb358f31b8b9c8fe068c895f0ef4a8b1",
+      "target_volume_m3": 0.3,
+      "psi_a_m": 0.2449489742783178,
+      "targets": [
+        0.47,
+        0.1,
+        6.0,
+        3.5,
+        0.3
+      ]
+    },
+    "selection": "minimum-full-objective-after-perturb32",
+    "selection_label": "扰动32选完整目标最优后BFGS的完整目标最低点",
+    "physical_array_sha256": "4954c4ae620d3c9a02ee4fd39a765f0feb358f31b8b9c8fe068c895f0ef4a8b1",
+    "physical_tokens_path": "/home/scc/pb24511935/local_surface_evaluator_runs/abi12_target_volume_20260927/coileval-preview-validation-20261102/prerelease_s2_20261105/example2_physical_v1/results/selected_record.npz",
+    "targets": [
+      0.47,
+      0.1,
+      6.0,
+      3.5,
+      0.3
+    ],
+    "nfp": 3,
+    "nc": 4,
+    "symmetry": "QA",
+    "helicity": [
+      1,
+      0
+    ],
+    "source_iteration": 132,
+    "source_event_seq": 132,
+    "screen_candidates": 32,
+    "initializer_metadata": {
+      "source": "example1-coefficient-lognormal-perturb32"
+    }
+  },
+  "timings": {
+    "alpha": {
+      "returncode": 0,
+      "seconds": 145.4962029978633
+    },
+    "nu": {
+      "returncode": 0,
+      "seconds": 15.424501068890095
+    },
+    "simsopt": {
+      "returncode": 0,
+      "seconds": 86.76448165997863
+    },
+    "downstream": {
+      "returncode": 0,
+      "seconds": 949.1696255803108
+    }
+  },
+  "reference_precision": {
+    "profile": "desc12-gpu8-20261101-v1",
+    "native_optimizer_changed": false,
+    "coil_quadrature": 1024,
+    "alpha": {
+      "order": [
+        12,
+        12,
+        16
+      ],
+      "train_points": 120000,
+      "validation_points": 120000,
+      "precision": "fp64"
+    },
+    "nu": {
+      "order": 16,
+      "extract_order": 32,
+      "fit_grid": [
+        129,
+        131
+      ],
+      "validation_grid": [
+        113,
+        117
+      ],
+      "interpolation": 193,
+      "precision": "fp64"
+    },
+    "simsopt": {
+      "order": 16,
+      "ls_tol": 1e-12,
+      "ls_maxiter": 200,
+      "newton_tol": 1e-13,
+      "newton_maxiter": 60,
+      "validation_grids": [
+        33,
+        65,
+        129,
+        193
+      ],
+      "qs_sdim": 32,
+      "surface_fc_grids": [
+        128,
+        256
+      ]
+    },
+    "desc": {
+      "L": 12,
+      "M": 12,
+      "N": 12,
+      "maxiter": 300,
+      "ftol": 1e-10,
+      "xtol": 1e-10,
+      "gtol": 1e-10,
+      "precision": "fp64",
+      "conversion_grid": [
+        192,
+        288
+      ],
+      "qs_rho_samples": 41,
+      "backend": "gpu",
+      "gpu_workers": 8,
+      "initialization_backends": [
+        "cuda",
+        "cpu"
+      ],
+      "grid": [
+        24,
+        24,
+        24
+      ]
+    },
+    "independent_acceptance_thresholds": "unchanged; self-intersection and topology guards retained",
+    "source_psi": "fresh CoilEval S2 source at the original target volume",
+    "limitation": "higher resolution is not a proof of convergence; all optimizer warnings remain visible"
+  }
+}

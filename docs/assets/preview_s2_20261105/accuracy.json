@@ -1,0 +1,82 @@
+{
+  "protocol": "coileval-s2-preview-20261105-v1",
+  "requested": 4096,
+  "scored": 2127,
+  "paired": 1944,
+  "qualified": 817,
+  "status_counts": {
+    "native_failed": 1674,
+    "completed": 2127,
+    "capture_failed": 240,
+    "surface_metrics_failed": 55
+  },
+  "reference_counts": {
+    "unavailable_native_failure": 1918,
+    "reference_rejected": 181,
+    "completed": 1981,
+    "cpu_timeout": 16
+  },
+  "source_sha256": "2fd003bc4fe18007a0f7088fe2dc171616cb13987d2192418f14ee02b7c000cf",
+  "reference_manifest_sha256": "daff50895c551b855adbd92aa9b8e75399f2bc1dd8288c74a432d4d96eee3248",
+  "p90_definition": "numpy.quantile(method=linear); QS abs(log(pred/ref)), iota abs(pred-ref); descriptive coverage, not confidence interval",
+  "populations": {
+    "All paired": {
+      "f_B": {
+        "pairs": 1944,
+        "log10_R2": 0.8901574790379769,
+        "p90_abs_log_ratio": 0.6863133012815913,
+        "p90_factor": 1.986378837145728,
+        "p90_relative_error": 0.9386158413868734
+      },
+      "f_C": {
+        "pairs": 1944,
+        "log10_R2": 0.96120157802603,
+        "p90_abs_log_ratio": 0.3135358324396026,
+        "p90_factor": 1.368254489779786,
+        "p90_relative_error": 0.34673605391245543
+      },
+      "f_T": {
+        "pairs": 1944,
+        "log10_R2": 0.991379045030857,
+        "p90_abs_log_ratio": 0.14603378717090032,
+        "p90_factor": 1.1572352870966864,
+        "p90_relative_error": 0.15198693917830866
+      },
+      "iota": {
+        "pairs": 1944,
+        "R2": 0.9997284630591238,
+        "RMSE": 0.01162507684064425,
+        "p90_absolute_error": 0.0127014350985665
+      }
+    },
+    "Reference-qualified": {
+      "f_B": {
+        "pairs": 817,
+        "log10_R2": 0.894896846313774,
+        "p90_abs_log_ratio": 0.6555276072833348,
+        "p90_factor": 1.9261585045875458,
+        "p90_relative_error": 0.8704457707994228
+      },
+      "f_C": {
+        "pairs": 817,
+        "log10_R2": 0.9596587734056552,
+        "p90_abs_log_ratio": 0.2651544948496598,
+        "p90_factor": 1.3036323647073893,
+        "p90_relative_error": 0.30166443107826163
+      },
+      "f_T": {
+        "pairs": 817,
+        "log10_R2": 0.9927941271362297,
+        "p90_abs_log_ratio": 0.11480064278007893,
+        "p90_factor": 1.1216498062943163,
+        "p90_relative_error": 0.12165070201966983
+      },
+      "iota": {
+        "pairs": 817,
+        "R2": 0.999823135302623,
+        "RMSE": 0.008752638226536004,
+        "p90_absolute_error": 0.010153324699972831
+      }
+    }
+  }
+}

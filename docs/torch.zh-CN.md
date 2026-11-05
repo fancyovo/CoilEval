@@ -21,7 +21,7 @@ Tensor 接口支持任意正整数 `nfp`、任意正整数基本线圈数量，�
 QA 使用 `EvaluationConfig(helicity=(1,0), ...)`，对应场周期的 QH 使用 `(1,nfp)`；
 螺旋度不会由 `nfp` 自动推断。每条线圈仍使用 256 段及四次 psi/alpha 局部拟合迭代。
 配置使用 `fast=True`、`flux_method='stokes'`，
-`psi_fit` 可以选择 `'single_stage'` 或 `'two_stage'`。
+0.11.0 默认采用 S2。显式选择历史 S1 时，还需同时设置 histogram 权重与 Zernike 基，见 API 指南。
 psi 计算使用 float64，磁场计算默认使用 float32，也可指定 `field_dtype=torch.float64`。
 
 ## 求值与批量
@@ -102,7 +102,7 @@ coils = CoilSet.read_json("examples/coils.json")
 x = pack_coils(coils)
 config = EvaluationConfig(
     target_volume=0.05, fast=True, flux_method="stokes",
-    psi_fit="two_stage", psi_refit_sampling="cartesian",
+    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
 )
 with TensorEvaluator(config=config, nfp=coils.nfp) as evaluator:
     result = evaluator.evaluate(x)

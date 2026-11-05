@@ -115,7 +115,10 @@ def factory(monkeypatch):
 
 
 def configurations():
-    base=EvaluationConfig(.03,psi_fit='two_stage',psi_refit_points=4)
+    # Legacy mock ABI intentionally has no optional basis/weight setters.
+    base=EvaluationConfig(.03,psi_fit='two_stage',psi_refit_points=4,fast=False,
+        flux_method='area',psi_refit_sampling='cartesian',
+        alpha_radial_weighting='histogram',alpha_radial_basis='zernike')
     return [base,replace(base,target_volume=.01),replace(base,target_volume=.04)]
 
 

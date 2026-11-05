@@ -15,8 +15,8 @@ from _oracle import make_coils
 DT=torch.float64
 
 
-def test_smooth_alpha_config_is_opt_in_s2_and_not_added_to_legacy_c_struct():
-    old=EvaluationConfig(.03)
+def test_legacy_alpha_config_remains_available_without_changing_c_struct():
+    old=EvaluationConfig(.03,psi_fit='single_stage',alpha_radial_weighting='histogram',alpha_radial_basis='zernike')
     assert old.alpha_radial_weighting=='histogram'
     with pytest.raises(ValueError,match='two_stage'):replace(old,alpha_radial_weighting='smooth')
     smooth=replace(old,psi_fit='two_stage',alpha_radial_weighting='smooth')

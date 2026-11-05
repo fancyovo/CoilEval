@@ -2,7 +2,7 @@
 
 [简体中文](qs.zh-CN.md)
 
-CoilEval 0.9.0 provides Fourier (`f_B`) and optional triple-product (`f_T`)
+CoilEval 0.11.0 provides Fourier (`f_B`) and optional triple-product (`f_T`)
 quasisymmetry metrics on the target-volume surface. They share a differentiable
 alpha+nu coordinate construction, with a target-surface alpha fit and vacuum
 potential-based nu correction. The coil evaluation interface uses PyTorch on

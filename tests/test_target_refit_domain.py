@@ -85,7 +85,7 @@ def test_capacity_failure_does_not_reduce_target_or_return_outer_root():
 
 
 @pytest.mark.parametrize('options',[
-    {'psi_target_refit': 1}, {'psi_target_refit': True},
+    {'psi_target_refit': 1}, {'psi_target_refit': True, 'psi_fit': 'single_stage'},
     {'psi_target_refit_factor': 1.}, {'psi_target_refit_factor': float('nan')},
     {'psi_target_refit_ridge': -1}, {'psi_target_refit_ridge': True}])
 def test_bad_target_refit_config_is_rejected(options):

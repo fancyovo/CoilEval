@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "coil-eval"
-version = "0.10.0"
+version = "0.11.0"
 description = "CPU and GPU evaluation of stellarator coils and local gradients"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -33,8 +33,8 @@ build-dir = "build/{wheel_tag}"
 cmake.source-dir = "native"
 wheel.packages = ["src/coil_eval"]
 wheel.py-api = "py3"
-sdist.include = ["native/**", "src/**", "docs/**", "examples/**", "tests/**", "tools/**", "AGENTS.md", "LICENSE", "README*.md", "CHANGELOG.md", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
-sdist.exclude = ["build/**", "dist/**", ".cache/**", "**/__pycache__/**", "**/*.pyc", "**/*.pyo"]
+sdist.include = ["/native/**", "/src/**", "/docs/**", "/examples/**", "/tests/**", "/tools/**", "/AGENTS.md", "/LICENSE", "/README*.md", "/CHANGELOG.md", "!**/__pycache__/**", "!**/*.pyc", "!**/*.pyo"]
+sdist.exclude = ["build/**", "dist/**", ".cache/**", ".pytest_cache/**", ".runtime_tmp/**", "**/__pycache__/**", "**/*.pyc", "**/*.pyo"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

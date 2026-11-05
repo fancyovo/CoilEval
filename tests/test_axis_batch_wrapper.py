@@ -211,7 +211,7 @@ def test_symbol_discovery_precedes_binding_any_native_function(monkeypatch):
 def test_coarse_only_mode_and_mixed_layout_rejection(fake_native):
     p=m.prepare_axis_batch(physical(),configs(),'unused',include_refinement=False)
     assert p.enabled and all(e.refinement is None for e in p.entries)
-    mixed=[configs(1)[0],EvaluationConfig(.04,fast=False)]
+    mixed=[configs(1)[0],EvaluationConfig(.04,fast=False,flux_method='area')]
     with pytest.raises(ValueError,match='explicit groups'):
         m.prepare_axis_batch(physical(),mixed,'unused')
 

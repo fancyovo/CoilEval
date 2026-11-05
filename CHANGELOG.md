@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0 (preview candidate)
+
+- Make the validated S2 configuration the public default: two-stage scalar fitting, weighted polar quadrature, smooth flux-Legendre volume-alpha fitting and the fast Stokes local path. Retain S3 as an explicit option disabled by default.
+- Preserve explicit configuration of historical numerical paths; saved configurations remain reproducible.
+- Prepare current S2 accuracy, amortized timing and reproducible evaluation/optimization examples for the first preview delivery.
+- Exclude local runtime and pytest cache documentation from the source archive.
+
 ## 0.10.0 (unreleased)
 
 - Add an explicit `psi_target_refit` option after the existing two scalar fits. Select a capacity-clipped target-volume interior from S2, fit S3 with separately configured regularization, and retain the original requested volume.

@@ -1,0 +1,2010 @@
+{
+  "source_sha256": "787df3261ed3d85d7770444d7e70c2f3736516db554146dd339ed45c203eadd7",
+  "convention": "warm complete-call median / batch_size; raw whole-call retained",
+  "cells": [
+    {
+      "hardware": "rtx5090",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.7752007097005844,
+      "whole_call_median_s": 1.7752007097005844,
+      "raw": {
+        "median_s": 1.7752007097005844,
+        "measured_s": [
+          1.7738054245710373,
+          1.7754320800304413,
+          1.7752007097005844
+        ],
+        "cold_s": 4.0270993039011955,
+        "warmup_s": 1.771071545779705,
+        "process_initialization_s": 0.6647727340459824,
+        "raw_sha256": "71ea2264e1d2f0ab4b23d6465d89213c8550d337545c73eb2231646a00231884",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            26,
+            27,
+            28,
+            29,
+            90,
+            91,
+            92,
+            93
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137104",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-c81a78cd-8680-b720-a4a8-88bba6e79af4, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 2.1681286469101906,
+      "whole_call_median_s": 2.1681286469101906,
+      "raw": {
+        "median_s": 2.1681286469101906,
+        "measured_s": [
+          2.2456084489822388,
+          2.1590104326605797,
+          2.1681286469101906
+        ],
+        "cold_s": 4.0057604387402534,
+        "warmup_s": 2.1764731742441654,
+        "process_initialization_s": 0.2435675896704197,
+        "raw_sha256": "a7a689bda303a0e7daa545c3ae08632f758fba5fb84628a640756d89f3fbce6e",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            35,
+            96,
+            97,
+            98,
+            99
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137105",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-5a1f5d04-126f-0796-c9ee-70e096fe85c3, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.7854289822280407,
+      "whole_call_median_s": 1.7854289822280407,
+      "raw": {
+        "median_s": 1.7854289822280407,
+        "measured_s": [
+          1.7854289822280407,
+          1.7891933806240559,
+          1.7850716710090637
+        ],
+        "cold_s": 2.6049141250550747,
+        "warmup_s": 1.7832967154681683,
+        "process_initialization_s": 0.2912854850292206,
+        "raw_sha256": "d729b87a5a1dabb874f31a5e15895a3bc9bdf2993d5ae7b56abf2a6a3cd1b338",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            26,
+            27,
+            28,
+            29,
+            90,
+            91,
+            92,
+            93
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137128",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-c81a78cd-8680-b720-a4a8-88bba6e79af4, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 2.1587128788232803,
+      "whole_call_median_s": 2.1587128788232803,
+      "raw": {
+        "median_s": 2.1587128788232803,
+        "measured_s": [
+          2.1587128788232803,
+          2.1662923730909824,
+          2.1585127003490925
+        ],
+        "cold_s": 3.8276577331125736,
+        "warmup_s": 2.1809273213148117,
+        "process_initialization_s": 0.24299833551049232,
+        "raw_sha256": "a6bb3873cc76a8d1b1bf5f367760ab0cb6f6aeb4722321d7628c883eb0ab4189",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            35,
+            96,
+            97,
+            98,
+            99
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137130",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-5a1f5d04-126f-0796-c9ee-70e096fe85c3, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 2,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.5016971677541733,
+      "whole_call_median_s": 3.0033943355083466,
+      "raw": {
+        "median_s": 3.0033943355083466,
+        "measured_s": [
+          3.006358951330185,
+          3.0033943355083466,
+          2.9532146230340004
+        ],
+        "cold_s": 3.7811262533068657,
+        "warmup_s": 2.9623174108564854,
+        "process_initialization_s": 0.2950195334851742,
+        "raw_sha256": "442cc3aa23cbd47beefcacf8b0936f3b0539a8069c1aa92d07bf6830a5ef1c8d",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            26,
+            27,
+            28,
+            29,
+            90,
+            91,
+            92,
+            93
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137135",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-c81a78cd-8680-b720-a4a8-88bba6e79af4, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 2,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 1.572375200688839,
+      "whole_call_median_s": 3.144750401377678,
+      "raw": {
+        "median_s": 3.144750401377678,
+        "measured_s": [
+          3.1462773829698563,
+          3.144750401377678,
+          3.1364391148090363
+        ],
+        "cold_s": 5.04176888614893,
+        "warmup_s": 3.1520915292203426,
+        "process_initialization_s": 0.24600205197930336,
+        "raw_sha256": "c76da62428c04622517980ce51e9722cd9a3fc31b6d4dba9b32e41569cf66b42",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            35,
+            96,
+            97,
+            98,
+            99
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137136",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-5a1f5d04-126f-0796-c9ee-70e096fe85c3, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 4,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.3466972699388862,
+      "whole_call_median_s": 5.386789079755545,
+      "raw": {
+        "median_s": 5.386789079755545,
+        "measured_s": [
+          5.386789079755545,
+          5.384698797017336,
+          5.392742186784744
+        ],
+        "cold_s": 6.241078052669764,
+        "warmup_s": 5.384897202253342,
+        "process_initialization_s": 0.2871631681919098,
+        "raw_sha256": "d5edfe17eb53733fd0a4b0c0bc819832d9d0275ceb3e754e553ff0a184820535",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            26,
+            27,
+            28,
+            29,
+            90,
+            91,
+            92,
+            93
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137139",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-c81a78cd-8680-b720-a4a8-88bba6e79af4, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 4,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 1.4176115933805704,
+      "whole_call_median_s": 5.670446373522282,
+      "raw": {
+        "median_s": 5.670446373522282,
+        "measured_s": [
+          5.645327679812908,
+          5.670446373522282,
+          5.741903785616159
+        ],
+        "cold_s": 7.628976043313742,
+        "warmup_s": 5.667201820760965,
+        "process_initialization_s": 0.24213136360049248,
+        "raw_sha256": "24791e629263158c3a8592b033b73d094ec1895740eaf62ec150917e43003665",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            35,
+            96,
+            97,
+            98,
+            99
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137140",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-5a1f5d04-126f-0796-c9ee-70e096fe85c3, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 8,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.2955255256965756,
+      "whole_call_median_s": 10.364204205572605,
+      "raw": {
+        "median_s": 10.364204205572605,
+        "measured_s": [
+          10.35612003132701,
+          10.364204205572605,
+          10.379906326532364
+        ],
+        "cold_s": 11.19620107114315,
+        "warmup_s": 10.396858498454094,
+        "process_initialization_s": 0.2515609599649906,
+        "raw_sha256": "32afa516b15928fe4dc86ae4377ed17bb200416114254a8f64002ab933db9cdc",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            26,
+            27,
+            28,
+            29,
+            90,
+            91,
+            92,
+            93
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137143",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-c81a78cd-8680-b720-a4a8-88bba6e79af4, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "batch",
+      "batch_size": 8,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 1.3748304569162428,
+      "whole_call_median_s": 10.998643655329943,
+      "raw": {
+        "median_s": 10.998643655329943,
+        "measured_s": [
+          11.01492466032505,
+          10.998643655329943,
+          10.933617368340492
+        ],
+        "cold_s": 12.893433064222336,
+        "warmup_s": 10.961618188768625,
+        "process_initialization_s": 0.25381525978446007,
+        "raw_sha256": "313fa51ea27f48507294ad4aa0986adbede40db1bc195e1080b681681c5cca67",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            35,
+            96,
+            97,
+            98,
+            99
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137144",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-5a1f5d04-126f-0796-c9ee-70e096fe85c3, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fT",
+      "seconds_per_sample": 2.0243614241480827,
+      "whole_call_median_s": 2.0243614241480827,
+      "raw": {
+        "median_s": 2.0243614241480827,
+        "measured_s": [
+          2.016926873475313,
+          2.026254776865244,
+          2.0243614241480827
+        ],
+        "cold_s": 3.700389664620161,
+        "warmup_s": 2.028499510139227,
+        "process_initialization_s": 0.27819228544831276,
+        "raw_sha256": "b71e42ab64611017713713cb5353433f75d0d84fb4087ee002a319dc418a8826",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            26,
+            27,
+            28,
+            29,
+            90,
+            91,
+            92,
+            93
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137152",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-c81a78cd-8680-b720-a4a8-88bba6e79af4, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "rtx5090",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fT",
+      "seconds_per_sample": 2.5846014879643917,
+      "whole_call_median_s": 2.5846014879643917,
+      "raw": {
+        "median_s": 2.5846014879643917,
+        "measured_s": [
+          2.5738084577023983,
+          2.5867273546755314,
+          2.5846014879643917
+        ],
+        "cold_s": 4.388130892068148,
+        "warmup_s": 2.6089684329926968,
+        "process_initialization_s": 0.24596304446458817,
+        "raw_sha256": "9d82a950b8224d755911e1d80d91c760e3fbcfc321a28b61fd1f5ae2e2b1b9c4",
+        "environment": {
+          "hostname": "anode12",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            35,
+            96,
+            97,
+            98,
+            99
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137098",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530",
+          "gpu_name": "NVIDIA GeForce RTX 5090",
+          "compute_capability": [
+            12,
+            0
+          ],
+          "gpu_total_memory": 33668857856,
+          "nvidia_smi": "NVIDIA GeForce RTX 5090, GPU-5a1f5d04-126f-0796-c9ee-70e096fe85c3, 580.159.03, 32607 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.9107631119550206,
+      "whole_call_median_s": 1.9107631119550206,
+      "raw": {
+        "median_s": 1.9107631119550206,
+        "measured_s": [
+          2.074865949980449,
+          1.9090963250491768,
+          1.9107631119550206
+        ],
+        "cold_s": 3.413725277991034,
+        "warmup_s": 2.0787173199933022,
+        "process_initialization_s": 1.1899202909553424,
+        "raw_sha256": "af312b1668e18d12491c933df419e91a8c1ae71992dd01808695e853c74ff884",
+        "environment": {
+          "hostname": "anode18",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            10,
+            11,
+            12,
+            13,
+            74,
+            75,
+            76,
+            77
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137106",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-cf276936-5ad3-d498-95fe-c574a845c252, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 2.396774100023322,
+      "whole_call_median_s": 2.396774100023322,
+      "raw": {
+        "median_s": 2.396774100023322,
+        "measured_s": [
+          2.6377920240047388,
+          2.3929425189853646,
+          2.396774100023322
+        ],
+        "cold_s": 3.1559030959615484,
+        "warmup_s": 2.401219409017358,
+        "process_initialization_s": 0.5654452220187522,
+        "raw_sha256": "bf603d7a30596973082ec015667471dafe69c8fccb6672bb84712c7347413877",
+        "environment": {
+          "hostname": "anode18",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            14,
+            15,
+            16,
+            17,
+            78,
+            79,
+            80,
+            81
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137107",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-4bb6d899-a6aa-880a-2009-8101c1c78c72, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.9154492350062355,
+      "whole_call_median_s": 1.9154492350062355,
+      "raw": {
+        "median_s": 1.9154492350062355,
+        "measured_s": [
+          1.9127432559616864,
+          1.9253949499689043,
+          1.9154492350062355
+        ],
+        "cold_s": 2.088192693016026,
+        "warmup_s": 1.9177725699846633,
+        "process_initialization_s": 0.6352667140308768,
+        "raw_sha256": "a175a66b55f7797bdc09a777d8cc804f1573bc08f5451b00aa79f868d28eedde",
+        "environment": {
+          "hostname": "anode18",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            10,
+            11,
+            12,
+            13,
+            74,
+            75,
+            76,
+            77
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137129",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-cf276936-5ad3-d498-95fe-c574a845c252, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 2.4101752520073205,
+      "whole_call_median_s": 2.4101752520073205,
+      "raw": {
+        "median_s": 2.4101752520073205,
+        "measured_s": [
+          2.417698639968876,
+          2.396510201971978,
+          2.4101752520073205
+        ],
+        "cold_s": 3.032490837969817,
+        "warmup_s": 2.4020195629564114,
+        "process_initialization_s": 0.5914524219697341,
+        "raw_sha256": "c106df2eed76f01434abc10756888368e5e58bf5b4ddf5f669f9654194f57a35",
+        "environment": {
+          "hostname": "anode18",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            14,
+            15,
+            16,
+            17,
+            78,
+            79,
+            80,
+            81
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137133",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-4bb6d899-a6aa-880a-2009-8101c1c78c72, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 2,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.605605866498081,
+      "whole_call_median_s": 3.211211732996162,
+      "raw": {
+        "median_s": 3.211211732996162,
+        "measured_s": [
+          3.214537540974561,
+          3.211211732996162,
+          3.211051648017019
+        ],
+        "cold_s": 3.620207139989361,
+        "warmup_s": 3.216268524003681,
+        "process_initialization_s": 0.5610823819879442,
+        "raw_sha256": "ed120ab71f8d1660114b2e8c93b863b578cb5d2cb736a890f29f07caf957a498",
+        "environment": {
+          "hostname": "anode18",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            10,
+            11,
+            12,
+            13,
+            74,
+            75,
+            76,
+            77
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137134",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-cf276936-5ad3-d498-95fe-c574a845c252, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 2,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 1.8232282399840187,
+      "whole_call_median_s": 3.6464564799680375,
+      "raw": {
+        "median_s": 3.6464564799680375,
+        "measured_s": [
+          3.6464564799680375,
+          3.656264119024854,
+          3.6456414610147476
+        ],
+        "cold_s": 4.316374834976159,
+        "warmup_s": 3.668182013963815,
+        "process_initialization_s": 0.5983565910137258,
+        "raw_sha256": "a2eefe82f93197e12b5f21d79993bd4dde7c93d17e0fe6a2594cdac84f2d55aa",
+        "environment": {
+          "hostname": "anode18",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            14,
+            15,
+            16,
+            17,
+            78,
+            79,
+            80,
+            81
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137099",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-4bb6d899-a6aa-880a-2009-8101c1c78c72, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 4,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.4526762999594212,
+      "whole_call_median_s": 5.810705199837685,
+      "raw": {
+        "median_s": 5.810705199837685,
+        "measured_s": [
+          5.8096703719347715,
+          5.810705199837685,
+          5.820753093808889
+        ],
+        "cold_s": 8.776710344478488,
+        "warmup_s": 5.8334940280765295,
+        "process_initialization_s": 1.0443098228424788,
+        "raw_sha256": "adbd77b5a5040de9f8e599bcf4f3b9ff08f6fd9b14438103921952e64809152a",
+        "environment": {
+          "hostname": "anode20",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            8,
+            13,
+            14,
+            15,
+            72,
+            77,
+            78,
+            79
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137185",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-78e11350-2930-ed93-ebdf-0f8060667801, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 4,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 1.6333802598528564,
+      "whole_call_median_s": 6.533521039411426,
+      "raw": {
+        "median_s": 6.533521039411426,
+        "measured_s": [
+          6.533521039411426,
+          6.529404774308205,
+          6.540553469210863
+        ],
+        "cold_s": 7.62132884375751,
+        "warmup_s": 6.546473478898406,
+        "process_initialization_s": 0.6223300043493509,
+        "raw_sha256": "711a2ba613bf66e5ba74da08653f390756f74ad7cc9f1b17eba47b0aa57f666b",
+        "environment": {
+          "hostname": "anode23",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            56,
+            57,
+            58,
+            59,
+            120,
+            121,
+            122,
+            123
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137186",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-ce4e0c8b-d25b-fd63-f547-9ddbacf20672, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 8,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 1.3957977276295424,
+      "whole_call_median_s": 11.166381821036339,
+      "raw": {
+        "median_s": 11.166381821036339,
+        "measured_s": [
+          11.166381821036339,
+          11.171967191621661,
+          11.15930594317615
+        ],
+        "cold_s": 11.36580746434629,
+        "warmup_s": 11.18415112607181,
+        "process_initialization_s": 0.6087336111813784,
+        "raw_sha256": "a5cf1a6b99c99a368418cba20c2decec6fe7e79eb1ca825b459386cb9eb4836b",
+        "environment": {
+          "hostname": "anode23",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            56,
+            57,
+            58,
+            59,
+            120,
+            121,
+            122,
+            123
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137204",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-ce4e0c8b-d25b-fd63-f547-9ddbacf20672, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "batch",
+      "batch_size": 8,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 1.5469650418963283,
+      "whole_call_median_s": 12.375720335170627,
+      "raw": {
+        "median_s": 12.375720335170627,
+        "measured_s": [
+          12.396231526508927,
+          12.366158550605178,
+          12.375720335170627
+        ],
+        "cold_s": 13.347824284806848,
+        "warmup_s": 12.43610604852438,
+        "process_initialization_s": 0.32127569802105427,
+        "raw_sha256": "02909658c9bccbf77d576ea0c3b847fc012843a5146596a6519f3704a52a2b3d",
+        "environment": {
+          "hostname": "anode20",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            0,
+            1,
+            5,
+            6,
+            64,
+            65,
+            69,
+            70
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137205",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-dae7651c-0574-9619-1eb7-414b96c07868, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fT",
+      "seconds_per_sample": 2.0567308850586414,
+      "whole_call_median_s": 2.0567308850586414,
+      "raw": {
+        "median_s": 2.0567308850586414,
+        "measured_s": [
+          2.0567308850586414,
+          2.0527774076908827,
+          2.0573076717555523
+        ],
+        "cold_s": 2.690013552084565,
+        "warmup_s": 2.0613776836544275,
+        "process_initialization_s": 0.5772038791328669,
+        "raw_sha256": "20a6d2f259b9de1300d693d8abc9cca3a710e875a0805760e12be4a0455e04c2",
+        "environment": {
+          "hostname": "anode23",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            56,
+            57,
+            58,
+            59,
+            120,
+            121,
+            122,
+            123
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137231",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-ce4e0c8b-d25b-fd63-f547-9ddbacf20672, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "a100",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fT",
+      "seconds_per_sample": 2.5844796784222126,
+      "whole_call_median_s": 2.5844796784222126,
+      "raw": {
+        "median_s": 2.5844796784222126,
+        "measured_s": [
+          2.5846436973661184,
+          2.5758957527577877,
+          2.5844796784222126
+        ],
+        "cold_s": 3.269360587000847,
+        "warmup_s": 2.599825130775571,
+        "process_initialization_s": 0.4704720117151737,
+        "raw_sha256": "4e55e93c90eab7210a005815bda46e3d17d083a50e3f39e5e87075ea8f29ab7b",
+        "environment": {
+          "hostname": "anode23",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/release-050a1-r1/install-r3/venv/bin/python",
+          "affinity": [
+            56,
+            57,
+            58,
+            59,
+            120,
+            121,
+            122,
+            123
+          ],
+          "torch_version": "2.7.1+cu128",
+          "torch_cuda_build": "12.8",
+          "torch_threads": 8,
+          "slurm_job": "137184",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": "0"
+          },
+          "cpu_model": "Intel(R) Xeon(R) Platinum 8358P CPU @ 2.60GHz",
+          "gpu_name": "NVIDIA A100-SXM4-80GB",
+          "compute_capability": [
+            8,
+            0
+          ],
+          "gpu_total_memory": 85093777408,
+          "nvidia_smi": "NVIDIA A100-SXM4-80GB, GPU-ce4e0c8b-d25b-fd63-f547-9ddbacf20672, 580.173.02, 81920 MiB"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 22.921999718993902,
+      "whole_call_median_s": 22.921999718993902,
+      "raw": {
+        "median_s": 22.921999718993902,
+        "measured_s": [
+          22.799719348549843,
+          22.921999718993902,
+          22.933170206844807
+        ],
+        "cold_s": 24.40339943394065,
+        "warmup_s": 22.95950574055314,
+        "process_initialization_s": 6.695237401872873,
+        "raw_sha256": "4ca2cbd29c34a41bdcc6a3c2295180720cd645a20a7f2df96b01c2c64384e994",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            49,
+            50,
+            52,
+            53,
+            113,
+            114,
+            116,
+            117
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137148",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 40.00009677559137,
+      "whole_call_median_s": 40.00009677559137,
+      "raw": {
+        "median_s": 40.00009677559137,
+        "measured_s": [
+          40.00009677559137,
+          40.283446338027716,
+          39.89681035280228
+        ],
+        "cold_s": 41.14984320476651,
+        "warmup_s": 40.20306973531842,
+        "process_initialization_s": 0.3186074495315552,
+        "raw_sha256": "4e1b231e4579f800ddd50a4af714d933f3a5d449ecd3dc82d9d1b3e28f6ea92c",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            56,
+            57,
+            58,
+            59,
+            120,
+            121,
+            122,
+            123
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137149",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 22.842956993728876,
+      "whole_call_median_s": 22.842956993728876,
+      "raw": {
+        "median_s": 22.842956993728876,
+        "measured_s": [
+          22.842956993728876,
+          22.830350819975138,
+          22.897341592237353
+        ],
+        "cold_s": 24.39148497954011,
+        "warmup_s": 22.536859545856714,
+        "process_initialization_s": 6.709918947890401,
+        "raw_sha256": "7a0ea231da15c83056a14394b09d26041c2f5c88d7ac3b05c068aa8a2f528f4f",
+        "environment": {
+          "hostname": "anode02",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            36,
+            37,
+            96,
+            97,
+            100,
+            101
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137150",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 42.363803612068295,
+      "whole_call_median_s": 42.363803612068295,
+      "raw": {
+        "median_s": 42.363803612068295,
+        "measured_s": [
+          41.96168469265103,
+          42.9763898383826,
+          42.363803612068295
+        ],
+        "cold_s": 42.69288455694914,
+        "warmup_s": 42.755509005859494,
+        "process_initialization_s": 0.23603815399110317,
+        "raw_sha256": "129afdf347c416b6f0e0eaeb34d44b41920f634d22976bdca250845bf4e74e04",
+        "environment": {
+          "hostname": "anode02",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            28,
+            29,
+            62,
+            63,
+            92,
+            93,
+            126,
+            127
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137151",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 2,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 31.18562727421522,
+      "whole_call_median_s": 62.37125454843044,
+      "raw": {
+        "median_s": 62.37125454843044,
+        "measured_s": [
+          62.37263682857156,
+          62.37125454843044,
+          61.95117249339819
+        ],
+        "cold_s": 63.073588978499174,
+        "warmup_s": 62.20605766773224,
+        "process_initialization_s": 0.19899702817201614,
+        "raw_sha256": "73d21204a6709d25bf9426e3dc01cf4f902f6a6843e1639978a02c586352dbd8",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            49,
+            50,
+            52,
+            53,
+            113,
+            114,
+            116,
+            117
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137209",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 2,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 50.41231033485383,
+      "whole_call_median_s": 100.82462066970766,
+      "raw": {
+        "median_s": 100.82462066970766,
+        "measured_s": [
+          100.82462066970766,
+          99.11357663013041,
+          104.4082398712635
+        ],
+        "cold_s": 103.76299742609262,
+        "warmup_s": 99.86434405483305,
+        "process_initialization_s": 1.1757431346923113,
+        "raw_sha256": "e1250c8de81d3fa06afb1b983697c3d6fee2653e49d24387266ebf4680e05b2e",
+        "environment": {
+          "hostname": "anode02",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            13,
+            14,
+            15,
+            16,
+            77,
+            78,
+            79,
+            80
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137210",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 4,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 30.44917185138911,
+      "whole_call_median_s": 121.79668740555644,
+      "raw": {
+        "median_s": 121.79668740555644,
+        "measured_s": [
+          122.380795288831,
+          121.08707337453961,
+          121.79668740555644
+        ],
+        "cold_s": 120.65195838734508,
+        "warmup_s": 120.3257638886571,
+        "process_initialization_s": 0.28977857902646065,
+        "raw_sha256": "cdb99b13be56eb4847936ee0223db20c9ab31259508cdf0c4db0d02be33c3e4b",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            56,
+            57,
+            58,
+            59,
+            120,
+            121,
+            122,
+            123
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137242",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 4,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 47.09273345815018,
+      "whole_call_median_s": 188.3709338326007,
+      "raw": {
+        "median_s": 188.3709338326007,
+        "measured_s": [
+          188.32225678116083,
+          189.39115728065372,
+          188.3709338326007
+        ],
+        "cold_s": 190.04123900085688,
+        "warmup_s": 189.2142964154482,
+        "process_initialization_s": 2.1297804433852434,
+        "raw_sha256": "6a5047ebf2e0c686662d002a8a15978e3603b913f64eef0dd6a9a34162bf5e78",
+        "environment": {
+          "hostname": "anode02",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            32,
+            33,
+            34,
+            36,
+            96,
+            97,
+            98,
+            100
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137252",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 8,
+      "mode": "value",
+      "metric": "fC",
+      "seconds_per_sample": 30.668557340744883,
+      "whole_call_median_s": 245.34845872595906,
+      "raw": {
+        "median_s": 245.34845872595906,
+        "measured_s": [
+          245.34845872595906,
+          246.40235328301787,
+          243.79625978320837
+        ],
+        "cold_s": 252.93075066804886,
+        "warmup_s": 243.68369490280747,
+        "process_initialization_s": 2.873447883874178,
+        "raw_sha256": "7657dd7204b362d63291110413f214c1f9809f5380530d3086967ded6260c3ab",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            45,
+            46,
+            47,
+            48,
+            109,
+            110,
+            111,
+            112
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137274",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "batch",
+      "batch_size": 8,
+      "mode": "value_grad",
+      "metric": "fC",
+      "seconds_per_sample": 47.28800353035331,
+      "whole_call_median_s": 378.30402824282646,
+      "raw": {
+        "median_s": 378.30402824282646,
+        "measured_s": [
+          378.30402824282646,
+          377.62776125594974,
+          379.27183232083917
+        ],
+        "cold_s": 416.4769074097276,
+        "warmup_s": 379.99842899665236,
+        "process_initialization_s": 3.8844070583581924,
+        "raw_sha256": "d4753bf11894d2649eeaff7709d7aadcca6317b2c6c67a768c09660444fc34f0",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            34,
+            44,
+            49,
+            50,
+            98,
+            108,
+            113,
+            114
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137299",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value",
+      "metric": "fT",
+      "seconds_per_sample": 36.701107032597065,
+      "whole_call_median_s": 36.701107032597065,
+      "raw": {
+        "median_s": 36.701107032597065,
+        "measured_s": [
+          36.73478692770004,
+          36.6072814874351,
+          36.701107032597065
+        ],
+        "cold_s": 37.30992145463824,
+        "warmup_s": 36.53718124702573,
+        "process_initialization_s": 0.5460429415106773,
+        "raw_sha256": "3f005bb2bd71cef74882d6690256d354aa40b24599fc9c7d7e5177d24e43c2dd",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            52,
+            53,
+            56,
+            57,
+            116,
+            117,
+            120,
+            121
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137353",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    },
+    {
+      "hardware": "cpu8",
+      "interface": "scalar",
+      "batch_size": 1,
+      "mode": "value_grad",
+      "metric": "fT",
+      "seconds_per_sample": 56.71374364569783,
+      "whole_call_median_s": 56.71374364569783,
+      "raw": {
+        "median_s": 56.71374364569783,
+        "measured_s": [
+          56.41194334253669,
+          57.25292221456766,
+          56.71374364569783
+        ],
+        "cold_s": 57.88804351165891,
+        "warmup_s": 57.02407655864954,
+        "process_initialization_s": 1.5839332230389118,
+        "raw_sha256": "c8c42f146ab5134fbd1a1ec7d298d4bf034e9569b11f2c05f87990f374b45b18",
+        "environment": {
+          "hostname": "anode01",
+          "platform": "Linux-6.8.0-53-generic-x86_64-with-glibc2.39",
+          "python": "3.12.15 (main, Oct 13 2026, 16:52:04) [GCC 15.3.0]",
+          "executable": "/home/scc/pb24511935/local_surface_evaluator_runs/coileval_two_stage_20261024/closure_20261025/coileval_throughput_cpu_20261028/release-r7/install-cpu/venv/bin/python",
+          "affinity": [
+            52,
+            53,
+            56,
+            57,
+            116,
+            117,
+            120,
+            121
+          ],
+          "torch_version": "2.7.1+cpu",
+          "torch_cuda_build": null,
+          "torch_threads": 8,
+          "slurm_job": "137147",
+          "slurm_cpus": "8",
+          "environment": {
+            "OMP_NUM_THREADS": "8",
+            "MKL_NUM_THREADS": "8",
+            "OPENBLAS_NUM_THREADS": "8",
+            "NUMPY_MADVISE_HUGEPAGE": "0",
+            "CUDA_VISIBLE_DEVICES": ""
+          },
+          "cpu_model": "INTEL(R) XEON(R) GOLD 6530"
+        },
+        "cohort_sha256": "d671ee8ca60430607a2177ad24888fcde97b8821ab033db570b62dff8f43402f"
+      }
+    }
+  ]
+}

@@ -20,22 +20,23 @@
 | 0.8.2 | Early dependency checks and complete installation guidance | Install the wheel with the extra for the chosen backend |
 | 0.9.0 | General field-period/coil counts and QA/QH modes | Explicit tensor nfp and configuration helicity |
 
-The source version is 0.9.0 (unreleased). It generalizes field-period and
-base-coil counts and explicit QA/QH modes. It includes the GPU batch scheduling
-introduced in 0.8.0, CPU values and gradients from 0.7.0, and target-surface
-QS features from 0.6.0. The [preview validation record](preview_validation.md)
-separates completed timing and example results from pending accuracy review.
+Version 0.11.0 is the first S2 preview candidate. Its public defaults are
+`fast=True`, `flux_method='stokes'`, `psi_fit='two_stage'`, polar quadrature,
+smooth volume-alpha weights and the flux-Legendre volume-alpha basis.
+S3 remains optional (`psi_target_refit=False`).
 
-The default NumPy behavior stays compatible across these versions. New numerical
-paths are selected explicitly. Use an exact version and save the configuration
-alongside results when repeating an evaluation.
+| Version | Added capability | Selection |
+| --- | --- | --- |
+| 0.9.1 | Angle inverse and first radial-branch repairs; S2 ridge override | Included; `psi_refit_ridge=` optional |
+| 0.10.0 | Target-interior S3 fit and its local derivatives | `psi_target_refit=True` |
+| 0.11.0 preview | Validated S2 defaults, P90 calibration, perturb32 optimization example | Default configuration; example2 |
 
-In 0.9.0, `psi_fit='single_stage'` remains the default. Two-stage fitting uses
-`psi_refit_sampling='cartesian'` unless selected otherwise. Weighted
-`'polar_quadrature'` is an optional experimental sampler. The Tensor API accepts
-both fitting methods and preserves physical units for every Fourier order.
-The Simsopt workflow has its own surface RMS diagnostics; choose comparable
-averaging regions when combining them with volume QS metrics.
+Versions through 0.10.0 used S1 by default. Reproduce historical runs with their
+frozen version and full configuration. For an explicit legacy S1 configuration
+on 0.11.0, follow the [API guide](api.md#configuration). API argument order and
+physical units are unchanged; numerical defaults changed deliberately.
+The [validation record](preview_validation.md) identifies the scored cohort,
+reference qualifications, errors, timing workload and examples.
 
 To build an earlier release from a clean checkout:
 

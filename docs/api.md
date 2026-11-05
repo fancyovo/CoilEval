@@ -35,31 +35,31 @@ and `write_json(path)` preserve these units and conventions.
 | `h` | `1e-4` | Normalized centered-difference step |
 | `segments_per_coil` | `256` | Coil discretization |
 | `psi_iterations`, `alpha_iterations` | `4`, `4` | Local iterative fit settings |
-| `fast` | `False` | Use 240 axis steps and 100 surface tracing steps |
-| `flux_method` | `'area'` | `'area'` or fast local `'stokes'` boundary integration |
-| `psi_fit` | `'single_stage'` | `'single_stage'` or `'two_stage'` |
+| `fast` | `True` | Use 240 axis steps and 100 surface tracing steps |
+| `flux_method` | `'stokes'` | `'area'` or fast local `'stokes'` boundary integration |
+| `psi_fit` | `'two_stage'` | `'single_stage'` or `'two_stage'` |
 | `psi_refit_points` | `82368` | Target training-row count for the second fit |
 | `psi_refit_ridge` | `None` | Optional nonnegative column-scaled ridge for S2 only; `None` retains the native setting |
 | `psi_target_refit` | `False` | Candidate S3 target-interior refit after `psi_fit='two_stage'` |
 | `psi_target_refit_factor` | `1.2` | Requested S3 training volume divided by target volume; must exceed one |
 | `psi_target_refit_ridge` | `1e-10` | Nonnegative column-scaled ridge for S3 only |
-| `psi_refit_sampling` | `'cartesian'` | Two-stage `'cartesian'` or `'polar_quadrature'` sampling |
+| `psi_refit_sampling` | `'polar_quadrature'` | Two-stage `'cartesian'` or `'polar_quadrature'` sampling |
 | `psi_nearby_method` | `'local'` | Two-stage local response or `'formal'` endpoint reconstruction |
 | `psi_fd_batch_size` | `8` | Two-stage local finite-difference endpoint batch size |
-| `alpha_radial_weighting` | `'histogram'` | `'histogram'` or two-stage experimental `'smooth'` radial density weighting |
+| `alpha_radial_weighting` | `'smooth'` | `'histogram'` or two-stage `'smooth'` radial density weighting |
 | `alpha_weight_sigma` | `0.05` | Gaussian width in normalized rho for smooth weighting |
 | `alpha_count_floor` | `32.0` | Positive additive pseudocount for smooth density denominators |
-| `alpha_radial_basis` | `'zernike'` | Original radial basis or two-stage `'flux_legendre'` |
+| `alpha_radial_basis` | `'flux_legendre'` | Original radial basis or two-stage `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-The single-stage settings remain the default in 0.10.0. Select the
-two-stage path explicitly:
+Version 0.11.0 defaults to the validated S2 recipe. The following explicit
+configuration is equivalent to `EvaluationConfig(target_volume=0.05, psi_a=0.15)`:
 
 ```python
 config = EvaluationConfig(
     target_volume=0.05, psi_a=0.15,
     fast=True, flux_method="stokes",
-    psi_fit="two_stage", psi_refit_sampling="cartesian",
+    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
 )
 ```
 
@@ -94,22 +94,25 @@ boundary, the S3 volume equation, capacity clipping and polar area weights on
 the selected discrete branch. Surface-alpha and native volume-alpha settings
 retain their independent meanings.
 The target-volume capacity guard checks at least the psi fitting toroidal grid
-and two samples per retained toroidal mode. Flux quadrature remains separately
+at twice its resolution and at least `4*psi_m_tor+1` toroidal sections. Flux quadrature remains separately
 configured. This is a sampled radial-branch check; an accepted result does not
 certify a global magnetic surface or physical accuracy.
-`psi_refit_sampling='polar_quadrature'` selects optional weighted polar
-quadrature, an experimental numerical option in 0.9.0.
+`psi_refit_sampling='polar_quadrature'` selects the default weighted polar
+quadrature. Cartesian sampling remains explicitly available.
 Both samplers retain complete sampling structures, so the actual row count can
 differ from `psi_refit_points`; inspect `diagnostics['psi_refit_training_count']`.
 
-`alpha_radial_weighting='smooth'` is an opt-in experimental option for
+`alpha_radial_weighting='smooth'` is the default for
 `psi_fit='two_stage'`. Its positive sigma and pseudocount settings control the
-smooth density weights. Histogram weighting remains the default.
+smooth density weights. Histogram weighting remains explicitly available.
 
 `alpha_radial_basis='flux_legendre'` fits the angular correction with
 polynomials of normalized flux. Select it with `psi_fit='two_stage'`; the
 choice applies to scalar evaluation, local gradients and captured alpha data.
-The original `'zernike'` basis remains the default.
+The default is `'flux_legendre'`; the original `'zernike'` basis remains available.
+For legacy S1 select `psi_fit='single_stage'`, `alpha_radial_weighting='histogram'`
+and `alpha_radial_basis='zernike'` together. To restore pre-0.11 standard tracing
+also select `fast=False`, `flux_method='area'` and `psi_refit_sampling='cartesian'`.
 
 `flux_method='stokes'` requires `fast=True` and selects boundary integration for
 local neighborhoods and finite-difference endpoints. Independent center calls
@@ -195,7 +198,7 @@ Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
 selected helicity. The outer bin uses the native point weights in the final
 radial bin; iota profile samples cover the selected radial range.
 The standalone `surface_fc`/`analyze_arrays` reference helpers use QH helicity
-`(1,nfp)` and have no helicity argument in 0.9.0. The separate
+`(1,nfp)` and have no helicity argument in 0.11.0. The separate
 `surface_qs_metrics` helper accepts explicit QA `helicity=(1,0)` for f_B/f_T.
 Use matching native helicity when comparing either reference path.
 

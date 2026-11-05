@@ -24,7 +24,8 @@ remain `nfp=4` and helicity `(1,4)`. Set `EvaluationConfig(helicity=(1,0), ...)`
 for QA, or `(1,nfp)` for QH at the selected field period; helicity is never
 inferred from `nfp`. The interface retains 256 coil segments and four
 psi/alpha local fit iterations. Select `fast=True` and
-`flux_method='stokes'`. Both `psi_fit='single_stage'` and `'two_stage'` are
+`flux_method='stokes'`. S2 is the 0.11.0 default. Explicit legacy S1 requires histogram weights and
+the Zernike basis as described in the API guide. Both fitting paths are
 accepted. Psi calculations use float64; field calculations use float32 by
 default, with `field_dtype=torch.float64` available.
 
@@ -120,7 +121,7 @@ coils = CoilSet.read_json("examples/coils.json")
 x = pack_coils(coils)
 config = EvaluationConfig(
     target_volume=0.05, fast=True, flux_method="stokes",
-    psi_fit="two_stage", psi_refit_sampling="cartesian",
+    psi_fit="two_stage", psi_refit_sampling="polar_quadrature",
 )
 with TensorEvaluator(config=config, nfp=coils.nfp) as evaluator:
     result = evaluator.evaluate(x)

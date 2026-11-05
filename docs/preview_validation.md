@@ -1,104 +1,192 @@
-# Preview validation experiments
+# CoilEval 0.11.0 S2 preview validation
 
-The 2026-11-03 validation campaign uses a frozen installed CoilEval 0.9.0
-runtime. The package remains unreleased. The campaign covers a fixed QUASR
-accuracy cohort, public API latency, a reconstructed QA optimization result,
-and a simple-ring initialization experiment. Source and library hashes in
-each experiment's manifest identify the measured runtime.
+[简体中文](preview_validation.zh-CN.md)
 
-## Fixed accuracy cohort: reviewed results
+The preview uses repaired S2 by default; S3 is optional. Calibration reuses the
+frozen4096 inputs and completed Simsopt references. Its measured numerical
+recipe is identical to the new public defaults, checked on CPU and GPU.
+The early0.9.0 campaign's1336-pair results and ring-only example2 are historical;
+they are superseded here by repaired-S2 calibration and perturb32 initialization.
 
-The cohort contains 1024 IDs sampled uniformly without replacement from the
-371701-entry QUASR catalog, using seed `2026110201`, without restricting coil
-count, field periods or QS type. Every ID has four perturbation scales:
-0, 0.003, 0.01 and 0.03 decades, for 4096 evaluation tasks. Each Fourier
-coefficient and coil current is independently multiplied by `10**(sigma*z)`,
-where `z` is a standard normal draw; zero coefficients remain zero. The target
-volume is half the stored outer reference volume. The source-radius multiplier
-is 3.5 and the initializer uses the high-precision `reference` profile.
+## S2 accuracy and speed
 
-Base GPU and CPU calculations have finished, including recorded failures.
-Of 4096 requested tasks, 1981 have completed Simsopt references; 1336 have
-paired CoilEval/reference results and 616 of those satisfy the preregistered
-reference qualifications. The table gives the reviewed 2026-11-03 results.
-Both primary populations retain every large error. The secondary
-evidence-filtered population removes four confirmed nearby-island cases from
-the reference-qualified set. Accuracy comparisons
-use target-surface iota and matched surface definitions and weights for
-f_B, f_C and f_T. The shared comparison kernel uses the RMS asymmetric
-Boozer Fourier-energy fraction for f_B and `|G|/B²` flux-shell RMS weighting
-for f_C and f_T. f_C uses the declared vacuum local residual with each
-sample's explicit helicity; f_T uses the same `R²*T/B⁴` normalization length
-on both surfaces. This validates CoilEval surfaces and fields against the
-independent Simsopt solve and field calculation; it does not independently
-validate two separately implemented QS formulas.
+The fixed cohort contains **4096** tasks: 1024 QUASR inputs at four noise scales.
+Repaired S2 produces **2127** complete scores, **1944** matches to frozen Simsopt
+references, and **817** pairs meeting the original reference-quality rules.
+All large errors remain. The 1981 completed references are reused unchanged;
+tasks without references contribute to success counts only.
 
-| Population | Pairs | log₁₀ f_B R² | log₁₀ f_C R² | log₁₀ f_T R² |
-| --- | ---: | ---: | ---: | ---: |
-| All paired | 1336 | 0.928267 | 0.977176 | 0.995077 |
-| Reference-qualified | 616 | 0.927736 | 0.970397 | 0.993762 |
-| Geometry-evidence-filtered (secondary) | 612 | 0.927790 | 0.970548 | 0.994189 |
+![CoilEval S2 versus Simsopt QS and iota, with measured P90 bands for each population](assets/preview_s2_20261105/calibration_p90.png)
 
+QS bands use `exp(±P90(abs(ln(prediction/reference))))`; iota bands use
+`±P90(abs(prediction-reference))`. They describe empirical error coverage.
+All-paired QS factors are 1.986, 1.368 and 1.157; reference-qualified factors are
+1.926, 1.304 and 1.122. The table separately reports P90 relative error.
+
+| Population | Pairs | f_B P90 relative error | f_C P90 relative error | f_T P90 relative error | ι P90 absolute error |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| All paired | 1944 | 93.86% | 34.67% | 15.20% | 0.01270 |
+| Reference-qualified | 817 | 87.04% | 30.17% | 12.17% | 0.01015 |
+
+Every entry below is **seconds per sample**: the median of three warm complete
+calls, divided by batch size. Gradient mode includes one complete objective
+reverse. Batch amortization measures throughput; scalar rows give single-query latency.
+
+| Interface / metric | Mode | CPU 8 threads | RTX 5090 | A100 |
+| --- | --- | ---: | ---: | ---: |
+| scalar / volume f_C | value | 22.922 | 1.775 | 1.911 |
+| scalar / volume f_C | value + gradient | 40.000 | 2.168 | 2.397 |
+| batch 1 / volume f_C | value | 22.843 | 1.785 | 1.915 |
+| batch 1 / volume f_C | value + gradient | 42.364 | 2.159 | 2.410 |
+| batch 2 / volume f_C | value | 31.186 | 1.502 | 1.606 |
+| batch 2 / volume f_C | value + gradient | 50.412 | 1.572 | 1.823 |
+| batch 4 / volume f_C | value | 30.449 | 1.347 | 1.453 |
+| batch 4 / volume f_C | value + gradient | 47.093 | 1.418 | 1.633 |
+| batch 8 / volume f_C | value | 30.669 | 1.296 | 1.396 |
+| batch 8 / volume f_C | value + gradient | 47.288 | 1.375 | 1.547 |
+| scalar / surface f_T | value | 36.701 | 2.024 | 2.057 |
+| scalar / surface f_T | value + gradient | 56.714 | 2.585 | 2.584 |
+
+These are the 2026-11-05 measurements of the same S2 recipe and native library:
+four original order-16 coil sets, eight fixed queries, and eight assigned logical
+CPUs per hardware allocation. Volume f_C and optional surface f_T are separate
+workloads. Cold calls, whole-batch latency, hardware and hashes remain in the
+[raw timing evidence](assets/preview_s2_20261105/timings.json). See the [validation record](preview_validation.md)
+for cohort definitions, failures, reference qualifications and numerical limitations.
+
+## Cohort, qualification and error definitions
+
+Seed2026110201 selected1024 IDs uniformly without replacement from371701 QUASR
+entries, across coil counts, field periods and QS types. Four noise scales are
+0,0.003,0.01,0.03 decades: each coefficient and current is multiplied by
+`10**(sigma*z)`. Target volume is half the stored outer-reference volume;
+source-radius multiplier is3.5. This calibration noise differs from example2.
+
+The fixed reference ledger has1981 completed solves,181 rejections,16 timeouts
+and1918 unavailable references following original native failures. Repaired S2
+has2127 complete scores,1674 native failures,240 source-capture failures and55
+surface-metric failures. All4096 remain in the denominator. Of1981 completed
+references,1944 pair with S2;183 scores have no completed reference. Those183
+measure recovered availability, not accuracy. No failed input was replaced.
 
 Reference qualification requires strict Simsopt residual quality, resolved
-geometric sections with maximum arc-length-weighted covariance axis ratio at
-most 5, and target iota at least 0.01 from rationals with denominator at most 8.
-All three QS metrics must pass the 97-to-129 surface-grid check (absolute
-tolerance 1e-10 plus 2% relative tolerance), and the 512-to-1024 coil-quadrature
-field check requires relative vector L2 at most 1e-3. Surface order remains
-fixed at 16; convergence with surface order was not established. Rational
-proximity is a qualification rule and alone does not establish an island chain.
+sections with maximum covariance-axis ratio≤5, target iota≥0.01 from rationals
+with denominator≤8,97→129 surface-grid checks of all three QS metrics
+(absolute1e-10 plus2% relative), and512→1024 coil-quadrature vector-field L2≤1e-3.
+Surface order16 stays fixed; convergence in surface order was not established.
+Rational proximity alone does not establish islands. The817 qualified pairs
+retain every error; selection uses the original reference rules, not score error.
 
-R² is `1 - sum((prediction-reference)^2) / sum((reference-mean(reference))^2)`
-on log₁₀ QS values, without fitting a regression. Signed target-surface iota
-uses the linear scale: all-paired R² is 0.99991166 and RMSE is 0.006556.
-The secondary population's signed-iota RMSE is 0.005758.
-The zero-noise stratum has 385 pairs and f_B log₁₀ R² of 0.744453;
-the pooled QS agreement does not describe that stratum's accuracy.
+Both surfaces use the shared comparison kernel: f_B is the RMS asymmetric
+Boozer Fourier-energy fraction; f_C and f_T use `|G|/B²` flux-shell RMS weights.
+The explicit sample helicity and the `R²*T/B⁴` length normalization match.
+This compares reconstructed surfaces and fields; formula implementation is shared.
+Iota is the geometric target-surface alpha solve, distinct from native volume-alpha
+`iota_boundary`. All points, including outliers, are in the scatter data.
 
-![Reviewed CoilEval versus Simsopt comparisons: 1336 all-paired and 616 reference-qualified samples, with geometric findings retained](assets/preview_validation_20261103/calibration_scatter.png)
+The P90 bands use linear-interpolated empirical quantiles. QS multiplicative
+bands treat reciprocal ratios symmetrically; relative-error P90 is computed
+separately as `P90(abs(pred/ref-1))`. Iota uses absolute signed-value differences.
+These are descriptive error coverage, not confidence intervals or predictions
+for every new magnetic configuration. Pooled statistics include the four noise
+strata; they do not establish a separate zero-noise accuracy claim.
 
-The upper row shows all 1336 pairs and the lower row shows the 616
-reference-qualified pairs. QS axes are logarithmic and signed iota axes are
-linear; the diagonal indicates equality. Outlined points mark large errors and
-purple crosses mark confirmed island or elongation findings. Both plotted
-populations retain these points; the 612-pair secondary result is in the table. A [PDF copy](assets/preview_validation_20261103/calibration_scatter.pdf)
-and [figure provenance](assets/preview_validation_20261103/calibration_figure_receipt.json)
-are available.
+[All4096 rows](assets/preview_s2_20261105/calibration_rows.json),
+[statistics and source hashes](assets/preview_s2_20261105/accuracy.json), and
+[PDF figure](assets/preview_s2_20261105/calibration_p90.pdf) accompany the report.
+The frozen reference manifest SHA256 is
+`daff50895c551b855adbd92aa9b8e75399f2bc1dd8288c74a432d4d96eee3248`.
 
-All 145 flagged cases have review outcomes: 144 received four-cut visual
-inspection and one failed the geometric-section guard before tracing. Of the
-visual cases, 130 show no resolved island chain, seven show nearby islands,
-two have elongated sections, four have insufficient trace coverage and one
-has unresolved outer morphology. The six unresolved cases, including the
-unavailable geometry, receive no geometry exclusion. Four of the seven
-nearby-island cases belonged to the 616 reference-qualified pairs; only these
-four are removed from the secondary comparison. The two elongated cases
-already failed the preregistered reference qualification. A completed review
-does not certify valid geometry or uniquely explain a metric error.
+## Numerical findings and remaining limitations
 
-The requested denominator remains 4096: 1981 completed Simsopt references,
-181 reference rejections, 16 reference timeouts and 1918 native failures
-without a reference. The 2115 tasks without completed references cannot enter
-accuracy comparisons. Failures, qualifications and geometry labels retain
-their task identities and reasons; no point is removed solely for its error.
-Frozen raw inputs and completed Simsopt references are available for reuse.
-Subsequent revisions verify the freeze manifest and rerun CoilEval and
-analysis. New references for previously uncovered tasks require a separately
-versioned extension rather than silently changing the frozen baseline.
+Angle inversion and first-radial-branch repairs remove implementation failures.
+Large errors can remain on apparently nested, smooth sections: full-volume scalar
+transport fitting and column-scaled ridge may distort a very low-QS target;
+the angular transport equation's unresolved spectral tail can couple into retained
+modes; small denominators amplify source-flow errors near resonances. Some surfaces
+also exceed the first-root star-shaped chart or smooth angular-coordinate assumptions.
+These mechanisms require different remedies. A small fitting residual or a smooth
+Poincaré plot alone does not quantify target QS accuracy.
 
-The protocol is
-`coileval090-all-quasr-1024-four-noise-matched-surface-20261102-v1`.
-Evidence in the parent validation workspace is under
-`evaluation/coileval_preview_20261102/calibration/`: `config.template.json`,
-`frozen_inputs/{manifest,selection,input_inventory,delivery}.json`, and
-`poincare_execution_20261103/required_reviews.json`. Reviewed statistics,
-compact 4096-row plotting input, visual-review accounting and analysis/reference
-receipts are in
-`results_20261103/{summary,paired_metrics,review_summary,analysis_receipt,freeze_receipt}.json`.
-The finalizer verified all 39671 frozen-file hashes before and after analysis;
-Simsopt was not rerun. The dated initial statistics remain under
-`results_20261103/attempts/before_final_geometry_review/`.
+S3 changes the training interior and its ridge. It improves many difficult targets,
+but fixed4096 testing gives1821 scores versus2127 for S2:314 losses and8 recoveries.
+Shrinking the domain and weakening ridge can induce radial scalar folds; the
+two changes have separate and interacting effects. S3 remains opt-in, with
+`psi_target_refit=False` in this release. The preview retains volume alpha and
+geometric target-surface alpha32; it adds no high-order or reference-assisted fallback.
+
+## Timing contract
+
+The36 cells cover CPU8/RTX5090/A100, scalar and batch1/2/4/8 volume f_C,
+and scalar target-surface f_T, each in value and value-plus-gradient modes.
+The fixed eight-query workload uses original order16 QH coil IDs1916221,2485714,
+1631665,1631494 at0.25 and0.5 of stored reference volume. Source-fit sharing is
+disabled; each query remains independent. GPU batch-axis/pipeline controls remain
+enabled. Fields use the recorded FP32 GPU local response; psi algebra uses FP64.
+
+Each cell has a fresh process, a cold call, one warmup, and three measured calls.
+The synchronized interval includes complete public forward work and, in gradient
+mode, a scalar objective and one full reverse including engineering terms. Imports,
+allocation, constructors, serialization and cleanup are outside. Raw whole-call
+times remain available; every displayed batch table uses median/batch_size.
+CPU uses eight logical Xeon Gold6530 threads and PyTorch2.7.1+cpu. GPU environments
+use PyTorch2.7.1+cu128; A100 has a Xeon Platinum8358P host, RTX5090 a Gold6530 host.
+Latency belongs to this workload, not the random calibration population.
+
+## Example1: fixed QA geometry through the complete reference workflow
+
+The original `n3-QA-i0-l5-s2-v5` coils, V=0.3m³ and a=√0.06m are unchanged.
+Fresh S2 source capture followed source→alpha→nu→standard Simsopt LS/Newton→
+diagnostics→DESC12, in one job. Native volume f_C=0.0039104499 and volume-alpha
+boundary iota=0.46571541. DESC boundary f_C=0.0072281188 uses its official
+surface-weighted mean absolute residual and its own normalization.
+The two f_C values describe different measures and domains.
+
+DESC's optimizer finishes in63 iterations at gtol; initial/final surfaces are
+nested. Mean/P95/maximum normalized residual force are0.00438092/0.01121054/0.08626663.
+Equilibrium certification remains false. A completed pipeline does not remove
+these residual-force or Simsopt quality limitations.
+
+[Fresh native record](assets/preview_s2_20261105/example1_native.json),
+[source provenance](assets/preview_s2_20261105/example1_source_provenance.json),
+and [complete stage/result record](assets/preview_s2_20261105/example1_result.json)
+are provided. The selected geometry is the original example1, reevaluated by S2;
+its native values and objective have been refreshed consistently.
+
+## Example2: perturb32 initialization and BFGS
+
+Each Fourier coefficient receives `c*exp(log1p(0.01)*z)`, independent standard
+Gaussian z, with seed2026110502. Screening currents, target volume and fitting
+radius remain fixed. Exactly32 candidates are scored; invalid entries remain.
+At1% noise,25/32 score successfully; candidate index4 minimizes the complete
+objective, initially−3.69036229. The objective includes log volume-QS, iota,
+gap, curvature, length, volume, normal-drift quality and live-axis-radius costs.
+Analytic gradients feed the existing dense inverse BFGS/Powell/Armijo policy.
+The400-outer-iteration budget and consecutive-rejection stopping do not assert
+convergence. The run accepted 116 updates over 164 outer iterations and stopped
+at the consecutive-rejection limit. The selected minimum is iteration 132:
+complete objective −5.48909363 and native volume f_C=0.0038968281, from 0.0178609147.
+The 1% amplitude completed without reduction.
+
+The final geometry completed the full source→alpha→nu→Simsopt→DESC workflow.
+DESC reached gtol in 110 iterations, with nested initial/final surfaces and
+boundary f_C=0.0075078856. Mean/P95/maximum normalized residual forces are
+0.00561424/0.01405266/0.14672194; equilibrium certification remains false.
+The native and DESC f_C definitions differ as in example1.
+[Optimization record](assets/preview_s2_20261105/example2_optimization.json),
+[native record](assets/preview_s2_20261105/example2_native.json) and
+[full physical result](assets/preview_s2_20261105/example2_result.json) retain
+the values, stopping reason, identities and stage times.
+
+Independent 352-seed four-cut plots of both examples show island-like contours
+near the selected boundary and dispersing outer traces. Individual periodic
+orbits were not certified. DESC nestedness describes its fitted equilibrium
+coordinates; it does not certify global nesting of the original coil field.
+
+The [runnable example](../examples/preview/README.md) preserves all32 outcomes,
+accepted and rejected trials, selected coefficients and the exact settings.
+If an amplitude cannot complete the example, retry a halved amplitude with the
+same Gaussian draws and retain the failed run; do not change volume or redraw seeds.
 
 ## Poincaré geometry checks
 
@@ -125,9 +213,8 @@ limits the displayed region.
 ![Dense four-cut Poincaré plot for r0320-q0783386-s0, with continuous contours near the selected reference boundary](assets/preview_validation_20261103/poincare_dense_r0320-q0783386-s0.png)
 
 `r0320-q0783386-s0` has continuous contours around the selected boundary,
-while CoilEval f_B is about 13.1 times the matched Simsopt reference. The
-geometric review does not explain this error, and the sample remains in the
-accuracy populations. All 352 dense traces complete the requested interval.
+while CoilEval f_B is about 13.1 times the matched Simsopt reference. Subsequent fixed-domain/ridge controls identify scalar-fit objective and
+regularization bias as major causes; the sample remains in both accuracy populations. All 352 dense traces complete the requested interval.
 [Figure provenance](assets/preview_validation_20261103/poincare_dense_r0320-q0783386-s0.provenance.json).
 
 ![Dense four-cut Poincaré plot for r0236-q1609885-s2, resolving multiple island lobes near the selected reference boundary](assets/preview_validation_20261103/poincare_dense_r0236-q1609885-s2.png)
@@ -158,151 +245,3 @@ remain in the parent workspace's
 `calibration/dense_execution_20261103/` manifest and registered remote root.
 The static figures here are the requested documentation exception to the
 ordinary raw-data/on-demand report policy.
-
-## Public API timing workload
-
-The benchmark measures a fixed eight-query workload. It uses the frozen
-two-stage configuration and preserves all 16 Fourier orders of four original
-QUASR QH coil sets: IDs 1916221, 2485714, 1631665 and 1631494, each with
-`nfp=4`, four base coils and 400 physical parameters. Targets are 0.25 and
-0.5 of each stored reference volume, with one explicit `EvaluationConfig`
-per query. Batch sizes use prefixes of this ordered workload. These are
-latencies for the established throughput workload; the random QUASR
-calibration experiment measures population accuracy separately.
-
-The matrix has CPU8, RTX 5090, and A100 allocations. Each allocation uses
-eight assigned logical CPUs. It records a scalar call and public batches B1, B2,
-B4, and B8, for pure value and complete value plus one engineering-inclusive
-scalar loss gradient. The gradient includes the QS volume, boundary iota,
-normal-drift quality, coil gap, curvature, length, and surface-volume terms;
-optional surface-QS scores are separate metrics. Source-fit sharing is disabled,
-including repeated coils at two target volumes. GPU batch-axis preparation and
-the public pipeline remain enabled.
-
-Every result is a fresh process. The first synchronized public call is labeled
-`cold`, one or more untimed calls are labeled `warmup`, and three synchronized
-calls are labeled `measured`. The timed wall interval includes public forward
-work, result completion, the objective and one reverse for gradient mode. Input
-loading, imports, constructor setup, allocation, serialization and cleanup are
-outside the interval. Batch wall time and wall time divided by batch size are
-reported separately; the latter is amortized cost, not scalar latency.
-
-Each JSON record contains source, native library, field library, cohort,
-physical-array and configuration hashes, host/device metadata, query status,
-cold/warm/measured attempts, and errors. Missing or failed cells remain
-explicit in the reducer. Authoritative latency comes from synchronized wall
-time around the complete public call.
-
-The runner requires a Slurm allocation and rejects a device whose reported
-GPU name does not match the requested RTX 5090 or A100 label. CPU records set
-`CUDA_VISIBLE_DEVICES` empty and record `NUMPY_MADVISE_HUGEPAGE=0`, the
-process-only setting needed to avoid the documented first-touch confounder.
-
-The CPU allocation has eight logical CPUs from an Intel Xeon Gold 6530 and
-uses eight threads with PyTorch 2.7.1+cpu. RTX 5090 uses the same CPU model;
-A100-SXM4-80GB uses an Intel Xeon Platinum 8358P host. Both GPU environments
-use PyTorch 2.7.1+cu128. The GPU local response uses FP32 field operations and
-FP64 psi operations, as recorded by the 0.9.0 API. The timing workload requests
-the ordinary volume `f_C` metrics and no optional surface `f_B` or `f_T`.
-
-Each hardware receives one isolated allocation. Its workload cells run in
-fresh processes sequentially to avoid competition on the same allocated
-device; the three hardware allocations run concurrently. Timing samples
-describe these allocations and workloads; cross-hardware ratios also include
-their recorded host differences.
-
-## Measured latency
-
-All 30 timing cells completed on 2026-11-03: each has three valid measured
-calls after one cold call and one warmup, for 90 measured calls in total.
-CPU measurements completed in retry job 128043.
-Values below are medians in seconds for the entire call. A batch contains the
-number of independent queries shown in its row.
-
-<!-- BENCHMARK_WALL_TABLE -->
-
-| API workload | CPU8 value | CPU8 value + gradient | RTX 5090 value | RTX 5090 value + gradient | A100 value | A100 value + gradient |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Scalar | 22.483 | 42.531 | 1.553 | 1.959 | 1.903 | 2.473 |
-| Batch 1 | 22.865 | 41.871 | 1.560 | 1.989 | 1.898 | 2.452 |
-| Batch 2 | 63.821 | 99.577 | 2.584 | 2.813 | 3.219 | 3.650 |
-| Batch 4 | 121.086 | 192.466 | 4.665 | 5.029 | 5.902 | 6.620 |
-| Batch 8 | 245.300 | 385.934 | 9.013 | 9.420 | 11.282 | 12.657 |
-
-<!-- /BENCHMARK_WALL_TABLE -->
-
-For batch 8, the amortized value/value-plus-gradient costs are 1.127/1.178
-seconds per query on RTX 5090 and 1.410/1.582 seconds per query on A100.
-The cold call and constructors have separate fields in the raw records;
-the table above contains warm public-call latency.
-
-The protocol is `coileval-preview-public-api-benchmark-20261102-v1`.
-The parent validation workspace retains the hash-pinned plan, cohort receipt,
-raw JSON records, reducer output and audit under
-`evaluation/coileval_preview_20261102/benchmark/`. CPU's first attempt used
-an environment missing `threadpoolctl` and stopped before a timed physical
-call; the retry uses the existing CPU environment and retains the failed
-attempt as evidence.
-
-## Example 1: QA BFGS result with independent reference
-
-Task `n3-QA-i0-l5-s2-v5` was selected from 12 historical candidates satisfying
-`Ap < 9` and DESC boundary `f_C < 0.01`. The frozen configuration has `nfp=3`,
-four base coils and QA helicity `(1,0)`; the selected trajectory is
-`w2-t00000182`, iteration 397. Its objective targets are iota 0.47, coil gap
-0.1 m, maximum curvature 6 m⁻¹, mean coil length 3.5 m and volume 0.3 m³.
-These engineering targets are soft: the selected gap is 0.099124 m, maximum
-curvature 6.109613 m⁻¹ and mean length 3.535930 m.
-
-The 2026-11-03 reference evaluation completed source psi → alpha → nu →
-standard Simsopt least-squares/Newton → diagnostics → DESC. The reference
-profile uses FP64, order-16 Simsopt surfaces and a GPU DESC solve with
-`L=M=N=12`, at most 300 iterations and `ftol=xtol=gtol=1e-10`.
-
-| Quantity | Result | Definition or scope |
-| --- | ---: | --- |
-| Volume-equivalent Ap | 8.4326 | `R_axis_mean / sqrt(V / (2*pi²*R_axis_mean))`, final Simsopt surface |
-| Actual surface volume | 0.300000011 m³ | Final Simsopt surface |
-| Target-surface iota | 0.469986190 | Final Simsopt surface |
-| Simsopt surface f_C | 0.008162690 | CoilEval local residual definition, flux-shell RMS |
-| DESC boundary f_C | 0.007228119 | Surface-Jacobian-weighted mean absolute DESC residual, divided by B₀³ |
-| DESC nested surface | true | Final DESC nesting check |
-
-The two f_C rows use different aggregation and normalization conventions.
-The QA Simsopt f_C value comes from the parent full-physical workflow's
-explicit-helicity reference; the standalone 0.9.0 `surface_fc` helper is QH-only.
-The Simsopt surface is accepted for downstream evaluation **with quality
-warnings**: dense relative L2 is `1.310671e-4` and dense normal-field p95 is
-`1.728808e-4`, both above their strict `1e-4` limits. The Simsopt LS/Newton
-solves converged. DESC's optimizer converged after 63 iterations and retained
-a nested final boundary; its normalized force residual has mean absolute
-value 0.004381 and p95 0.011211. The result retains
-`certified_equilibrium=false`.
-
-## Example 2: simple-ring initialization did not reach BFGS
-
-The initializer constructs four base poloidal circles with `nfp=3`, major
-radius 1 m and circle radius `3.5/(2*pi)` m, then adds bounded center, tilt,
-current and order-2–4 Fourier perturbations. The same 32 seeds are screened
-at volumes 0.30, 0.15 and 0.075 m³, in that order, advancing only after a
-screen has no valid start. The declared continuation selects the minimum-loss
-valid seed, then uses dense inverse BFGS, one full-chain analytic reverse and
-an Armijo value-only line search. The loss uses Example 1's QA targets and
-an iota tolerance of 0.005.
-
-All three screens finished with **zero valid starts**, so BFGS never started.
-At each volume all 32 seeds passed the coil geometry gate; 30 returned
-`no_axis` and two returned `no_surface` because the positive near-axis
-quadratic source-domain requirement failed. This is 96 evaluations of 32
-unique seeds. The result records a failed initialization experiment; its
-scope is the declared geometry, perturbations and seeds.
-
-Both examples use protocol `coileval-preview-validation-examples-20261102-v1`.
-Original evidence is retained in the parent validation workspace under
-`evaluation/coileval_preview_20261102/examples/`: `manifest.json`,
-`selection.json`, and `execution_20261103.json`; Example 1 raw results are
-`results_20261103/example1/{surface_fc,simsopt_summary,desc_summary,result}.json`;
-Example 2 retains `results_20261103/example2/{summary,result}.json` and
-`events-v030.jsonl`, `events-v015.jsonl`, `events-v0075.jsonl` in that same
-Example 2 directory. Frozen inputs and runnable launchers remain in the
-parent workspace's `example1/` and `example2/` directories.
