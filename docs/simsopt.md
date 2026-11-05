@@ -41,6 +41,9 @@ for capture in captures:
 Configurations select `psi_fit='two_stage'` and differ only in `target_volume`.
 One geometry shares its magnetic axis, first fit, training domain and second
 fit across those volumes. Each volume receives its own downstream evaluation.
+When `psi_target_refit=True`, each volume also receives its own third fit and
+the returned `SourcePsi` contains that S3 scalar. The original volume-alpha
+preparation remains part of the capture.
 Set `include_torsion=False` when preparing sources without the optional torsion
 diagnostic. Scoring metrics and source coefficients retain the same definitions.
 

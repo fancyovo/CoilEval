@@ -75,6 +75,9 @@ class CpuBackend:
             alpha_iterations=config.alpha_iterations,alpha_radial_weighting=config.alpha_radial_weighting,
             alpha_weight_sigma=config.alpha_weight_sigma,alpha_count_floor=config.alpha_count_floor,
             alpha_radial_basis=config.alpha_radial_basis)
+        options.update(psi_target_refit=config.psi_target_refit,
+            psi_target_refit_factor=config.psi_target_refit_factor,
+            psi_target_refit_ridge=config.psi_target_refit_ridge)
         if config.psi_refit_ridge is not None:
             options['psi_refit_ridge']=config.psi_refit_ridge
         field=CpuField(coils,cfg.segments_per_coil,self.threads,self.library)
@@ -119,6 +122,23 @@ class CpuBackend:
                     refit_cfg,coils.nfp,sample.get('row_weights')))
                 diagnostics.update(psi_refit_domain_volume=boundary['volume_m3'],
                     psi_refit_training_count=len(sample['rz']),psi_refit_ridge=refit_cfg.psi_ridge)
+                if config.psi_target_refit:
+                    from .._two_stage.target_domain import target_training_domain
+                    model=PsiModel(coefficients,axis,nfp=coils.nfp,a=cfg.psi_a,
+                        degree=cfg.psi_poly_degree,mtor=cfg.psi_m_tor)
+                    target_metadata=stage('target_training_domain',lambda:target_training_domain(
+                        model,phis,config.target_volume,factor=config.psi_target_refit_factor,
+                        target_count=config.psi_refit_points))
+                    target_metadata.update(stage2_coefficients=coefficients,
+                        stage2_scale=factor['scale'],stage2_upper=factor['upper'])
+                    sample=target_metadata['sampling']
+                    refit_cfg.psi_ridge=config.psi_target_refit_ridge
+                    coefficients,factor=stage('psi_target_refit',lambda:fit_psi(field,axis,
+                        sample['rz'],sample['phi'],refit_cfg,coils.nfp,sample['row_weights']))
+                    two['target_refit']=target_metadata
+                    diagnostics['psi_target_refit_domain']=dict(
+                        target_metadata['boundary']['diagnostics'],training_count=len(sample['rz']))
+            diagnostics['psi_fit_stages']=3 if config.psi_target_refit else 2 if two is not None else 1
             geometry=PsiGeometry(torch.from_numpy(axis),torch.from_numpy(coefficients),coils.nfp,
                 cfg.psi_a,cfg.psi_poly_degree,cfg.psi_m_tor,
                 maximum_radius_scale=cfg.surface_max_radius_scale,root_iterations=cfg.surface_newton_iters,

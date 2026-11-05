@@ -37,6 +37,9 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `psi_fit` | `'single_stage'` | `'single_stage'` 或 `'two_stage'` |
 | `psi_refit_points` | `82368` | 第二次拟合的目标训练行数 |
 | `psi_refit_ridge` | `None` | 可选的 S2 列归一化正则系数，须非负；`None` 保留原生设置 |
+| `psi_target_refit` | `False` | `psi_fit='two_stage'` 后增加目标内部 S3 拟合的候选选项 |
+| `psi_target_refit_factor` | `1.2` | S3 请求训练体积与目标体积的比值，须大于 1 |
+| `psi_target_refit_ridge` | `1e-10` | 仅用于 S3 的非负列归一化正则系数 |
 | `psi_refit_sampling` | `'cartesian'` | 两阶段拟合的 `'cartesian'` 或 `'polar_quadrature'` 采样 |
 | `psi_nearby_method` | `'local'` | 两阶段局部响应，或 `'formal'` 端点重建 |
 | `psi_fd_batch_size` | `8` | 两阶段局部差分端点的批量大小 |
@@ -46,7 +49,7 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `alpha_radial_basis` | `'zernike'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor 磁通一致性容差；`None` 关闭检查 |
 
-0.9.0 默认保留单阶段设置。显式选择两阶段路径：
+0.10.0 默认保留单阶段设置。显式选择两阶段路径：
 
 ```python
 config = EvaluationConfig(
@@ -61,7 +64,21 @@ config = EvaluationConfig(
 `psi_refit_ridge` 可用于减小很低 QS 误差下的正则化偏差。它只作用于 S2，
 包括对应的局部梯度；S1 及其训练区域保持原设置。GPU 路径需要提供 0.9.1
 设置函数的原生库。减小正则并不保证磁面更准确，应同时检查法向磁场误差、
-坐标收敛与几何容量。针对目标附近区域的第三次拟合是另一项诊断策略，不属于此选项。
+坐标收敛与几何容量。第三次拟合由独立选项 `psi_target_refit` 控制。
+
+启用 `psi_target_refit=True` 后，S1、S2 保持各自配置的拟合目标，再从 S2 选择体积为
+`min(psi_target_refit_factor*V, (V+Vcapacity)/2)` 的闭合首根边界。容量必须大于原请求体积 V。
+S3 在该边界包围的整个内部进行加权极坐标求积拟合，沿用原基函数和后端精度；
+目标行数为 `psi_refit_points`，正则系数仅使用 `psi_target_refit_ridge`。
+最终磁面由 S3 在原体积 V 上求得。容量不足或续算失败会明确报错。
+原生诊断中的 `psi_fit_stages`、`psi_target_refit_domain` 记录实际流程。
+该方法保留显式启用：缩小训练域与弱正则共同作用时，标量可能失去径向单调性，
+使原先可评分的输入丢失可用容量。固定 4096 验证不支持将该选项推广为默认。
+训练域与正则各有影响，也存在交互；仅恢复正则不能保证所有目标的准确性。
+
+多体积捕获共享 S1、S2，每个目标独立保存 S3 系数、QR 因子和下游状态。
+局部梯度包含 S2 训练边界运动、S3 体积方程、容量裁剪及极坐标面积权重的响应，
+适用于已选定的离散分支。面 α 与原生体 α 保留各自独立的配置含义。
 目标体积容量检查至少覆盖 psi 拟合的环向网格，并为保留的环向模提供每周期至少两个采样点。
 磁通积分仍使用其独立配置的网格。这是采样截面上的径向分支检查；通过检查不代表全局磁面或物理精度得到认证。
 `psi_refit_sampling='polar_quadrature'` 选择可选的加权极坐标求积，

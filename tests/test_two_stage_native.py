@@ -119,6 +119,38 @@ def configurations():
     return [base,replace(base,target_volume=.01),replace(base,target_volume=.04)]
 
 
+def test_target_refit_shares_only_first_two_fits_and_owns_per_volume_factors(factory):
+    driver,library,_=factory()
+    ridges=[]
+    library.sgpu_two_stage_set_refit_ridge_v1=Function(lambda context,value: ridges.append(value) or 0)
+    def weighted(context,R,Z,phi,count,weights,coefficients,rms,stats,stats_count):
+        library.calls.append(('target_fit',count))
+        np.ctypeslib.as_array(coefficients,shape=(2,))[:]=[.015,1.15]
+        rms._obj.value=.001
+        return 0
+    library.sgpu_two_stage_fit_weighted_v1=Function(weighted)
+    configs=[replace(c,psi_target_refit=True,psi_refit_points=1024) for c in configurations()]
+    results=driver.evaluate_many(make_coils(),configs,capture=True)
+    assert sum(name=='begin' for name,_ in library.calls)==1
+    assert sum(name=='fit' for name,_ in library.calls)==1
+    assert sum(name=='target_fit' for name,_ in library.calls)==3
+    assert library.factor_count==5
+    assert ridges[::2]==[1e-10]*3
+    assert ridges[1::2]==[0.]*3  # fake native default, restored after each S3
+    for (raw,snapshot),cfg in zip(results,configs):
+        third=snapshot['two_stage']['target_refit']
+        assert raw['diagnostics']['psi_fit_stages']==3
+        assert third['boundary']['volume_m3']==pytest.approx(1.2*cfg.target_volume,rel=2e-11)
+        assert third['stage2_scale'][0]==2
+        assert not third['stage2_scale'].flags.writeable
+    assert [snapshot['psi_scale'][0] for _,snapshot in results]==[3,4,5]
+    assert all(not snapshot[key].flags.writeable for _,snapshot in results for key in ('psi_scale','psi_upper'))
+    assert results[0][1]['psi_scale'] is not results[1][1]['psi_scale']
+    assert (results[0][1]['two_stage']['target_refit']['stage2_scale']
+            is results[1][1]['two_stage']['target_refit']['stage2_scale'])
+    assert results[0][1]['psi_coefficients'] is not results[1][1]['psi_coefficients']
+
+
 def test_multiple_volumes_begin_and_refit_once_resume_each_in_order(factory):
     driver,library,geometry=factory()
     results=driver.evaluate_many(make_coils(),configurations())

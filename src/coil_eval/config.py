@@ -25,8 +25,22 @@ class EvaluationConfig:
     alpha_radial_basis: str = "zernike"
     stokes_validation_rtol: float | None = 1e-3
     psi_refit_ridge: float | None = None
+    psi_target_refit: bool = False
+    psi_target_refit_factor: float = 1.2
+    psi_target_refit_ridge: float = 1e-10
 
     def __post_init__(self):
+        if not isinstance(self.psi_target_refit, bool):
+            raise TypeError('psi_target_refit must be a boolean')
+        if self.psi_target_refit and self.psi_fit != 'two_stage':
+            raise ValueError("psi_target_refit requires psi_fit='two_stage'")
+        for name, lower, inclusive in (('psi_target_refit_factor', 1., False),
+                                       ('psi_target_refit_ridge', 0., True)):
+            value = getattr(self, name)
+            if (isinstance(value, bool) or not math.isfinite(float(value)) or
+                    (float(value) < lower if inclusive else float(value) <= lower)):
+                raise ValueError(f'{name} must be finite and {">=" if inclusive else ">"} {lower}')
+            object.__setattr__(self, name, float(value))
         if self.psi_refit_ridge is not None:
             value = self.psi_refit_ridge
             if isinstance(value, bool) or not math.isfinite(float(value)) or float(value) < 0:

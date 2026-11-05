@@ -8,7 +8,7 @@ from .config import EvaluationConfig
 # Target volumes and fitting radii are independent per query. The second-fit
 # samplers/row counts are also independent and use masked section padding.
 _BATCH_SHARED_SETTINGS = (
-    "psi_fit", "alpha_radial_weighting", "alpha_weight_sigma", "alpha_count_floor", "alpha_radial_basis",
+    "psi_fit", "psi_target_refit", "alpha_radial_weighting", "alpha_weight_sigma", "alpha_count_floor", "alpha_radial_basis",
 )
 
 

@@ -45,6 +45,9 @@ physical parameters whose configurations differ only in target volume. Each
 query retains its own downstream calculation and parameter gradient. Set either
 option to `False` to select its independent preparation path. Libraries without
 the batch-axis API use independent axis preparation.
+With `psi_target_refit=True`, sharing stops after S2. Each target has its own S3
+training domain, coefficients and QR factors. Its local gradient includes the
+moving training boundary and weights on the captured capacity-clipping branch.
 CPU batches prepare queries independently; `threads` controls each query's CPU
 budget and `axis_grid` optionally selects its primary magnetic-axis seed grid.
 CPU query diagnostics and timings are available under `diagnostics['queries']`

@@ -40,6 +40,9 @@ and `write_json(path)` preserve these units and conventions.
 | `psi_fit` | `'single_stage'` | `'single_stage'` or `'two_stage'` |
 | `psi_refit_points` | `82368` | Target training-row count for the second fit |
 | `psi_refit_ridge` | `None` | Optional nonnegative column-scaled ridge for S2 only; `None` retains the native setting |
+| `psi_target_refit` | `False` | Candidate S3 target-interior refit after `psi_fit='two_stage'` |
+| `psi_target_refit_factor` | `1.2` | Requested S3 training volume divided by target volume; must exceed one |
+| `psi_target_refit_ridge` | `1e-10` | Nonnegative column-scaled ridge for S3 only |
 | `psi_refit_sampling` | `'cartesian'` | Two-stage `'cartesian'` or `'polar_quadrature'` sampling |
 | `psi_nearby_method` | `'local'` | Two-stage local response or `'formal'` endpoint reconstruction |
 | `psi_fd_batch_size` | `8` | Two-stage local finite-difference endpoint batch size |
@@ -49,7 +52,7 @@ and `write_json(path)` preserve these units and conventions.
 | `alpha_radial_basis` | `'zernike'` | Original radial basis or two-stage `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-The single-stage settings remain the default in 0.9.0. Select the
+The single-stage settings remain the default in 0.10.0. Select the
 two-stage path explicitly:
 
 ```python
@@ -68,7 +71,28 @@ errors. It applies to S2 only, including local gradients; S1 and its domain stay
 fixed. The GPU option requires a native library exposing the 0.9.1 setter.
 Smaller ridge does not guarantee a more accurate magnetic surface: compare
 normal-field error, coordinate convergence and geometric capacity. Target-local
-third-fit experiments are a separate diagnostic strategy, not this option.
+third-fit behavior is selected separately with `psi_target_refit`.
+
+With `psi_target_refit=True`, S1 and S2 retain their configured objectives.
+S2 then supplies a closed first-root boundary of volume
+`min(psi_target_refit_factor*V, (V+Vcapacity)/2)` for a third fit. The capacity
+must exceed the requested physical volume V. S3 uses weighted polar quadrature
+over the entire interior and the same basis and backend precision. Its nominal
+row count is `psi_refit_points`; `psi_target_refit_ridge` controls only S3.
+The final surface uses S3 at the original V. Unavailable capacity or a failed
+continuation remains an explicit failure. Inspect `psi_fit_stages` and
+`psi_target_refit_domain` in the native diagnostics. S3 requires explicit
+selection: shrinking the training domain together with weak regularization can
+produce a nonmonotone scalar and lose usable capacity even on a previously
+scorable input. Its fixed4096 validation does not support default promotion.
+Changing the domain and changing ridge have separate effects and can interact;
+restoring ridge alone does not establish accuracy for every target.
+
+Multi-volume captures share S1/S2; each target owns its S3 coefficients, QR
+factors and downstream state. Local derivatives include S2's moving training
+boundary, the S3 volume equation, capacity clipping and polar area weights on
+the selected discrete branch. Surface-alpha and native volume-alpha settings
+retain their independent meanings.
 The target-volume capacity guard checks at least the psi fitting toroidal grid
 and two samples per retained toroidal mode. Flux quadrature remains separately
 configured. This is a sampled radial-branch check; an accepted result does not

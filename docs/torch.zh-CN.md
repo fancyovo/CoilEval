@@ -40,6 +40,8 @@ GPU 的 `batch_axis=True` 将不同几何的常规磁轴准备合批。
 `share_geometry=True` 在物理参数相同、配置仅目标体积不同的查询之间共享已捕获的两阶段拟合。
 每个查询保留独立的下游计算和参数梯度。可分别设为 `False` 选择独立准备路径；
 原生库缺少批量磁轴 API 时，采用逐个磁轴准备。
+启用 `psi_target_refit=True` 后，共享止于 S2；每个目标拥有独立的 S3 训练域、
+系数和 QR 因子。局部梯度包含训练边界与权重的变化，容量裁剪分支固定于捕获状态。
 CPU 批量独立准备每个查询；`threads` 指定单个查询的 CPU 预算，`axis_grid` 可选配磁轴初筛网格。
 CPU 的逐查询诊断和计时分别保存在 `diagnostics['queries']` 和 `timings['queries']` 中。
 

@@ -130,10 +130,11 @@ The ordinary ``TwoStageNative.evaluate_many`` remains the serial reference.
     def finish(work):
         driver,initial=work['driver'],work['initial']
         group,timings=work['group'],work['timings']
-        formal=[];postprocess=[];pairs=[];wait_seconds=0.
+        formal=[];postprocess=[];target_times=[];query_timings=[];pairs=[];wait_seconds=0.
         if 'partial_result' in initial:
             pairs=[(deepcopy(initial['partial_result']),None) for _ in group]
             formal=[0.]*len(group);postprocess=[0.]*len(group)
+            target_times=[0.]*len(group)
             shared_seconds=perf_counter()-work['started']
         else:
             tick=perf_counter()
@@ -143,26 +144,34 @@ The ordinary ``TwoStageNative.evaluate_many`` remains the serial reference.
             with _capture_stage(group, 'stage2_fit'):
                 driver._check(driver.lib.sgpu_set_reverse_capture(1))
                 prepared=driver._finish_prepare(work['configs'][0],initial,domain,True,timings)
+                prepared['nfp']=nfp
             with _capture_stage(group, 'snapshot'):
                 driver._prepare_snapshot_arrays(prepared,'reverse',False)
             shared_seconds=perf_counter()-work['started']
             for query_index,cfg in zip(group,work['configs']):
+                tick=perf_counter();local_timing={}
+                with _capture_stage([query_index], 'target_refit'):
+                    selected=driver._prepare_target(prepared,configs[query_index],cfg,True,local_timing)
+                    if selected is not prepared:
+                        driver._prepare_snapshot_arrays(selected,'reverse',False)
+                target_times.append(perf_counter()-tick if selected is not prepared else 0.);query_timings.append(local_timing)
                 with _capture_stage([query_index], 'resume'):
                     pair,formal_seconds,postprocess_seconds=driver._resume(
-                        prepared,cfg,work['arrays'],'reverse',False)
+                        selected,cfg,work['arrays'],'reverse',False)
                 pairs.append(pair);formal.append(formal_seconds);postprocess.append(postprocess_seconds)
         driver.close()
         total=perf_counter()-work['started']
         group_timing=dict(query_count=len(group),completed_volumes=len(pairs),
             shared_preparation_s=shared_seconds,each_formal_s=formal,
+            each_target_preparation_s=target_times,
             each_postprocess_s=postprocess,total_s=total,
-            overhead_s=max(0.,total-shared_seconds-sum(formal)-sum(postprocess)),
+            overhead_s=max(0.,total-shared_seconds-sum(formal)-sum(postprocess)-sum(target_times)),
             overlapping_group_spans=True,
             accounting='group spans overlap; use capture pipeline total_s for batch wall time')
         for index,(raw,snapshot) in enumerate(pairs):
             if 'partial_result' not in initial:
-                raw['timing']['two_stage']=dict(timings,formal_downstream=formal[index],
-                    total=total if len(group)==1 else shared_seconds+formal[index]+postprocess[index])
+                raw['timing']['two_stage']=dict(timings,**query_timings[index],formal_downstream=formal[index],
+                    total=total if len(group)==1 else shared_seconds+target_times[index]+formal[index]+postprocess[index])
             raw['timing']['two_stage_group']=deepcopy(group_timing)
             results[group[index]]=(raw,snapshot)
         records.append(dict(group_index=work['group_index'],query_indices=group,

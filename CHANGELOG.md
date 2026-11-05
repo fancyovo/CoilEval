@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0 (unreleased)
+
+- Add an explicit `psi_target_refit` option after the existing two scalar fits. Select a capacity-clipped target-volume interior from S2, fit S3 with separately configured regularization, and retain the original requested volume.
+- Preserve independent target-specific captures and propagate the moving training domain through scalar and batched local gradients. CPU and GPU paths retain their existing fit precision.
+- Keep surface-alpha order and volume-alpha evaluation unchanged. Keep S3 opt-in after fixed4096 validation finds 314 lost successes and 8 recoveries; the uniform low-ridge target-interior strategy is not promoted.
+- Exclude Python bytecode and cache directories from source distributions, including broad include patterns.
+
 ## 0.9.1 (unreleased)
 
 - Safeguard alpha-angle inversion with a root bracket and residual-decrease checks, eliminating clipped-Newton cycles on invertible maps while retaining fold rejection and implicit derivatives.

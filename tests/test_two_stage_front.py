@@ -180,7 +180,8 @@ def test_section_operator_rejects_missing_or_invalid_phi_membership():
 
 
 @pytest.mark.parametrize('refit_ridge',[None,1e-3])
-def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis(refit_ridge):
+@pytest.mark.parametrize('target_refit',[False,True])
+def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis(refit_ridge,target_refit):
     # A smooth integrable toy field supplies an exact periodic axis and an
     # elliptical psi. Both coefficient and axis parameters are perturbed.
     samples=torch.zeros((8,4),dtype=DT);samples[:,0]=1.
@@ -226,11 +227,25 @@ def test_complete_two_fit_builder_local_fd_includes_moving_periodic_axis(refit_r
         config=dict(nfp=4,psi_a=.15,psi_poly_degree=2,psi_m_tor=0,psi_n_r=7,psi_n_z=8,
                     psi_n_phi=5,axis_trace_steps=8,axis_sample_count=8))
     center['config']['psi_refit_ridge']=refit_ridge
+    if target_refit:
+        from coil_eval._two_stage.target_domain import target_training_domain
+        coefficients2,_=four_step_pcgls(op2,zero,scale2,upper2,ridge=ridge2)
+        model=PsiModel(coefficients2.detach().numpy(),samples.numpy(),nfp=4,a=.15,degree=2,mtor=0)
+        third=target_training_domain(model,boundary['phis'],.02,ntheta=32,theta_count=16,target_count=480,workers=1)
+        third.update(stage2_coefficients=coefficients2.detach(),stage2_scale=scale2,stage2_upper=upper2)
+        sample3=third['sampling'];boundary3=third['boundary']
+        op3=SectionPsiOperator(magnetic(zero),samples,sample3['rz'],boundary3['phis'],sample3['section_index'],
+            a=.15,degree=2,mtor=0,dtype=DT,row_weights=sample3['row_weights'])
+        scale3,upper3=factors(op3,1e-10)
+        center.update(psi_scale=scale3,psi_upper=upper3)
+        metadata['target_refit']=third
+        center['config']['psi_target_refit_ridge']=1e-10
     built=build_two_stage_front(magnetic(zero),tracing(zero),center,dtype=DT)
-    A=torch.stack([op2.apply(column).reshape(-1) for column in torch.eye(2,dtype=DT)],-1)
-    scaled=A/scale2
-    expected_coefficients=torch.linalg.solve(scaled.T@scaled+ridge2*torch.eye(2,dtype=DT),
-        scaled.T@op2.rhs.reshape(-1))/scale2
+    final_op,final_scale,final_ridge=(op3,scale3,1e-10) if target_refit else (op2,scale2,ridge2)
+    A=torch.stack([final_op.apply(column).reshape(-1) for column in torch.eye(2,dtype=DT)],-1)
+    scaled=A/final_scale
+    expected_coefficients=torch.linalg.solve(scaled.T@scaled+final_ridge*torch.eye(2,dtype=DT),
+        scaled.T@final_op.rhs.reshape(-1))/final_scale
     torch.testing.assert_close(built.geometry.coefficients,expected_coefficients,rtol=2e-8,atol=2e-9)
     def value(parameters,local=False):
         out=build_two_stage_front(magnetic(parameters),tracing(parameters),center,dtype=DT,local_value=local)

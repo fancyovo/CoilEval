@@ -119,7 +119,9 @@ class TwoStageNative:
         if 'partial_result' in initial:
             return initial
         domain=self._prepare_domain(coils,config,cfg,initial,timings)
-        return self._finish_prepare(cfg,initial,domain,capture,timings)
+        prepared=self._finish_prepare(cfg,initial,domain,capture,timings)
+        prepared['axis']=initial['axis']
+        return prepared
 
     def _begin_prepare(self,coils,config,cfg,arrays,capture,timings):
         """Run native S1 on the caller thread and own all exported host data."""
@@ -237,9 +239,55 @@ class TwoStageNative:
             sampling_members_sha256=members.hexdigest(),spacing=sample['spacing'],training_count=len(rows[0]),
             sampling_kind=sample.get('kind','cartesian'),weighted_fit=weights is not None)
         return dict(coefficients=coefficients,train_rms=rms.value,first=first,
+            axis=initial['axis'],
             alpha_options=initial['alpha_options'],
             s1_scale=s1_scale,s1_upper=s1_upper,s2_scale=s2_scale,s2_upper=s2_upper,
             boundary=boundary,sample=sample,branch=branch,training_count=len(rows[0]))
+
+    def _prepare_target(self,prepared,config,cfg,capture,timings):
+        """Keep S1/S2 shared; own one S3 and its factors per target volume."""
+        if not getattr(config,'psi_target_refit',False):
+            return prepared
+        from .target_domain import target_training_domain
+        stage=perf_counter()
+        model=PsiModel(prepared['coefficients'],prepared['axis'],nfp=prepared['nfp'],
+            a=cfg.psi_a,degree=cfg.psi_poly_degree,mtor=cfg.psi_m_tor)
+        phis=np.arange(cfg.psi_n_phi)*2*np.pi/(model.nfp*cfg.psi_n_phi)
+        metadata=target_training_domain(model,phis,config.target_volume,
+            factor=config.psi_target_refit_factor,target_count=config.psi_refit_points)
+        timings['target_training_domain']=perf_counter()-stage
+        metadata.update(stage2_coefficients=prepared['coefficients'],
+            stage2_scale=prepared['s2_scale'],stage2_upper=prepared['s2_upper'])
+        sample=metadata['sampling']
+        rows=[np.ascontiguousarray(sample['rz'][:,i]) for i in range(2)]
+        rows.append(np.ascontiguousarray(sample['phi']))
+        weights=np.ascontiguousarray(sample['row_weights'])
+        setter=getattr(self.lib,'sgpu_two_stage_set_refit_ridge_v1',None)
+        if setter is None:
+            raise RuntimeError('native library lacks target-refit regularization support; rebuild the library')
+        coefficients=np.empty_like(prepared['coefficients'])
+        rms=ct.c_double();stats=np.zeros(16,dtype=np.float64)
+        stage=perf_counter()
+        self._check(setter(self._context,config.psi_target_refit_ridge))
+        try:
+            self._check(self.lib.sgpu_two_stage_fit_weighted_v1(self._context,
+                *[pointer(a) for a in rows],len(rows[0]),pointer(weights),pointer(coefficients),
+                ct.byref(rms),pointer(stats),len(stats)))
+            scale,upper=self._factor(len(coefficients)) if capture else (None,None)
+        finally:
+            self._check(setter(self._context,config.psi_refit_ridge if config.psi_refit_ridge is not None else cfg.psi_ridge))
+        timings['stage3_fit']=perf_counter()-stage
+        for factor in (scale,upper):
+            if factor is not None:
+                factor.setflags(write=False)
+        result=dict(prepared,coefficients=coefficients,train_rms=rms.value,
+            s2_scale=scale,s2_upper=upper,target_refit=metadata,
+            alpha_options={**prepared['alpha_options'],
+                'psi_target_refit':True,'psi_target_refit_factor':config.psi_target_refit_factor,
+                'psi_target_refit_ridge':config.psi_target_refit_ridge})
+        for key in ('shared_snapshot_arrays','shared_two_stage','native_source_capture'):
+            result.pop(key,None)
+        return result
 
     @staticmethod
     def _prepare_snapshot_arrays(prepared,capture_mode,source_native):
@@ -250,6 +298,8 @@ class TwoStageNative:
         prepared['shared_two_stage']=_shared_array_tree(dict(
             stage1_coefficients=prepared['first'],stage1_scale=prepared['s1_scale'],
             stage1_upper=prepared['s1_upper'],boundary=prepared['boundary'],sampling=prepared['sample']))
+        if 'target_refit' in prepared:
+            prepared['shared_two_stage']['target_refit']=_shared_array_tree(prepared['target_refit'])
 
     def _resume(self,prepared,cfg,arrays,capture_mode,include_torsion):
         coefficients=prepared['coefficients']
@@ -270,6 +320,11 @@ class TwoStageNative:
             **prepared['alpha_options'],
             psi_refit_domain_volume=prepared['boundary']['volume_m3'],
             psi_refit_training_count=prepared['training_count'],psi_refit_branch=deepcopy(prepared['branch']))
+        result['diagnostics']['psi_fit_stages']=3 if 'target_refit' in prepared else 2
+        if 'target_refit' in prepared:
+            result['diagnostics']['psi_target_refit_domain']=dict(
+                prepared['target_refit']['boundary']['diagnostics'],
+                training_count=len(prepared['target_refit']['sampling']['rz']))
         snapshot=None
         if capture_mode is not None and raw.status==0:
             # All per-volume native arrays are copied before the next resume
@@ -354,7 +409,7 @@ class TwoStageNative:
             options=_config_dict(cfg);options.pop('target_volume')
             if options!=baseline:
                 raise ValueError('native two-stage configuration differs beyond target_volume')
-        timings={};results=[];formal=[];postprocess=[]
+        timings={};results=[];formal=[];postprocess=[];target_times=[];query_timings=[]
         shared_seconds=None
         try:
             capability=getattr(self.lib,'sgpu_source_capture_version',None)
@@ -365,15 +420,23 @@ class TwoStageNative:
             flag=4 if source_native else 3 if diagnostics else 1 if capture_mode is not None else 0
             self._check(self.lib.sgpu_set_reverse_capture(flag))
             prepared=self._prepare(coils,configs[0],native_configs[0],arrays,capture_mode=='reverse',timings)
+            prepared['nfp']=coils.nfp
             if capture_mode is not None and 'partial_result' not in prepared:
                 self._prepare_snapshot_arrays(prepared,capture_mode,source_native)
             shared_seconds=perf_counter()-started
             if 'partial_result' in prepared:
                 results=[(deepcopy(prepared['partial_result']),None) for _ in configs]
                 formal=[0.]*len(configs);postprocess=[0.]*len(configs)
+                target_times=[0.]*len(configs)
             else:
-                for cfg in native_configs:
-                    result,formal_seconds,postprocess_seconds=self._resume(prepared,cfg,arrays,capture_mode,include_torsion)
+                for config,cfg in zip(configs,native_configs):
+                    tick=perf_counter();local_timing={}
+                    selected=self._prepare_target(prepared,config,cfg,capture_mode=='reverse',local_timing)
+                    if selected is not prepared and capture_mode is not None:
+                        self._prepare_snapshot_arrays(selected,capture_mode,source_native)
+                    target_times.append(perf_counter()-tick if selected is not prepared else 0.)
+                    query_timings.append(local_timing)
+                    result,formal_seconds,postprocess_seconds=self._resume(selected,cfg,arrays,capture_mode,include_torsion)
                     results.append(result);formal.append(formal_seconds);postprocess.append(postprocess_seconds)
         finally:
             self.lib.sgpu_set_reverse_capture(0)
@@ -383,13 +446,14 @@ class TwoStageNative:
                 shared_seconds=total
             self.last_many_timing=dict(query_count=len(configs),completed_volumes=len(results),
                 shared_preparation_s=shared_seconds,each_formal_s=list(formal),
+                each_target_preparation_s=list(target_times),
                 each_postprocess_s=list(postprocess),total_s=total,
-                overhead_s=max(0.,total-shared_seconds-sum(formal)-sum(postprocess)))
+                overhead_s=max(0.,total-shared_seconds-sum(formal)-sum(postprocess)-sum(target_times)))
         for index,(result,snapshot) in enumerate(results):
             if 'partial_result' not in prepared:
-                result['timing']['two_stage']=dict(timings,formal_downstream=formal[index],
+                result['timing']['two_stage']=dict(timings,**query_timings[index],formal_downstream=formal[index],
                     total=(self.last_many_timing['total_s'] if len(configs)==1 else
-                           shared_seconds+formal[index]+postprocess[index]))
+                           shared_seconds+target_times[index]+formal[index]+postprocess[index]))
             result['timing']['two_stage_group']=deepcopy(self.last_many_timing)
         return results
 

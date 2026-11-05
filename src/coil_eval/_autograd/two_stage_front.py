@@ -403,6 +403,7 @@ def build_two_stage_front(field,trace,center: Mapping,*,config=None,
     """
     cfg=dict(center.get('config',{}));cfg.update(config or {})
     two=center['two_stage']
+    third=two.get('target_refit')
     axis_center=center['axis_samples']
     if not isinstance(axis_center,torch.Tensor):
         raise TypeError('center axis_samples must be a device tensor')
@@ -424,10 +425,26 @@ def build_two_stage_front(field,trace,center: Mapping,*,config=None,
     domain=two_stage_sampling_geometry(geometry1,two,reference_axis=axis_center,local_value=local_value)
     op2=SectionPsiOperator(field,axis,domain['rz'],domain['phis'],domain['section_index'],
         nfp=nfp,a=a,degree=degree,mtor=mtor,dtype=dtype,row_weights=domain['row_weights'])
-    coefficients,_=four_step_pcgls(op2,center['psi_coefficients'],center['psi_scale'],center['psi_upper'],
+    stage2=({key:third['stage2_'+key] for key in ('coefficients','scale','upper')}
+            if third is not None else {key:center['psi_'+key] for key in ('coefficients','scale','upper')})
+    coefficients,_=four_step_pcgls(op2,stage2['coefficients'],stage2['scale'],stage2['upper'],
         ridge=float(cfg['psi_refit_ridge'] if cfg.get('psi_refit_ridge') is not None else cfg.get('psi_ridge',1e-6)),
         iterations=int(cfg.get('psi_iterations',4)),
         live_column_scale=bool(cfg.get('psi_live_column_scale',True)))
+    final_operator=op2
+    if third is not None:
+        from .target_domain import target_sampling_geometry
+        target_domain=target_sampling_geometry(PsiGeometry(axis,coefficients,nfp,a,degree,mtor),
+            third,reference_axis=axis_center,local_value=local_value)
+        op3=SectionPsiOperator(field,axis,target_domain['rz'],target_domain['phis'],target_domain['section_index'],
+            nfp=nfp,a=a,degree=degree,mtor=mtor,dtype=dtype,row_weights=target_domain['row_weights'])
+        coefficients,_=four_step_pcgls(op3,center['psi_coefficients'],center['psi_scale'],center['psi_upper'],
+            ridge=float(cfg['psi_target_refit_ridge']),iterations=int(cfg.get('psi_iterations',4)),
+            live_column_scale=bool(cfg.get('psi_live_column_scale',True)))
+        final_operator=op3
+        diagnostics.update(third_fit_point_count=op3.point_count,
+            third_fit_column_scale_relative_max=(op3.column_scale_ratio-1).abs().max().detach(),
+            target_fit_domain_derivatives=target_domain['derivative_scope'])
     geometry=PsiGeometry(axis,coefficients,nfp,a,degree,mtor,
         maximum_radius_scale=float(cfg.get('surface_max_radius_scale',1.)),
         root_iterations=int(cfg.get('surface_newton_iters',20)),
@@ -442,7 +459,7 @@ def build_two_stage_front(field,trace,center: Mapping,*,config=None,
                        second_fit_sampling=domain['kind'],
                        two_stage_domain_derivatives=domain['derivative_scope'])
     return TwoStageFrontResult(geometry,predict_target_level(geometry,center),
-                               op2.residual_rms(coefficients),diagnostics,op2,geometry1,domain)
+                               final_operator.residual_rms(coefficients),diagnostics,final_operator,geometry1,domain)
 
 
 def _batch_axis_local_value(field,captured_starts,*,nfp,trace_steps,sample_count):
@@ -497,6 +514,9 @@ def build_batch_two_stage_front(field,centers,*,config_overrides=None,
     if not centers or len(centers)!=field.positions.shape[0]:
         raise ValueError('one independent center required per batch field query')
     cfgs=[{**c.get('config',{}),**(config_overrides or {})} for c in centers]
+    thirds=[c['two_stage'].get('target_refit') for c in centers]
+    if any(t is not None for t in thirds) and not all(t is not None for t in thirds):
+        raise ValueError('group two-stage and target-refit captures separately')
     defaults=dict(axis_trace_steps=240,axis_sample_count=240,psi_poly_degree=10,psi_m_tor=12,
         psi_n_r=48,psi_n_z=48,psi_n_phi=48,psi_iterations=4,psi_live_column_scale=True,surface_max_radius_scale=1.,
         surface_newton_iters=20,surface_newton_tolerance=1e-12)
@@ -536,10 +556,28 @@ def build_batch_two_stage_front(field,centers,*,config_overrides=None,
     op2=BatchSectionPsiOperator(field,axes,[d['rz'] for d in domains],[d['phis'] for d in domains],
         [d['section_index'] for d in domains],radii,nfp=nfp,degree=degree,mtor=mtor,dtype=dtype,
         row_weights=[d['row_weights'] for d in domains])
-    coefficients,_=batch_four_step_pcgls(op2,stack('psi_coefficients'),stack('psi_scale'),stack('psi_upper'),
+    def stack_stage2(name):
+        return (_stack_live([t['stage2_'+name] for t in thirds],device=device,dtype=torch.float64)
+                if thirds[0] is not None else stack('psi_'+name))
+    coefficients,_=batch_four_step_pcgls(op2,stack_stage2('coefficients'),stack_stage2('scale'),stack_stage2('upper'),
         ridge=[float(c['psi_refit_ridge'] if c.get('psi_refit_ridge') is not None else c.get('psi_ridge',1e-6)) for c in cfgs],
         iterations=int(common['psi_iterations']),
         live_column_scale=bool(common['psi_live_column_scale']))
+    final_operator=op2
+    if thirds[0] is not None:
+        from .target_domain import target_sampling_geometry
+        target_domains=[target_sampling_geometry(PsiGeometry(axes[i],coefficients[i],nfp,radii[i],degree,mtor),
+            thirds[i],reference_axis=centers[i]['axis_samples'],local_value=local_value) for i in range(len(centers))]
+        op3=BatchSectionPsiOperator(field,axes,[d['rz'] for d in target_domains],[d['phis'] for d in target_domains],
+            [d['section_index'] for d in target_domains],radii,nfp=nfp,degree=degree,mtor=mtor,dtype=dtype,
+            row_weights=[d['row_weights'] for d in target_domains])
+        coefficients,_=batch_four_step_pcgls(op3,stack('psi_coefficients'),stack('psi_scale'),stack('psi_upper'),
+            ridge=[float(c['psi_target_refit_ridge']) for c in cfgs],iterations=int(common['psi_iterations']),
+            live_column_scale=bool(common['psi_live_column_scale']))
+        final_operator=op3
+        diagnostics.update(third_fit_point_count=op3.valid_rows.detach(),
+            third_fit_column_scale_relative_max=(op3.column_scale_ratio-1).abs().amax(-1).detach(),
+            target_fit_domain_derivatives=[d['derivative_scope'] for d in target_domains])
     geometries=[PsiGeometry(axes[i],coefficients[i],nfp,radii[i],degree,mtor,
         maximum_radius_scale=float(common['surface_max_radius_scale']),
         root_iterations=int(common['surface_newton_iters']),
@@ -555,5 +593,5 @@ def build_batch_two_stage_front(field,centers,*,config_overrides=None,
                             [None if d['spacing'] is None else d['spacing'].detach() for d in domains]),
         second_fit_sampling=[d['kind'] for d in domains],
         two_stage_domain_derivatives=[d['derivative_scope'] for d in domains])
-    return BatchTwoStageFrontResult(axes,coefficients,levels,op2.residual_rms(coefficients),
-                                    diagnostics,op2,geometries,geometries1,domains)
+    return BatchTwoStageFrontResult(axes,coefficients,levels,final_operator.residual_rms(coefficients),
+                                    diagnostics,final_operator,geometries,geometries1,domains)

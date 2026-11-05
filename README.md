@@ -7,7 +7,7 @@ coil currents, field periods and a target volume to obtain quasi-symmetry,
 rotational transform, surface quality and coil geometry metrics. Compose these
 metrics into a scalar objective and compute its local parameter gradient.
 
-The source package is 0.9.1 (unreleased). CPU and GPU evaluation support different
+The source package is 0.10.0 (unreleased). CPU and GPU evaluation support different
 field-period and base-coil counts, with explicit QA or QH helicity. The tensor
 constructor accepts `nfp=coils.nfp`; its default remains 4. For QA choose
 `EvaluationConfig(..., helicity=(1,0))`; standard QH uses `(1,coils.nfp)`.
@@ -17,6 +17,15 @@ See the [tensor guide](docs/torch.md), [CPU guide](docs/cpu.md) and
 Version 0.9.1 repairs angle inversion and axis-connected radial sampling, and
 adds an explicit second-fit regularization setting. The frozen 0.9.0 calibration
 wheel below predates these repairs; use a source build for the 0.9.1 changes.
+
+The 0.10.0 candidate adds `psi_target_refit=True` to the two-stage configuration.
+It fits the scalar a third time over a target-specific interior, with separate
+regularization and an unchanged target volume. It remains opt-in (`False` by
+default): the fixed 4096 comparison with geometric surface-alpha32 scored 1821
+inputs versus 2127 for repaired S2, with 314 lost successes and 8 recoveries.
+Among 699 originally quality-qualified pairs without an error alarm, 31 became
+unscorable and one crossed the error threshold. The option improves many scored
+cases but does not meet the normal-path preservation condition for promotion.
 
 The examples accept `--helicity M N`; for a QA input use
 `python examples/qs_metrics.py --coils qa.json --helicity 1 0 --volume V --radius A`.

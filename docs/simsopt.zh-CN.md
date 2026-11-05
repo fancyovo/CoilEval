@@ -38,6 +38,8 @@ for capture in captures:
 `EvaluationConfig`，始终按输入顺序返回列表。配置选择 `psi_fit='two_stage'`，
 各份配置只允许目标体积不同。同一几何的多个体积共享磁轴、第一次拟合、训练区域与
 第二次拟合，各目标体积分别完成下游求值。
+启用 `psi_target_refit=True` 时，各体积还分别完成第三次拟合，返回的 `SourcePsi`
+包含 S3 标量；捕获流程继续计算原来的体 alpha。
 只准备源数据而不需要可选扭率诊断时，可设置 `include_torsion=False`。
 评分指标与源系数的定义保持一致。
 
