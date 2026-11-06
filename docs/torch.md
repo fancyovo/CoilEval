@@ -2,6 +2,51 @@
 
 [简体中文](torch.zh-CN.md)
 
+
+<details markdown="1">
+<summary>Terms and coordinate conventions used on this page</summary>
+
+On this page, **quasisymmetry (QS)** means that magnetic-field strength depends on one
+helical angle in suitable surface coordinates. **QA** is quasi-axisymmetry and **QH**
+is quasi-helical symmetry. `nfp` is the number of repeated field periods around the
+device; `helicity=(M,N)` selects the angle `Mθ−Nφ`, with poloidal θ around a surface
+cross-section and toroidal φ around the device. **Rotational transform ι (iota)** is
+the average number of poloidal turns per toroidal turn of a field line. **RMS** is
+the square root of a weighted mean of squares; **P90/P95** are the 90th/95th
+percentiles. `f_B` measures field-strength Fourier content outside the requested
+symmetry; `f_C` is a differential quasisymmetry residual; `f_T` is a triple-product
+residual involving field derivatives. All have ideal value zero; comparisons
+require matching averaging regions and normalization.
+
+**Fits and coordinates.** The scalar surface label s approximates magnetic surfaces by its
+level sets; fitting fields in the API retain the `psi_` prefix. Physical toroidal
+flux ψ is calibrated separately by flux integration. The default two-fit procedure
+fits an initial region, selects a closed region and fits that region again. An
+optional third fit uses the entire interior of a boundary slightly beyond the requested volume; it is off by default.
+Alpha (α) fitting constructs field-line angles, with lambda (λ) as a periodic
+angular correction. Nu (ν) then constructs Boozer angles: coordinates in which
+field lines are straight and covariant angular magnetic-field components depend
+only on the surface. A volume-alpha fit spans the volume; a surface-alpha fit is
+recomputed on one target surface, with orders referring to angular Fourier modes.
+Rho (ρ) is a normalized radial label. `flux_legendre` uses Legendre polynomials of
+normalized flux; `zernike` uses another radial polynomial basis. Polar quadrature uses weighted radial/angular samples; Cartesian sampling uses a rectangular grid. Smooth density weights estimate radial sample density; the positive pseudo-count added to the denominator prevents excessive weights in sparse regions. Ridge
+regularization adds a coefficient penalty to stabilize a fit. Stellarator symmetry generates the full device by rotations and reflection of base coils. Stokes flux integration uses a boundary line integral; area integration directly samples the cross-section. QR solves least
+squares using an orthogonal/upper-triangular matrix factorization.
+
+**Saved state and precision.** The native backend is the packaged C++/CUDA library.
+A capture saves the axis, fit coefficients and sample points from a complete
+evaluation for later derivatives or surface construction. The center is that
+evaluated parameter vector; endpoints are small perturbations. A local derivative
+keeps the current discrete choices fixed while differentiating continuous changes.
+Capacity is the largest volume represented by the fitted scalar's radially
+monotone region. The first branch is the first outward monotone radial interval
+from the magnetic axis. A fold is loss of coordinate monotonicity. A Jacobian is a
+first-derivative matrix; the angular-map minimum Jacobian denotes its determinant.
+FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
+
+</details>
+
+
 For GPU use, install a CUDA-enabled PyTorch build compatible with your GPU and
 driver, then run `python examples/autograd.py`. CPU execution uses CPU PyTorch
 and `TensorEvaluator(device='cpu', ...)`; see the [CPU guide](cpu.md).
@@ -24,7 +69,7 @@ remain `nfp=4` and helicity `(1,4)`. Set `EvaluationConfig(helicity=(1,0), ...)`
 for QA, or `(1,nfp)` for QH at the selected field period; helicity is never
 inferred from `nfp`. The interface retains 256 coil segments and four
 psi/alpha local fit iterations. Select `fast=True` and
-`flux_method='stokes'`. S2 is the 0.11.0 default. Explicit legacy S1 requires histogram weights and
+`flux_method='stokes'`. The second fit is the 0.11.0 default. Explicit legacy the first fit requires histogram weights and
 the Zernike basis as described in the API guide. Both fitting paths are
 accepted. Psi calculations use float64; field calculations use float32 by
 default, with `field_dtype=torch.float64` available.
@@ -46,7 +91,7 @@ physical parameters whose configurations differ only in target volume. Each
 query retains its own downstream calculation and parameter gradient. Set either
 option to `False` to select its independent preparation path. Libraries without
 the batch-axis API use independent axis preparation.
-With `psi_target_refit=True`, sharing stops after S2. Each target has its own S3
+With `psi_target_refit=True`, sharing stops after the second fit. Each target has its own the third fit
 training domain, coefficients and QR factors. Its local gradient includes the
 moving training boundary and weights on the captured capacity-clipping branch.
 CPU batches prepare queries independently; `threads` controls each query's CPU
@@ -76,7 +121,7 @@ to compare its independent execution path; set `synchronize_stages=True` to
 compare synchronized stage timing.
 With `capture_workers=2`, `3` or `4`, each host worker would own a complete
 geometry group and its native context. The public native path currently rejects
-these values because the independent cuSOLVER handles used by two-stage capture
+these values because the independent cuSOLVER (NVIDIA’s matrix-solver library) handles used by two-stage capture
 still need a dedicated isolation implementation. `capture_workers=1` is the
 validated path; use it with `capture_pipeline=True` for CPU-domain/native
 overlap.
@@ -146,7 +191,7 @@ respect to that returned tensor, as in the example.
 `TensorMetrics` exposes `qs_volume`, `qs_outer`, `iota_boundary`, `iota_min`,
 `iota_max`, `relative_normal_drift_p95`, `coil_gap_min`, `coil_curvature_max`,
 `coil_length_mean`, `surface_volume` and `psi_fit_rms`. QS quantities are RMS;
-the whole-volume and outer-bin quantities have different weighting regions.
+the whole-volume and outer radial-bin quantities have different weighting regions.
 `psi_fit_rms` is the psi training-equation residual RMS in T/m, matching the
 scalar `LocalMetrics` field.
 `iota_min` and `iota_max` use the same 257 uniformly spaced rho-squared profile
@@ -158,7 +203,7 @@ dictionary for scalar evaluation, or one dictionary per query in a batch.
 integration, and `validation` is `'checked'` or `'disabled'`.
 `edge_relative_error` compares boundary flux; `derivative_relative_error`
 compares the flux derivative at 33 normalized positions, scaled by the largest
-reference derivative. The reference is the captured formal center's area
+reference derivative. The reference is the captured complete-evaluation center's area
 polynomial. The default tolerance is `1e-3`; configure it with
 `EvaluationConfig(stokes_validation_rtol=...)`, or use `None` to disable the
 check. A batch recomputes area integration only for queries that fail the
@@ -228,3 +273,5 @@ an aggregate loss can conceal a component discrepancy. The NumPy `Evaluator`
 provides centered finite differences for scalar callbacks; see [the API](api.md).
 
 See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.
+
+A CUDA stream is an ordered device execution queue; an event is a timing marker in that queue. An active branch is the currently selected nearest point, maximum point or limiting ray, held fixed for the local derivative.

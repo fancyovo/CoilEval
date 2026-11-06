@@ -1,23 +1,69 @@
 # Changelog
 
+<details markdown="1">
+<summary>Terms and coordinate conventions used on this page</summary>
+
+On this page, **quasisymmetry (QS)** means that magnetic-field strength depends on one
+helical angle in suitable surface coordinates. **QA** is quasi-axisymmetry and **QH**
+is quasi-helical symmetry. `nfp` is the number of repeated field periods around the
+device; `helicity=(M,N)` selects the angle `Mθ−Nφ`, with poloidal θ around a surface
+cross-section and toroidal φ around the device. **Rotational transform ι (iota)** is
+the average number of poloidal turns per toroidal turn of a field line. **RMS** is
+the square root of a weighted mean of squares; **P90/P95** are the 90th/95th
+percentiles. `f_B` measures field-strength Fourier content outside the requested
+symmetry; `f_C` is a differential quasisymmetry residual; `f_T` is a triple-product
+residual involving field derivatives. All have ideal value zero; comparisons
+require matching averaging regions and normalization.
+
+**Fits and coordinates.** The scalar surface label s approximates magnetic surfaces by its
+level sets; fitting fields in the API retain the `psi_` prefix. Physical toroidal
+flux ψ is calibrated separately by flux integration. The default two-fit procedure
+fits an initial region, selects a closed region and fits that region again. An
+optional third fit uses the entire interior of a boundary slightly beyond the requested volume; it is off by default.
+Alpha (α) fitting constructs field-line angles, with lambda (λ) as a periodic
+angular correction. Nu (ν) then constructs Boozer angles: coordinates in which
+field lines are straight and covariant angular magnetic-field components depend
+only on the surface. A volume-alpha fit spans the volume; a surface-alpha fit is
+recomputed on one target surface, with orders referring to angular Fourier modes.
+Rho (ρ) is a normalized radial label. `flux_legendre` uses Legendre polynomials of
+normalized flux; `zernike` uses another radial polynomial basis. Polar quadrature uses weighted radial/angular samples; Cartesian sampling uses a rectangular grid. Smooth density weights estimate radial sample density; the positive pseudo-count added to the denominator prevents excessive weights in sparse regions. Ridge
+regularization adds a coefficient penalty to stabilize a fit. Stellarator symmetry generates the full device by rotations and reflection of base coils. Stokes flux integration uses a boundary line integral; area integration directly samples the cross-section. QR solves least
+squares using an orthogonal/upper-triangular matrix factorization.
+
+**Saved state and precision.** The native backend is the packaged C++/CUDA library.
+A capture saves the axis, fit coefficients and sample points from a complete
+evaluation for later derivatives or surface construction. The center is that
+evaluated parameter vector; endpoints are small perturbations. A local derivative
+keeps the current discrete choices fixed while differentiating continuous changes.
+Capacity is the largest volume represented by the fitted scalar's radially
+monotone region. The first branch is the first outward monotone radial interval
+from the magnetic axis. A fold is loss of coordinate monotonicity. A Jacobian is a
+first-derivative matrix; the angular-map minimum Jacobian denotes its determinant.
+FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
+
+</details>
+
+
+Entries describe historical versions; defaults in an entry apply to that version.
+
 ## 0.11.0 (preview candidate)
 
-- Make the validated S2 configuration the public default: two-stage scalar fitting, weighted polar quadrature, smooth flux-Legendre volume-alpha fitting and the fast Stokes local path. Retain S3 as an explicit option disabled by default.
+- Make the validated two-fit configuration the public default: two-stage scalar fitting, weighted polar quadrature, smooth flux-Legendre volume-alpha fitting and the shorter tracing with Stokes flux integration for local evaluations. Retain the third fit as an explicit option disabled by default.
 - Preserve explicit configuration of historical numerical paths; saved configurations remain reproducible.
-- Prepare current S2 accuracy, amortized timing and reproducible evaluation/optimization examples for the first preview delivery.
+- Prepare current the second fit accuracy, amortized timing and reproducible evaluation/optimization examples for the first preview delivery.
 - Exclude local runtime and pytest cache documentation from the source archive.
 
 ## 0.10.0 (unreleased)
 
-- Add an explicit `psi_target_refit` option after the existing two scalar fits. Select a capacity-clipped target-volume interior from S2, fit S3 with separately configured regularization, and retain the original requested volume.
+- Add an explicit `psi_target_refit` option after the existing two scalar fits. Select a capacity-clipped target-volume interior from the second fit, fit the third fit with separately configured regularization, and retain the original requested volume.
 - Preserve independent target-specific captures and propagate the moving training domain through scalar and batched local gradients. CPU and GPU paths retain their existing fit precision.
-- Keep surface-alpha order and volume-alpha evaluation unchanged. Keep S3 opt-in after fixed4096 validation finds 314 lost successes and 8 recoveries; the uniform low-ridge target-interior strategy is not promoted.
+- Keep surface-alpha order and volume-alpha evaluation unchanged. Keep the third fit opt-in after fixed 4096-input validation finds 314 lost successes and 8 recoveries; the uniform low-ridge target-interior strategy is not promoted.
 - Exclude Python bytecode and cache directories from source distributions, including broad include patterns.
 
 ## 0.9.1 (unreleased)
 
 - Safeguard alpha-angle inversion with a root bracket and residual-decrease checks, eliminating clipped-Newton cycles on invertible maps while retaining fold rejection and implicit derivatives.
-- Keep radial inversion on the first axis-connected monotone branch in target-surface replay, CPU formal volume sampling, native flux/surface sampling and local batches. Preserve selected sample indices and reject unavailable active rays instead of sampling another branch.
+- Keep radial inversion on the first axis-connected monotone branch in target-surface recomputation from saved fit coefficients, CPU complete volume sampling, native flux/surface sampling and local batches. Preserve selected sample indices and reject unavailable active rays instead of sampling another branch.
 - Increase the toroidal capacity-guard grid to catch between-plane scalar folds. This remains a sampled capacity check, with the original geometric acceptance thresholds.
 - Expose optional `psi_refit_ridge` for the second scalar fit without changing the first fit or its training boundary. Preserve the original setting when omitted; retain separate regularization in CPU, scalar and batched local gradients.
 - Explain legacy target-volume capacity and axis-search failures separately, preserving their native messages and numerical status. Include the actual near-axis polynomial coefficients in source-domain rejection diagnostics.
@@ -25,7 +71,7 @@
 
 ## 0.9.0 (unreleased)
 
-- Support positive field-period counts and arbitrary nonempty base-coil counts in CPU and GPU tensor evaluation, source capture, neighborhoods and target-surface QS. Tensor evaluators accept an explicit `nfp` (default 4).
+- Support positive field-period counts and arbitrary nonempty base-coil counts in CPU and GPU tensor evaluation, saved evaluation state, neighborhoods and target-surface QS. Tensor evaluators accept an explicit `nfp` (default 4).
 - Support explicit QA `(1,0)` and general QH helicities, including independent per-query helicity reductions in tensor batches. Keep the existing `(1,4)` configuration default for compatibility.
 - Group heterogeneous CoilSet value requests by compatible geometry and preserve input order. Dense tensor batches share field periods, coil count and Fourier width.
 - Retain stellarator symmetry, numerical settings, validity guards and the requirement that helicity M is nonzero.
@@ -78,8 +124,8 @@
 
 - Accelerated coil geometry metrics while retaining them in complete value-and-gradient evaluation.
 - Kept GPU triangular solves independent per query and bounded temporary memory for larger batches.
-- Preserved formal volume-point selection in the local gradient and documented its discrete sampling boundaries.
-- Validated tensor Stokes flux against the formal center and added differentiable area integration for queries exceeding the configured tolerance.
+- Preserved complete-evaluation volume-point selection in the local gradient and documented its discrete sampling boundaries.
+- Validated tensor Stokes flux against the complete-evaluation center and added differentiable area integration for queries exceeding the configured tolerance.
 - Added optional `flux_legendre` alpha fitting for two-stage evaluations and matching source initialization.
 - Shared magnetic-axis preparation across independent tensor batches and repeated two-stage fits across volumes of the same geometry.
 - Reduced source-capture work and made torsion diagnostics optional during source preparation.
@@ -95,7 +141,7 @@
 - Exposed optional `psi_fit_rms` in scalar metrics for psi training-equation residual objectives, in T/m.
 - Added optional experimental smooth radial-density weights for two-stage alpha fitting.
 - Extended physical parameter tensors to higher Fourier orders, including order 16.
-- Added shared multi-volume source capture, a callable GPU coil field, alpha+nu initialization and standard Simsopt LS/Newton integration.
+- Added shared multi-volume saved evaluation state, a callable GPU coil field, alpha+nu initialization and standard Simsopt least-squares/Newton refinement integration.
 - Added native-normalized surface f_C RMS diagnostics and volume aggregation helpers.
 - Added examples for two-stage evaluation and separate GPU preparation/CPU-only process pools, with bilingual API documentation.
 

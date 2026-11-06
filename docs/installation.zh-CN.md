@@ -5,6 +5,9 @@
 
 [English](installation.md)
 
+
+wheel（`.whl`）是已构建的 Python 安装包，sdist（`.tar.gz`）是源码包。extras 是方括号中的可选依赖组，如 `[cpu]`；它不会把 PyTorch 自动切换为 CPU 构建。CUDA 是 NVIDIA 的 GPU 计算平台，nvcc 是它的编译器，运行预编译包通常只需相应运行库和驱动。
+
 ## 预编译安装包
 
 创建或激活 Python 3.10+ 环境，然后安装：
@@ -145,3 +148,5 @@ python examples/evaluate.py --library build/native/libcoil_eval_native.so
 - **缺少 CUDA 运行库依赖：** 重新安装 wheel 的 `gpu` 依赖组，并启用依赖安装。离线安装还需要准备 NVIDIA 依赖包。
 - **驱动或 GPU 内核不兼容：** 对照上表检查驱动和显卡。`nvidia-smi` 显示驱动支持能力，
   `nvcc --version` 显示单独安装的编译器版本。
+
+表中的 sm_XX 是 GPU 架构目标，PTX 是供驱动编译的中间指令。OpenMP 提供 CPU 并行运行支持。f_B/f_T 是准对称性（磁场强度只依赖一个螺旋角）误差指标，分别使用傅里叶分量和磁场导数三重积。

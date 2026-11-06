@@ -2,6 +2,8 @@
 
 [English](development.md)
 
+本页面向开发者。原生后端是随包提供的 C++/CUDA 库；QS 是准对称性误差指标，`f_C` 是其微分残差。psi/s 是拟合的磁面标签；alpha 和 nu 是构造磁力线角坐标的两步角修正。两次拟合先在初始区域拟合，再在选出的闭合区域重拟合；可选第三次拟合覆盖略大于目标体积的整个内部。capture 指保存一次完整求值的中间状态，局部反向求导据此计算参数的小幅连续变化。Simsopt 是独立的磁面优化库；LS/Newton 指先最小二乘拟合、再用 Newton 法精修。
+
 开发 Python 接口，并按已安装的可选依赖运行测试时：
 
 ```sh
@@ -15,7 +17,7 @@ python -m build --sdist
 CPU 后端测试使用 `cpu` 依赖和编译的 CPU 库，安装方式见 [CPU 源码构建](installation.zh-CN.md#从源码构建-cpu-版本)。
 CUDA 测试还需要 GPU 后端和可用设备。
 
-制作发行 wheel 时，用 micromamba 创建并激活 `tools/build-environment.yml` 中的环境：
+制作发行 wheel（免本地编译的 Python 安装包）时，用环境管理器 micromamba 创建并激活 `tools/build-environment.yml` 中的环境：
 
 ```sh
 micromamba create -f tools/build-environment.yml
@@ -23,7 +25,7 @@ micromamba activate coileval-build
 bash tools/build_linux_wheel.sh
 ```
 
-构建使用 CUDA 12.8、GCC 11 和 glibc 2.28 sysroot；`auditwheel` 检查系统兼容基线，
+构建使用 CUDA 12.8、GCC 11 和 glibc 2.28 sysroot（目标 Linux 系统的头文件和库）；nvcc 是 CUDA 编译器。`auditwheel` 检查系统兼容基线，
 NVIDIA 运行库由 `gpu` 安装依赖组提供。GitHub Actions 中的 wheel 流程可手动触发，保存构建产物供审阅。
 在全新的 GPU 环境中验证安装包，确认 PATH 中没有 nvcc，并检查 NumPy 梯度及可选 Tensor 接口：
 
@@ -43,7 +45,7 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 | `native/include` | 共享类型与模块接口 |
 | `native/src/autograd` | 可选 Tensor 接口的 CUDA 算子 |
 | `native/cpu` | CPU 磁场、追踪、几何与主机搜索策略适配 |
-| `tests` | API、数值 oracle 和源码结构测试 |
+| `tests` | API、独立参考解 和源码结构测试 |
 | `examples` | 求值与自定义目标示例 |
 
 实现文件独立编译；头文件声明接口、共享类型和小型内联函数。
@@ -70,7 +72,7 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 
 ## 数值修改
 
-保留 0.11.0 已验证的 S2 默认配方，S3 为可选项。通过 `EvaluationConfig` 增加拟合或采样选项，
+0.11.0 默认采用已验证的两次拟合配置，第三次拟合为可选项。通过 `EvaluationConfig` 增加拟合或采样选项，
 保持单位和参数顺序。修改 Fourier 参数处理时，同时验证 4 阶与更高阶输入。
 
 两阶段采样器提供坐标、采样选择和最小二乘行权重；原生拟合与局部反传算子应使用一致的

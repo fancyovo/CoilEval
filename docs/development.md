@@ -2,6 +2,8 @@
 
 [简体中文](development.zh-CN.md)
 
+This guide is for contributors. The native backend is the packaged C++/CUDA library. QS denotes quasisymmetry error, with `f_C` its differential residual. Psi/s is the fitted surface label; alpha and nu are successive angle corrections used to construct field-line coordinates. Two fits use an initial region and then a selected closed region; an optional third fit uses the full interior slightly beyond the target volume. A capture saves intermediate evaluation state for local reverse differentiation. Simsopt is an independent surface-optimization library; LS/Newton means least-squares fitting followed by Newton refinement.
+
 For Python API development and tests that use installed optional dependencies:
 
 ```sh
@@ -16,7 +18,7 @@ CPU-backend tests use the `cpu` dependencies and a compiled CPU library; follow
 the [CPU source build](installation.md#cpu-source-build) instructions to enable
 them. CUDA tests additionally require the GPU backend and an available device.
 
-For a release wheel, create and activate the environment from
+For a release wheel (a prebuilt Python installation package), use the micromamba environment manager to create and activate the environment from
 `tools/build-environment.yml` with micromamba, then run:
 
 ```sh
@@ -25,7 +27,7 @@ micromamba activate coileval-build
 bash tools/build_linux_wheel.sh
 ```
 
-The build uses CUDA 12.8, GCC 11 and a glibc 2.28 sysroot. `auditwheel` checks
+The build uses CUDA 12.8, GCC 11 and a glibc 2.28 sysroot (headers and libraries for the target Linux baseline). The CUDA compiler is `nvcc`. `auditwheel` checks
 the platform baseline; NVIDIA runtime libraries are supplied by the `gpu`
 installation extra. The manually triggered GitHub Actions wheel workflow saves build
 artifacts for review. Verify a wheel in a fresh GPU environment with nvcc absent
@@ -47,14 +49,14 @@ python -I tools/check_installation.py examples/coils.json --require-no-nvcc --to
 | `native/include` | Shared records and module interfaces |
 | `native/src/autograd` | CUDA primitives for the optional Tensor API |
 | `native/cpu` | CPU magnetic field, tracing, geometry and host policy adapters |
-| `tests` | API, numerical oracle and source layout tests |
+| `tests` | API, independent numerical reference and source layout tests |
 | `examples` | Runnable evaluation and custom objective examples |
 
 Native implementation files compile independently. Headers carry interfaces,
 shared types and small inline helpers. Field state is owned by `field/state.cpp`;
 evaluation session state is owned by `pipeline/session_state.cu`.
 
-The optional `src/coil_eval/_autograd` package groups field, trace, front and downstream operators; `native/src/autograd` contains their CUDA primitives. `src/coil_eval/torch.py` owns the public Tensor API. Install PyTorch to run the mathematical operator tests. Set `COIL_EVAL_TEST_INSTALLED=1` when running the suite against an installed wheel.
+The optional `src/coil_eval/_autograd` package groups field, trace, surface-fitting and subsequent metric operators; `native/src/autograd` contains their CUDA primitives. `src/coil_eval/torch.py` owns the public Tensor API. Install PyTorch to run the mathematical operator tests. Set `COIL_EVAL_TEST_INSTALLED=1` when running the suite against an installed wheel.
 
 Use additive configuration and public methods for compatible changes. Record
 new behavior in CHANGELOG.md and update both documentation languages.
@@ -80,7 +82,7 @@ the package version; retain earlier tags for reproducible installations.
 
 ## Numerical changes
 
-Keep the validated S2 recipe as the 0.11.0 default and S3 optional. Add fitting or sampling
+Keep the validated two-fit configuration as the 0.11.0 default and the third fit optional. Add fitting or sampling
 choices through `EvaluationConfig`, and preserve units and parameter order.
 Test both order-4 and higher-order inputs when changing Fourier handling.
 

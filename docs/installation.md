@@ -5,6 +5,9 @@ The accompanying source archive includes the examples and development files.
 
 [简体中文](installation.zh-CN.md)
 
+
+A wheel (`.whl`) is a built Python distribution; an sdist (`.tar.gz`) contains source. Extras are optional dependency groups such as `[cpu]`; selecting that extra does not select a CPU build of PyTorch. CUDA is NVIDIA’s GPU computing platform and nvcc its compiler; prebuilt wheels normally require the corresponding runtime libraries and driver.
+
 ## Binary wheel
 
 Create or activate a Python 3.10+ environment, then install the supplied wheel:
@@ -162,3 +165,5 @@ configured toolkits, including the CUDA 13 build used in earlier releases.
 - **Driver or kernel compatibility error:** compare the driver and GPU with the
   table above. `nvidia-smi` reports driver capability; `nvcc --version` reports
   the separately installed compiler.
+
+In the architecture table, sm_XX identifies a GPU architecture target and PTX is intermediate code compiled by the driver. OpenMP supplies CPU parallel execution. f_B/f_T are quasisymmetry-error metrics (field strength depending on one helical angle), using Fourier content and a field-derivative triple product respectively.

@@ -2,6 +2,51 @@
 
 [简体中文](api.zh-CN.md)
 
+
+<details markdown="1">
+<summary>Terms and coordinate conventions used on this page</summary>
+
+On this page, **quasisymmetry (QS)** means that magnetic-field strength depends on one
+helical angle in suitable surface coordinates. **QA** is quasi-axisymmetry and **QH**
+is quasi-helical symmetry. `nfp` is the number of repeated field periods around the
+device; `helicity=(M,N)` selects the angle `Mθ−Nφ`, with poloidal θ around a surface
+cross-section and toroidal φ around the device. **Rotational transform ι (iota)** is
+the average number of poloidal turns per toroidal turn of a field line. **RMS** is
+the square root of a weighted mean of squares; **P90/P95** are the 90th/95th
+percentiles. `f_B` measures field-strength Fourier content outside the requested
+symmetry; `f_C` is a differential quasisymmetry residual; `f_T` is a triple-product
+residual involving field derivatives. All have ideal value zero; comparisons
+require matching averaging regions and normalization.
+
+**Fits and coordinates.** The scalar surface label s approximates magnetic surfaces by its
+level sets; fitting fields in the API retain the `psi_` prefix. Physical toroidal
+flux ψ is calibrated separately by flux integration. The default two-fit procedure
+fits an initial region, selects a closed region and fits that region again. An
+optional third fit uses the entire interior of a boundary slightly beyond the requested volume; it is off by default.
+Alpha (α) fitting constructs field-line angles, with lambda (λ) as a periodic
+angular correction. Nu (ν) then constructs Boozer angles: coordinates in which
+field lines are straight and covariant angular magnetic-field components depend
+only on the surface. A volume-alpha fit spans the volume; a surface-alpha fit is
+recomputed on one target surface, with orders referring to angular Fourier modes.
+Rho (ρ) is a normalized radial label. `flux_legendre` uses Legendre polynomials of
+normalized flux; `zernike` uses another radial polynomial basis. Polar quadrature uses weighted radial/angular samples; Cartesian sampling uses a rectangular grid. Smooth density weights estimate radial sample density; the positive pseudo-count added to the denominator prevents excessive weights in sparse regions. Ridge
+regularization adds a coefficient penalty to stabilize a fit. Stellarator symmetry generates the full device by rotations and reflection of base coils. Stokes flux integration uses a boundary line integral; area integration directly samples the cross-section. QR solves least
+squares using an orthogonal/upper-triangular matrix factorization.
+
+**Saved state and precision.** The native backend is the packaged C++/CUDA library.
+A capture saves the axis, fit coefficients and sample points from a complete
+evaluation for later derivatives or surface construction. The center is that
+evaluated parameter vector; endpoints are small perturbations. A local derivative
+keeps the current discrete choices fixed while differentiating continuous changes.
+Capacity is the largest volume represented by the fitted scalar's radially
+monotone region. The first branch is the first outward monotone radial interval
+from the magnetic axis. A fold is loss of coordinate monotonicity. A Jacobian is a
+first-derivative matrix; the angular-map minimum Jacobian denotes its determinant.
+FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
+
+</details>
+
+
 ## Coil inputs
 
 `CoilSet(coeffs_x, coeffs_y, coeffs_z, currents_a, nfp)` describes basic coils
@@ -39,10 +84,10 @@ and `write_json(path)` preserve these units and conventions.
 | `flux_method` | `'stokes'` | `'area'` or fast local `'stokes'` boundary integration |
 | `psi_fit` | `'two_stage'` | `'single_stage'` or `'two_stage'` |
 | `psi_refit_points` | `82368` | Target training-row count for the second fit |
-| `psi_refit_ridge` | `None` | Optional nonnegative column-scaled ridge for S2 only; `None` retains the native setting |
-| `psi_target_refit` | `False` | Candidate S3 target-interior refit after `psi_fit='two_stage'` |
-| `psi_target_refit_factor` | `1.2` | Requested S3 training volume divided by target volume; must exceed one |
-| `psi_target_refit_ridge` | `1e-10` | Nonnegative column-scaled ridge for S3 only |
+| `psi_refit_ridge` | `None` | Optional nonnegative column-scaled ridge for the second fit only; `None` retains the native setting |
+| `psi_target_refit` | `False` | Optional third fit over the target interior after `psi_fit='two_stage'` |
+| `psi_target_refit_factor` | `1.2` | Requested training volume for the third fit divided by target volume; must exceed one |
+| `psi_target_refit_ridge` | `1e-10` | Nonnegative column-scaled ridge for the third fit only |
 | `psi_refit_sampling` | `'polar_quadrature'` | Two-stage `'cartesian'` or `'polar_quadrature'` sampling |
 | `psi_nearby_method` | `'local'` | Two-stage local response or `'formal'` endpoint reconstruction |
 | `psi_fd_batch_size` | `8` | Two-stage local finite-difference endpoint batch size |
@@ -52,7 +97,7 @@ and `write_json(path)` preserve these units and conventions.
 | `alpha_radial_basis` | `'flux_legendre'` | Original radial basis or two-stage `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-Version 0.11.0 defaults to the validated S2 recipe. The following explicit
+Version 0.11.0 defaults to the validated two-fit configuration. The following explicit
 configuration is equivalent to `EvaluationConfig(target_volume=0.05, psi_a=0.15)`:
 
 ```python
@@ -67,30 +112,30 @@ Two-stage evaluation first fits psi in the initial domain, constructs an
 axis-connected closed training domain, and fits psi again in that domain.
 The target-volume surface and QS metrics use the second fit.
 `psi_refit_ridge` can reduce regularization bias when resolving very small QS
-errors. It applies to S2 only, including local gradients; S1 and its domain stay
+errors. It applies to the second fit only, including local gradients; the first fit and its domain stay
 fixed. The GPU option requires a native library exposing the 0.9.1 setter.
 Smaller ridge does not guarantee a more accurate magnetic surface: compare
 normal-field error, coordinate convergence and geometric capacity. Target-local
 third-fit behavior is selected separately with `psi_target_refit`.
 
-With `psi_target_refit=True`, S1 and S2 retain their configured objectives.
-S2 then supplies a closed first-root boundary of volume
+With `psi_target_refit=True`, the first fit and the second fit retain their configured objectives.
+The second fit then supplies a closed first-root boundary of volume
 `min(psi_target_refit_factor*V, (V+Vcapacity)/2)` for a third fit. The capacity
-must exceed the requested physical volume V. S3 uses weighted polar quadrature
+must exceed the requested physical volume V. The third fit uses weighted polar quadrature
 over the entire interior and the same basis and backend precision. Its nominal
-row count is `psi_refit_points`; `psi_target_refit_ridge` controls only S3.
-The final surface uses S3 at the original V. Unavailable capacity or a failed
+row count is `psi_refit_points`; `psi_target_refit_ridge` controls only the third fit.
+The final surface uses the third fit at the original V. Unavailable capacity or a failed
 continuation remains an explicit failure. Inspect `psi_fit_stages` and
-`psi_target_refit_domain` in the native diagnostics. S3 requires explicit
+`psi_target_refit_domain` in the native diagnostics. The third fit requires explicit
 selection: shrinking the training domain together with weak regularization can
 produce a nonmonotone scalar and lose usable capacity even on a previously
-scorable input. Its fixed4096 validation does not support default promotion.
+scorable input. Its fixed 4096-input validation does not support default promotion.
 Changing the domain and changing ridge have separate effects and can interact;
 restoring ridge alone does not establish accuracy for every target.
 
-Multi-volume captures share S1/S2; each target owns its S3 coefficients, QR
-factors and downstream state. Local derivatives include S2's moving training
-boundary, the S3 volume equation, capacity clipping and polar area weights on
+Multi-volume captures share the first and second fits; each target owns its coefficients from the third fit, QR
+factors and downstream state. Local derivatives include the second fit's moving training
+boundary, the third fit volume equation, capacity clipping and polar area weights on
 the selected discrete branch. Surface-alpha and native volume-alpha settings
 retain their independent meanings.
 The target-volume capacity guard checks at least the psi fitting toroidal grid
@@ -110,7 +155,7 @@ smooth density weights. Histogram weighting remains explicitly available.
 polynomials of normalized flux. Select it with `psi_fit='two_stage'`; the
 choice applies to scalar evaluation, local gradients and captured alpha data.
 The default is `'flux_legendre'`; the original `'zernike'` basis remains available.
-For legacy S1 select `psi_fit='single_stage'`, `alpha_radial_weighting='histogram'`
+For legacy the first fit select `psi_fit='single_stage'`, `alpha_radial_weighting='histogram'`
 and `alpha_radial_basis='zernike'` together. To restore pre-0.11 standard tracing
 also select `fast=False`, `flux_method='area'` and `psi_refit_sampling='cartesian'`.
 
@@ -163,7 +208,7 @@ GPU value batches require NumPy and the native backend; CPU evaluation also
 uses the [CPU dependencies](cpu.md). Inputs sharing field periods, coefficient
 shape and axis-search settings are grouped for magnetic-axis preparation, then
 restored to input order. Each input retains its ordinary axis selection and
-complete formal score. Singleton groups and older native libraries use the
+complete score. Singleton groups and older native libraries use the
 ordinary sequential path. `timings['shared_independent_batch']` reports preparation,
 per-query and total batch time; `python_wall_s` allocates the public batch wall
 time across its results, including each query and its share of preparation.
@@ -191,7 +236,7 @@ native stage timings can overlap or contain other stages.
 | `psi_fit_rms` | Optional psi training-equation residual RMS, T/m |
 
 QS values use an RMS definition. Aggregate their squares with the appropriate
-weights, then take the square root. A volume RMS, an outer-bin RMS and the
+weights, then take the square root. A volume RMS, an outer radial-bin RMS and the
 Simsopt reference's flux-shell RMS describe different regions; see
 [Simsopt integration](simsopt.md).
 Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
@@ -235,7 +280,7 @@ An unusable center or endpoint raises `InvalidEvaluationError`; `.results`
 contains available results. An expired or cross-session center raises
 `CenterContextError`. Native failures raise `EvaluationError`.
 
-Flux-Legendre radial values use a three-term Legendre recurrence in the native, tensor and Simsopt initialization paths. This avoids cancellation from an expanded FP32 monomial polynomial; it does not increase the finite basis or remove alpha/psi fitting error. Regenerate source captures when changing the native library or basis implementation.
+Flux-Legendre radial values use a three-term Legendre recurrence in the native, tensor and Simsopt initialization paths. This avoids cancellation from an expanded FP32 monomial polynomial; it does not increase the finite basis or remove alpha/psi fitting error. Regenerate saved evaluation states when changing the native library or basis implementation.
 
 See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.
 
@@ -261,3 +306,7 @@ The default device remains `'cuda'`. A positive `threads` selects the CPU
 budget; `None` follows process affinity and the scheduler allocation.
 The [CPU guide](cpu.md) covers installation, batch execution, finite differences
 and `TensorEvaluator(..., device='cpu')` reverse gradients.
+
+Here V is the requested volume and Vcapacity is the second fit’s representable capacity; `psi_n_phi` is the initial toroidal section count and `psi_m_tor` the scalar fit’s maximum toroidal Fourier mode.
+
+A Bernstein certificate expresses the radial polynomial in a Bernstein basis and uses coefficient signs to test positivity of its derivative; root isolation instead brackets polynomial roots. An elliptic axis candidate is a periodic orbit around which nearby field lines rotate.

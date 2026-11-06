@@ -4,6 +4,52 @@ Version 0.11.0 is unreleased. The example below uses the supplied binary wheel.
 
 [简体中文](simsopt.zh-CN.md)
 
+Simsopt is an independent magnetic-field and surface-optimization library. LS/Newton means least-squares fitting followed by Newton refinement.
+
+<details markdown="1">
+<summary>Terms and coordinate conventions used on this page</summary>
+
+On this page, **quasisymmetry (QS)** means that magnetic-field strength depends on one
+helical angle in suitable surface coordinates. **QA** is quasi-axisymmetry and **QH**
+is quasi-helical symmetry. `nfp` is the number of repeated field periods around the
+device; `helicity=(M,N)` selects the angle `Mθ−Nφ`, with poloidal θ around a surface
+cross-section and toroidal φ around the device. **Rotational transform ι (iota)** is
+the average number of poloidal turns per toroidal turn of a field line. **RMS** is
+the square root of a weighted mean of squares; **P90/P95** are the 90th/95th
+percentiles. `f_B` measures field-strength Fourier content outside the requested
+symmetry; `f_C` is a differential quasisymmetry residual; `f_T` is a triple-product
+residual involving field derivatives. All have ideal value zero; comparisons
+require matching averaging regions and normalization.
+
+**Fits and coordinates.** The scalar surface label s approximates magnetic surfaces by its
+level sets; fitting fields in the API retain the `psi_` prefix. Physical toroidal
+flux ψ is calibrated separately by flux integration. The default two-fit procedure
+fits an initial region, selects a closed region and fits that region again. An
+optional third fit uses the entire interior of a boundary slightly beyond the requested volume; it is off by default.
+Alpha (α) fitting constructs field-line angles, with lambda (λ) as a periodic
+angular correction. Nu (ν) then constructs Boozer angles: coordinates in which
+field lines are straight and covariant angular magnetic-field components depend
+only on the surface. A volume-alpha fit spans the volume; a surface-alpha fit is
+recomputed on one target surface, with orders referring to angular Fourier modes.
+Rho (ρ) is a normalized radial label. `flux_legendre` uses Legendre polynomials of
+normalized flux; `zernike` uses another radial polynomial basis. Polar quadrature uses weighted radial/angular samples; Cartesian sampling uses a rectangular grid. Smooth density weights estimate radial sample density; the positive pseudo-count added to the denominator prevents excessive weights in sparse regions. Ridge
+regularization adds a coefficient penalty to stabilize a fit. Stellarator symmetry generates the full device by rotations and reflection of base coils. Stokes flux integration uses a boundary line integral; area integration directly samples the cross-section. QR solves least
+squares using an orthogonal/upper-triangular matrix factorization.
+
+**Saved state and precision.** The native backend is the packaged C++/CUDA library.
+A capture saves the axis, fit coefficients and sample points from a complete
+evaluation for later derivatives or surface construction. The center is that
+evaluated parameter vector; endpoints are small perturbations. A local derivative
+keeps the current discrete choices fixed while differentiating continuous changes.
+Capacity is the largest volume represented by the fitted scalar's radially
+monotone region. The first branch is the first outward monotone radial interval
+from the magnetic axis. A fold is loss of coordinate monotonicity. A Jacobian is a
+first-derivative matrix; the angular-map minimum Jacobian denotes its determinant.
+FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
+
+</details>
+
+
 `coil_eval.simsopt` provides source-psi and alpha records, alpha+nu surface
 initialization, a standard Simsopt LS/Newton solve, and reference QS diagnostics.
 Install Simsopt in the environment used for surface preparation and solves.
@@ -42,7 +88,7 @@ Configurations select `psi_fit='two_stage'` and differ only in `target_volume`.
 One geometry shares its magnetic axis, first fit, training domain and second
 fit across those volumes. Each volume receives its own downstream evaluation.
 When `psi_target_refit=True`, each volume also receives its own third fit and
-the returned `SourcePsi` contains that S3 scalar. The original volume-alpha
+the returned `SourcePsi` contains the scalar from the third fit. The original volume-alpha
 preparation remains part of the capture.
 Set `include_torsion=False` when preparing sources without the optional torsion
 diagnostic. Scoring metrics and source coefficients retain the same definitions.
@@ -102,6 +148,8 @@ same target volume when comparing choices.
 | `geometry_method`, `geometry_cache_bytes` | `'reference'`, `536870912` |
 | `reject_alpha_folds`, `max_radius_scale` | `True`, `1.0` |
 | `alpha_fold_policy`, `alpha_min_jacobian` | `'reject'`, `0.05` |
+
+Orders in the table are retained angular-mode limits; nphi/ntheta are toroidal/poloidal sample counts. FFT means fast Fourier transform; `cached_qr` caches the least-squares QR factors; `resident` performs angle inversion on the device; `reference` uses direct geometry calculations and `cached_basis` caches geometry basis functions. The byte limit bounds cache memory.
 
 Reuse an initializer to reuse its projection factors. `seed.diagnostics`
 contains extraction, mapping, fit and timing information. `SurfaceSeed.save`
@@ -236,3 +284,5 @@ the CPU cores assigned to the job. Both phases preserve each target's success
 or failure status and use explicit file paths through their CLI options.
 
 See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.
+
+A flux shell is the thin region between neighboring equal-flux surfaces; its weighted RMS differs from a whole-volume RMS. Relative L2 error is the Euclidean norm of the difference vector divided by that of the reference.

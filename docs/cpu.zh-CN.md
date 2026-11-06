@@ -2,13 +2,17 @@
 
 [English](cpu.md)
 
+本页介绍 CPU 安装、线程设置和求导。**QS** 是准对称性，即磁场强度在磁面角坐标中只依赖一个螺旋角；`f_B`、`f_T` 分别是其傅里叶分量残差和磁场导数三重积残差。**QA/QH** 分别指准轴对称/准螺旋对称。`nfp` 是场周期数；仿星器对称性通过旋转和反射由基本线圈生成完整装置。
+
+默认先拟合磁面标签 s，再在选出的闭合区域内重拟合；接口沿用 `psi` 名称。α（alpha）拟合构造沿磁力线的角坐标，Boozer 坐标进一步使磁力线表示为直线并满足磁场协变角分量的约束。“捕获”是保存一次完整求值的中间状态；“中心”是原参数，“端点”是有限差分的小扰动参数。QR 是求解最小二乘的正交/三角矩阵分解。BLAS 是线性代数库，OpenMP 是 CPU 并行框架，AVX2 是 CPU 向量指令集。
+
 CPU 后端沿用 GPU 后端的线圈离散、磁轴搜索策略、拟合基函数和积分采样规模，
-支持两种 psi 拟合、线圈几何指标、有限差分与 PyTorch 局部反传梯度。
+支持单次或两次磁面标签拟合、线圈几何指标、有限差分与 PyTorch 局部反传梯度。
 可选的目标磁面 `f_B` 和 `f_T` 复用 Boozer 坐标实现。
 
 ## 安装
 
-先安装 CPU 版 PyTorch，再安装 CoilEval wheel 和 CPU 依赖：
+先安装 CPU 版 PyTorch，再安装 CoilEval wheel（免本地编译的 Python 安装包）和 CPU 依赖：
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -41,16 +45,18 @@ with Evaluator(config=config, device="cpu", threads=8) as evaluator:
 诊断包含实际网格、种子数量、是否使用回退和磁轴各阶段计时。
 三个 CPU evaluator 均支持此选项。
 
+Newton 迭代利用导数求解磁轴方程；椭圆型磁轴候选是附近磁力线绕其旋转的周期轨道。
 CPU 磁轴搜索使用双精度检验周期闭合误差。如果所有候选都未通过验收，但某个
 椭圆型候选已经接近要求的容差，会再做至多两步位移受限的双精度 Newton 修正，
 然后重新执行原有的周期闭合与拓扑检验。已有合格磁轴时保留原选择。
 `axis_fp64_polish` 诊断记录是否修正、位移以及未通过的原因。
 
 `CoilSet.nfp` 接受任意正整数，基本线圈数量也可为任意正整数，并要求保留
-stellarator symmetry。`EvaluationConfig` 的螺旋度仍需显式指定：QA 用 `(1,0)`，
+仿星器对称性。`EvaluationConfig` 的螺旋度仍需显式指定：QA 用 `(1,0)`，
 对应场周期的 QH 用 `(1,coils.nfp)`。即使改变 `nfp`，默认螺旋度仍为 `(1,4)`。
+整数对 `(M,N)` 指定角组合 `Mθ−Nφ`，θ 为极向角，φ 为环向角，N 对应完整环向一圈。
 
-`evaluate_many()` 接受不同 `nfp`、基本线圈数量和 Fourier 宽度的线圈集合，
+`evaluate_many()` 接受不同 `nfp`、基本线圈数量和 傅里叶系数数组宽度的线圈集合，
 按输入顺序返回结果。CPU 批量模式依次处理样本，每个样本的
 磁场计算和线性代数使用所指定的线程数。若使用多个独立工作进程，应把 CPU
 配额分配给各进程的 `threads`。
@@ -74,9 +80,9 @@ with TensorEvaluator(config=config, device="cpu", threads=8, nfp=coils.nfp) as e
 ```
 
 Tensor 接口接受任意正整数 `nfp` 和基本线圈数量。请显式传入 `nfp=coils.nfp`：
-张量不包含场周期元数据，评估器默认仍为 4。接口保留 stellarator symmetry、
+张量不包含场周期元数据，评估器默认仍为 4。接口保留仿星器对称性、
 每条线圈 256 段及四次 psi/alpha 局部拟合迭代。
-`evaluate_batch()` 要求统一的 `nfp`、基本线圈数量和 Fourier 宽度，
+`evaluate_batch()` 要求统一的 `nfp`、基本线圈数量和 傅里叶系数数组宽度，
 返回堆叠指标及相互独立的梯度。各查询的配置可指定不同螺旋度，包括 QA `(1,0)`；
 `M` 必须非零。
 `surface_qs=SurfaceQSConfig(...)` 启用可选磁面指标。
@@ -97,6 +103,8 @@ CPU 与 GPU 的归约次序可能不同；比较数值误差、梯度方向和�
 启用 OpenMP 的 CPU 构建会并行计算相互独立的磁场点和磁力线。
 在支持的系统上自动使用 AVX2，其他 CPU 使用标量实现。
 
-运行 `python examples/cpu.py --threads 8` 可执行完整 S2 求值。0.11.0 保留的
+运行 `python examples/cpu.py --threads 8` 可执行完整的两次拟合求值。0.11.0 保留的
 `--two-stage` 兼容参数无需再添加。结果包含各阶段计时；测量求值加梯度时，另行计时
 `torch.autograd.grad`。
+
+CPU 8、16、32 逻辑线程的同型号实测比较见 [README 速度表](../README.zh-CN.md#validation)，单位为秒/样本。

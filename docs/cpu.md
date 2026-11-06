@@ -2,15 +2,18 @@
 
 [简体中文](cpu.zh-CN.md)
 
+This page covers CPU installation, thread limits and derivatives. **QS** means quasisymmetry: field strength depends on one helical surface angle. `f_B` and `f_T` measure its Fourier-content and field-derivative triple-product residuals. **QA/QH** mean quasi-axisymmetry/quasi-helical symmetry. `nfp` counts field periods; stellarator symmetry generates the full device from base coils by rotations and reflection.
+
+The default fits a scalar surface label s, then fits it again inside a selected closed region; API names retain `psi`. Alpha (α) fitting constructs field-line angles; Boozer coordinates additionally impose the covariant-field angle conditions. A capture saves an evaluation’s intermediate state; the center is the original parameter vector and endpoints are finite-difference perturbations. QR is an orthogonal/triangular factorization for least squares. BLAS supplies linear algebra, OpenMP CPU parallelism, and AVX2 CPU vector instructions.
+
 The CPU backend evaluates the same coil discretization, magnetic-axis search,
-fitting bases and quadrature sizes as the GPU backend. It supports both psi
-fitting methods, coil geometry metrics, finite differences and PyTorch local
+fitting bases and quadrature sizes as the GPU backend. It supports single-fit and two-fit surface-label methods, coil geometry metrics, finite differences and PyTorch local
 reverse gradients. Optional target-surface `f_B` and `f_T` use the shared
 Boozer-coordinate implementation.
 
 ## Installation
 
-Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel:
+Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel (a prebuilt Python installation package):
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -48,6 +51,7 @@ before adopting them. Diagnostics include the effective grids, seed counts,
 fallback use and axis-stage times. The option is available on all three CPU
 evaluator classes.
 
+Newton iteration uses derivatives to solve the magnetic-axis equations. An elliptic axis candidate is a periodic orbit around which nearby field lines rotate.
 CPU axis search also checks periodicity in double precision. If every candidate
 fails acceptance and an elliptic candidate is already close to the required
 tolerance, it performs up to two bounded double-precision Newton corrections
@@ -58,7 +62,7 @@ its displacement and any rejection reason.
 `CoilSet.nfp` accepts any positive integer, and a coil set may contain any
 positive number of basic coils with stellarator symmetry. `EvaluationConfig`
 keeps helicity explicit: use `(1,0)` for QA or `(1,coils.nfp)` for QH. The
-default remains `(1,4)`, even when `nfp` changes.
+default remains `(1,4)`, even when `nfp` changes. The pair `(M,N)` specifies the angle `Mθ−Nφ`, with θ poloidal and φ toroidal; N refers to a full toroidal turn.
 
 `evaluate_many()` accepts coil sets with different `nfp`, coil counts and
 Fourier widths and preserves input order. CPU batches process samples in order,
@@ -66,7 +70,7 @@ with all selected threads available to each sample's field evaluations and
 linear algebra. For multiple independent worker processes, divide the CPU
 allocation among their `threads` settings.
 
-CPU `loss_and_grad()` uses complete formal centered differences and follows
+CPU `loss_and_grad()` uses complete centered differences with a complete evaluation at each perturbed point and follows
 the center's magnetic-axis branch. Its endpoint diagnostics report
 `nearby_method='formal'` and `nearby_backend='cpu'`. PyTorch reverse gradients
 are preferable when a loss can be expressed using tensor metrics.
@@ -98,7 +102,7 @@ apply to the GPU backend; CPU batches prepare each query independently.
 
 For values alone, use `SurfaceQSEvaluator(config=config, device='cpu',
 threads=8)`. Its `evaluate(coils)` and `evaluate_many(coils)` methods return
-ordinary floating-point `SurfaceQSResult` values from one formal capture per
+ordinary floating-point `SurfaceQSResult` values from one complete saved evaluation per
 query. Its value batches accept mixed field periods and coil layouts and retain
 input order.
 
@@ -107,7 +111,7 @@ context manager so they share the requested thread budget. PyTorch and BLAS
 thread limits are process-wide and are restored on exit. Use separate
 processes for concurrent sessions with different thread budgets.
 
-The CPU backend uses Householder QR for formal fits and the same local
+The CPU backend uses Householder QR for complete fits and the same local
 four-step response for reverse gradients. CPU and GPU arithmetic can differ
 in reduction order; compare metric errors and gradient direction and norm
 rather than expecting bitwise equality.
@@ -116,6 +120,8 @@ An OpenMP-enabled CPU build parallelizes independent field points and
 magnetic-field traces. AVX2 is selected automatically on supported systems,
 with a scalar implementation available on other CPUs.
 
-Run `python examples/cpu.py --threads 8` for a complete S2 value example.
+Run `python examples/cpu.py --threads 8` for a complete value example using two fits.
 The retained `--two-stage` flag is redundant in 0.11.0. Stage times are included in the result;
 time `torch.autograd.grad` separately when measuring value-plus-gradient cost.
+
+See the [README timing table](../README.md#validation) for measurements with 8, 16 and 32 logical threads on the same CPU model, in seconds per sample.

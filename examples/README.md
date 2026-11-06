@@ -1,54 +1,46 @@
-# Examples
+# Running the examples
 
-[evaluate.py](evaluate.py) loads [coils.json](coils.json) and evaluates its metrics.
-[custom_loss.py](custom_loss.py) composes a scalar objective and returns its full physical gradient.
-The scripts load the installed wheel's backend automatically. Pass
-`--library /path/to/libcoil_eval_native.so` to select a custom backend.
-Use `--help` for options.
+[简体中文](README.zh-CN.md)
 
-[cpu.py](cpu.py) evaluates coils on CPU. Install the `cpu` extra and CPU PyTorch
-as described in the [CPU guide](../docs/cpu.md), then run
-`python examples/cpu.py --threads 8`. S2 is the default; use `--axis-grid 32` to select a smaller primary magnetic-axis seed grid.
+Run these commands from the extracted source archive, after [installing CoilEval](../docs/installation.md).
+The wheel supplies the library; the source archive also supplies these scripts and input files.
 
-[autograd.py](autograd.py) evaluates a GPU PyTorch objective and its gradient. Add `--batch` for independent geometries. Install CUDA-enabled PyTorch and the `gpu` extra to run it.
+## Start here
 
-[qs_metrics.py](qs_metrics.py) evaluates target-surface f_B. Use `--gradient`
-for a local parameter gradient, `--metric f_T` to include the triple-product
-metric, and `--accuracy high|balanced|fast` to select the angular resolution.
-It uses the CUDA-enabled PyTorch setup in the [installation guide](../docs/installation.md).
+- **Example 1: evaluate fixed coils.** The [README commands](../README.md#example1) load `preview/example1.json` and score a target volume of 0.3 m³ on CPU or GPU.
+- **Example 2: perturb, select and optimize.** The [screening and optimization commands](preview/README.md) generate 32 approximately 1% multiplicative perturbations of example 1 and optimize the best valid candidate. This script requires a GPU and CUDA-enabled PyTorch.
 
-[two_stage.py](two_stage.py) demonstrates the default S2 fit. All evaluation
-examples use polar quadrature, smooth alpha weights and flux-Legendre alpha.
-Use `--coils`, `--volume`, `--radius` and `--output` to select your inputs.
-`--two-stage` remains an accepted compatibility flag in CPU/autograd examples.
-`autograd.py --batch` reports seconds per sample, including one full objective
-reverse; the first call includes cold initialization.
+## Other interface examples
 
-```sh
-python examples/two_stage.py --output output/metrics.json
-python examples/autograd.py --batch
-```
+Quasisymmetry (QS) means that field strength depends on one helical surface angle.
+`f_B` measures Fourier content outside that symmetry, `f_C` is a differential residual, and `f_T` a field-derivative triple-product residual; each has ideal value zero.
+The default first fits a surface label in an initial region, then refits it inside a selected closed region. These examples use that procedure.
 
-[Preview examples](preview/README.md) include the frozen QA example1 input and
-example2's reproducible 1% multiplicative perturbations,32-candidate screening,
-and dense inverse BFGS with analytic gradients. Their fixed target is V=0.3m³.
+| Script | Purpose and command |
+| --- | --- |
+| [evaluate.py](evaluate.py) | Score [coils.json](coils.json): `python examples/evaluate.py` |
+| [cpu.py](cpu.py) | CPU values: `python examples/cpu.py --threads 8` |
+| [custom_loss.py](custom_loss.py) | Custom scalar objective and parameter gradient: `python examples/custom_loss.py` |
+| [autograd.py](autograd.py) | PyTorch derivatives: `python examples/autograd.py`; add `--batch` for independent inputs |
+| [qs_metrics.py](qs_metrics.py) | Target-surface f_B: `python examples/qs_metrics.py`; add `--gradient --metric f_T` for f_T and its gradient |
+| [two_stage.py](two_stage.py) | Explicit two-fit example: `python examples/two_stage.py --output runs/metrics.json` |
 
-[simsopt_async.py](simsopt_async.py) separates GPU source capture and alpha+nu
-preparation from CPU-only standard Simsopt solves. Install Simsopt and the
-CUDA-enabled PyTorch dependency for preparation. The solve phase uses spawned
-processes with one BLAS/OpenMP thread each and no visible GPU.
+GPU scripts automatically load the installed backend; `--library /path/to/libcoil_eval_native.so` selects a custom library.
+See the [CPU guide](../docs/cpu.md) for CPU dependencies and thread limits. PyTorch examples also require PyTorch for the chosen device.
+Use each script’s `--help` for input options. The retained `--two-stage` compatibility flag is redundant in 0.11.0.
+`autograd.py --batch` reports seconds per sample including one full backward pass; the first call includes initialization.
+
+## Independent surface validation
+
+[simsopt_async.py](simsopt_async.py) prepares a surface and angle-coordinate initializer on GPU, then uses the independent Simsopt library to optimize the surface on CPU.
+Preparation needs CUDA PyTorch and Simsopt. CPU solve processes each use one linear-algebra/parallelism thread (BLAS/OpenMP).
 
 ```sh
-python examples/simsopt_async.py prepare --directory output/case1 --volumes 0.01 0.03 0.05
-python examples/simsopt_async.py solve --directory output/case1 --workers 4
+python examples/simsopt_async.py prepare --directory runs/case1 --volumes 0.01 0.03 0.05
+python examples/simsopt_async.py solve --directory runs/case1 --workers 4
 ```
 
-Preparation exits after saving ready tasks and failures. CPU jobs can solve
-completed directories while another GPU job prepares a new geometry. Match
-`--workers` to the CPU allocation. Accepted surfaces receive flux-shell f_C RMS
-diagnostics; the saved native result also retains volume and outer-bin QS RMS.
-See [the Simsopt API](../docs/simsopt.md) for these averaging conventions.
-
-Add `--alpha-fold-policy damp --alpha-min-jacobian 0.05` to `prepare` to use
-coordinate damping for folded alpha maps. The default policy is `reject`.
-The solve phase still evaluates each resulting standard surface independently.
+Preparation saves completed tasks and failures. CPU solves can overlap preparation of other geometries; keep `--workers` within the CPU allocation.
+Results include f_C RMS (square root of mean square) over a thin magnetic-flux shell, reported separately from volume averages.
+Preparation optionally accepts `--alpha-fold-policy damp --alpha-min-jacobian 0.05` to reduce an angular correction until the map is monotone; the default rejects folded maps.
+This changes the initializer; each final surface still undergoes independent solver acceptance. See the [Simsopt guide](../docs/simsopt.md).

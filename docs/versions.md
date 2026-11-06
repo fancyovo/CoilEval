@@ -2,6 +2,11 @@
 
 [简体中文](versions.zh-CN.md)
 
+
+This page records when features were introduced; defaults in historical entries belong to those versions. Psi/s is a scalar label whose level sets represent surfaces; alpha is a field-line angle correction. Two fits use an initial region and a selected closed interior; a third fit uses the full interior slightly beyond the target volume. Capacity is the largest representable volume and the first branch is the first outward monotone interval from the axis. A capture saves intermediate evaluation state.
+
+QS means quasisymmetry; QA/QH are quasi-axisymmetry/quasi-helical symmetry. f_B/f_T measure asymmetric Fourier content and a field-derivative triple-product residual. nfp counts field periods and helicity selects a poloidal/toroidal angle combination. P90 is the 90th percentile. Stokes flux integration uses a boundary line integral; polar quadrature weights radial/angular samples; smooth weights correct uneven sample density; flux-Legendre uses Legendre polynomials of normalized flux. Simsopt is an independent surface-optimization library; a wheel is a built Python distribution. Regularization penalizes fit coefficients; angle inversion finds spatial positions for requested angles.
+
 | Version | Added capability | Selection |
 | --- | --- | --- |
 | 0.0.0 | Independent evaluation and local finite-difference gradients | `Evaluator` |
@@ -20,19 +25,19 @@
 | 0.8.2 | Early dependency checks and complete installation guidance | Install the wheel with the extra for the chosen backend |
 | 0.9.0 | General field-period/coil counts and QA/QH modes | Explicit tensor nfp and configuration helicity |
 
-Version 0.11.0 is the first S2 preview candidate. Its public defaults are
+Version 0.11.0 is the first preview candidate using two fits by default. Its public defaults are
 `fast=True`, `flux_method='stokes'`, `psi_fit='two_stage'`, polar quadrature,
 smooth volume-alpha weights and the flux-Legendre volume-alpha basis.
-S3 remains optional (`psi_target_refit=False`).
+The third fit remains optional (`psi_target_refit=False`).
 
 | Version | Added capability | Selection |
 | --- | --- | --- |
-| 0.9.1 | Angle inverse and first radial-branch repairs; S2 ridge override | Included; `psi_refit_ridge=` optional |
-| 0.10.0 | Target-interior S3 fit and its local derivatives | `psi_target_refit=True` |
-| 0.11.0 preview | Validated S2 defaults, P90 calibration, perturb32 optimization example | Default configuration; example2 |
+| 0.9.1 | Angle inverse and first radial-branch repairs; the second fit ridge override | Included; `psi_refit_ridge=` optional |
+| 0.10.0 | Optional third fit over the target interior and its local derivatives | `psi_target_refit=True` |
+| 0.11.0 preview | Validated two-fit defaults, P90 calibration, optimization example selecting from 32 perturbations | Default configuration; example2 |
 
-Versions through 0.10.0 used S1 by default. Reproduce historical runs with their
-frozen version and full configuration. For an explicit legacy S1 configuration
+Versions through 0.10.0 used a single fit by default. Reproduce historical runs with their
+frozen version and full configuration. For an explicit legacy single-fit configuration
 on 0.11.0, follow the [API guide](api.md#configuration). API argument order and
 physical units are unchanged; numerical defaults changed deliberately.
 The [validation record](preview_validation.md) identifies the scored cohort,

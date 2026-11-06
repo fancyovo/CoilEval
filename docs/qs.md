@@ -2,6 +2,51 @@
 
 [简体中文](qs.zh-CN.md)
 
+
+<details markdown="1">
+<summary>Terms and coordinate conventions used on this page</summary>
+
+On this page, **quasisymmetry (QS)** means that magnetic-field strength depends on one
+helical angle in suitable surface coordinates. **QA** is quasi-axisymmetry and **QH**
+is quasi-helical symmetry. `nfp` is the number of repeated field periods around the
+device; `helicity=(M,N)` selects the angle `Mθ−Nφ`, with poloidal θ around a surface
+cross-section and toroidal φ around the device. **Rotational transform ι (iota)** is
+the average number of poloidal turns per toroidal turn of a field line. **RMS** is
+the square root of a weighted mean of squares; **P90/P95** are the 90th/95th
+percentiles. `f_B` measures field-strength Fourier content outside the requested
+symmetry; `f_C` is a differential quasisymmetry residual; `f_T` is a triple-product
+residual involving field derivatives. All have ideal value zero; comparisons
+require matching averaging regions and normalization.
+
+**Fits and coordinates.** The scalar surface label s approximates magnetic surfaces by its
+level sets; fitting fields in the API retain the `psi_` prefix. Physical toroidal
+flux ψ is calibrated separately by flux integration. The default two-fit procedure
+fits an initial region, selects a closed region and fits that region again. An
+optional third fit uses the entire interior of a boundary slightly beyond the requested volume; it is off by default.
+Alpha (α) fitting constructs field-line angles, with lambda (λ) as a periodic
+angular correction. Nu (ν) then constructs Boozer angles: coordinates in which
+field lines are straight and covariant angular magnetic-field components depend
+only on the surface. A volume-alpha fit spans the volume; a surface-alpha fit is
+recomputed on one target surface, with orders referring to angular Fourier modes.
+Rho (ρ) is a normalized radial label. `flux_legendre` uses Legendre polynomials of
+normalized flux; `zernike` uses another radial polynomial basis. Polar quadrature uses weighted radial/angular samples; Cartesian sampling uses a rectangular grid. Smooth density weights estimate radial sample density; the positive pseudo-count added to the denominator prevents excessive weights in sparse regions. Ridge
+regularization adds a coefficient penalty to stabilize a fit. Stellarator symmetry generates the full device by rotations and reflection of base coils. Stokes flux integration uses a boundary line integral; area integration directly samples the cross-section. QR solves least
+squares using an orthogonal/upper-triangular matrix factorization.
+
+**Saved state and precision.** The native backend is the packaged C++/CUDA library.
+A capture saves the axis, fit coefficients and sample points from a complete
+evaluation for later derivatives or surface construction. The center is that
+evaluated parameter vector; endpoints are small perturbations. A local derivative
+keeps the current discrete choices fixed while differentiating continuous changes.
+Capacity is the largest volume represented by the fitted scalar's radially
+monotone region. The first branch is the first outward monotone radial interval
+from the magnetic axis. A fold is loss of coordinate monotonicity. A Jacobian is a
+first-derivative matrix; the angular-map minimum Jacobian denotes its determinant.
+FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
+
+</details>
+
+
 CoilEval 0.11.0 provides Fourier (`f_B`) and optional triple-product (`f_T`)
 quasisymmetry metrics on the target-volume surface. They share a differentiable
 alpha+nu coordinate construction, with a target-surface alpha fit and vacuum
@@ -59,7 +104,7 @@ geometries with settings differing only in volume share their source fit; each
 target surface is then sampled in turn. Constructor options `batch_axis=False`
 and `share_geometry=False` disable those respective optimizations. Each result's
 `diagnostics["batch"]` records its group, execution strategy and amortized wall
-time. Invalid source captures raise `InvalidEvaluationError`, as in scalar use.
+time. Invalid saved evaluation states raise `InvalidEvaluationError`, as in scalar use.
 CPU batches capture each query independently and retain the same input order.
 
 Run the example with:
@@ -96,7 +141,7 @@ the sum of independent objectives gives the corresponding per-input gradients.
 retain their usual outputs and computational path. The optional metrics appear
 in `result.surface_qs`; the existing `result.metrics.qs_volume` and `qs_outer`
 continue to describe the differential residual over their respective volume
-and outer-bin regions.
+and outer radial-bin regions.
 
 The local reverse derivative includes the moving magnetic axis, psi fits,
 target level, alpha, iota, nu, sampling positions and field values. Coordinate
@@ -157,34 +202,34 @@ gradient calls append their corresponding reverse-solve records.
 
 ## Metric definitions
 
-Angles below use radians and the Fourier series is
+Here m and n are integer poloidal and full-torus toroidal Fourier mode numbers; θ_B and φ_B are Boozer poloidal and toroidal angles. Angles below use radians and the Fourier series is
 
-\[
+$$
 B(\theta_B,\phi_B)=\sum_{m,n}B_{mn}e^{i(m\theta_B-n\phi_B)}.
-\]
+$$
 
 For helicity `(M,N)`, `N` is the full-torus mode number. The dimensionless
 Fourier metric is
 
-\[
+$$
 f_B=\sqrt{\frac{\sum_{mN-nM\ne0}|B_{mn}|^2}
                        {\sum_{m,n}|B_{mn}|^2}}.
-\]
+$$
 
 The denominator uses uniform Boozer-angle Fourier energy. For the triple
-product, let \(\psi\) be toroidal flux divided by \(2\pi\),
-\(B=|\mathbf B|\), and
+product, let $\psi$ be toroidal flux divided by $2\pi$,
+$B=|\mathbf{B}|$, and
 
-\[
-T=(\nabla\psi\times\nabla B)\cdot\nabla(\mathbf B\cdot\nabla B).
-\]
+$$
+T=(\nabla\psi\times\nabla B)\cdot\nabla(\mathbf{B}\cdot\nabla B).
+$$
 
-\[
+$$
 f_T=\sqrt{\left\langle\left(\frac{R^2T}{B^4}\right)^2\right\rangle_\psi}.
-\]
+$$
 
 The flux-shell average uses weights
-\(|\mathcal J|=|G+\iota I|/B^2\). Coil evaluation uses the vacuum convention
+$|\mathcal{J}|=|G+\iota I|/B^2$. Coil evaluation uses the vacuum convention
 `I=0`; `R` is the magnetic-axis mean cylindrical radius. Use this same radius
 when comparing a Simsopt reference. These definitions specify the scalar RMS
 normalization; other software can use different averages or normalizations.
@@ -249,3 +294,5 @@ surfaces can prevent a reliable nested-surface representation; preserve their
 failure or quality diagnostics when assessing agreement. Grid convergence on
 one fitted surface and long-term field-line confinement answer different
 questions.
+
+In these formulas, G and I are the toroidal and poloidal covariant magnetic-field components in Boozer coordinates, B is field strength, and J is the volume Jacobian from flux and the two angles to space. FFT means fast Fourier transform. Geometric radii are measured in metres and angles in radians.
