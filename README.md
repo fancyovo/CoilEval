@@ -10,7 +10,7 @@ curve. The target volume selects the enclosed volume of the surface to evaluate.
 
 A local gradient describes small parameter changes while retaining the selected axis and sampling branches. Rotational transform ι is the average poloidal turns per toroidal turn of a field line.
 
-**Version 0.11.0, preview candidate.** By default, a scalar surface-label function
+**Version 0.11.1, preview candidate.** By default, a scalar surface-label function
 is fitted first in an initial region and then again in the closed region selected
 from that fit. An optional third fit is enabled by `psi_target_refit=True`; it is
 off by default.
@@ -26,7 +26,7 @@ GPU: install the supplied wheel and CUDA 12.8 runtime dependencies. Example2 als
 needs CUDA-enabled PyTorch:
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 ```
 
@@ -36,67 +36,64 @@ CPU value evaluation also uses Torch linear algebra.
 
 ```sh
 python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 GPU operation needs a compatible NVIDIA driver; CPU operation does not need CUDA.
 See the [installation guide](docs/installation.md) for environments and source builds.
 
 <a id="example1"></a>
-## Example1: evaluate the supplied coils
+## Example1: read coils and evaluate
 
-This example uses `examples/preview/example1.json` at volume 0.3 m³. `psi_a` is the
-fitting radius around the magnetic axis, in metres. `helicity=(1,0)` requests
-quasi-axisymmetry: field strength independent of the toroidal surface angle.
-
-```python
-import math
-from coil_eval import CoilSet, EvaluationConfig, Evaluator
-
-coils = CoilSet.read_json("examples/preview/example1.json")
-config = EvaluationConfig(target_volume=0.3, psi_a=math.sqrt(0.06), helicity=(1, 0))
-with Evaluator(config=config, device="cpu", threads=8) as evaluator:
-    result = evaluator.evaluate(coils)
-    if result.valid:
-        print("Volume quasisymmetry residual:", result.metrics.qs_volume)
-        print("Boundary rotational transform:", result.metrics.iota_boundary)
-    else:
-        print("Evaluation failed:", result.status)
-```
-
-For GPU, use `Evaluator(config=config, device="cuda")`.
-`valid` means the numerical procedure returned a usable result; it does not certify
-global magnetic surfaces or sufficient accuracy.
-
-<a id="example2"></a>
-## Example2: screen 32 perturbed starts and optimize the best
-
-**Run `examples/preview/perturb_optimize.py` with an NVIDIA GPU and the GPU/PyTorch
-installation above.** From the extracted source root:
+From the source archive root, run:
 
 ```sh
-python examples/preview/perturb_optimize.py screen --output runs/example2-screen
-python examples/preview/perturb_optimize.py optimize --screens runs/example2-screen/screen.json --output runs/example2-optimize
+python examples/example1.py
 ```
 
-The first command makes 32 candidates using `c*exp(log(1.01)*z)` for each Example1
-coefficient, with independent standard-normal z and unchanged screening currents.
-The second selects the valid candidate with the **smallest complete objective**,
-then optimizes coefficients and currents using BFGS, a quasi-Newton method that
-updates its search direction using gradients. The objective includes quasisymmetry,
-rotational transform, coil gap, curvature, length, volume and surface quality.
+[example1.py](examples/example1.py) directly shows `CoilSet` for the input,
+`EvaluationConfig` for the target, and `Evaluator` for computing metrics.
+Defaults are CPU, eight threads and 0.3 m³ target volume. Edit `COILS`,
+`TARGET_VOLUME`, `FITTING_RADIUS`, `DEVICE` and the other settings at the top.
+The fitting radius is in metres; `helicity=(1,0)` selects quasi-axisymmetry,
+meaning field strength independent of the toroidal surface angle.
 
-`screen.json` retains every candidate status. The optimization directory contains
-`history.json` for iterations, `selected.npz` for the best coil parameters and
-`result.json` for results and stopping reasons. Output directories must be new.
-See the [complete Example2 guide](examples/preview/README.md) for the fixed seed,
-targets, multiple GPUs and smaller perturbations.
+The script prints status, volume/outer-region QS residuals, boundary rotational
+transform, normal drift, coil length/gap/curvature, current and elapsed times.
+It saves `runs/example1/result.json`. A valid result still needs its accuracy
+diagnostics to be assessed.
 
-The tested 1% perturbation produced 25/32 valid candidates and 116 accepted updates;
-the volume quasisymmetry residual fell from 0.01786 to 0.003897. Consecutive rejected
-trials stopped optimization; convergence was not established. These commands run
-CoilEval optimization. Separate Simsopt surface solves and DESC equilibrium checks
-performed for release validation are documented in the [validation report](docs/preview_validation.md).
+<a id="example2"></a>
+## Example2: screen 32 starts and optimize in one run
+
+The default uses a GPU with CUDA-enabled PyTorch and SciPy. After installation,
+run one script:
+
+```sh
+python -m pip install scipy
+python examples/example2.py
+```
+
+[example2.py](examples/example2.py) keeps `N_STARTS`, `NOISE`, `MAX_STEPS`, device
+and parameter scales at the top. Edit `objective(metrics)` to try other goals or
+weights. There are no command-line options, shard files or fixed input hashes.
+Each Example1 coefficient is perturbed as `c*exp(log(1.01)*z)` with independent
+standard-normal z; screening currents stay fixed. The valid candidate with the
+lowest objective starts optimization of coefficients and currents.
+
+The objective combines volume QS, rotational transform, coil gap, curvature,
+length and normal drift. SciPy BFGS updates a curvature approximation from gradients
+provided through the public `TensorEvaluator` and PyTorch interfaces.
+**Each screened candidate and each optimizer iteration prints a line** containing
+the objective, QS, iota, coil metrics and elapsed time. Final output includes the
+stopping reason, final metrics and total time, plus
+`runs/example2/optimized_coils.json` and `history.csv`. Invalid trials are identified;
+an optimizer stop or iteration limit is separate from physical certification.
+
+Edit and rerun either script; change `OUTPUT` to retain multiple runs.
+See [all examples](examples/README.md) for batches, gradients, surface metrics and
+Simsopt. The simpler 0.11.1 teaching objective differs from the old preview
+reproduction experiment; its older trajectory is labeled historical validation.
 
 <a id="validation"></a>
 ## Accuracy and speed
@@ -161,7 +158,7 @@ for cohort definitions, failures, reference qualifications and numerical limitat
 Errors can come from finite-order surface fits, regularization bias, angular
 discretization and amplification near resonances. Even smooth Poincare sections
 (field-line intersections with fixed cross-sections) can accompany large metric
-errors. Both examples retain force-residual and reference-surface quality limits;
+errors. The historical preview examples retain force-residual and reference-surface quality limits;
 see the [validation report](docs/preview_validation.md).
 
 - [API, metrics and configuration](docs/api.md)

@@ -1,35 +1,29 @@
-"""Evaluate a coil set with the default two-stage psi fit."""
-import argparse
+"""Use the default two scalar fits to evaluate several target volumes."""
+import math
 from pathlib import Path
-
+from time import perf_counter
 from coil_eval import CoilSet, EvaluationConfig, Evaluator
+
+COILS = Path(__file__).parent / "preview" / "example1.json"
+VOLUMES = [0.20, 0.25, 0.30]       # m^3, one independent query per target
+RADIUS = math.sqrt(0.06)
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--coils", type=Path, default=Path(__file__).with_name("coils.json"))
-    parser.add_argument("--library", help="Optional custom native library")
-    parser.add_argument("--volume", type=float, default=.05, help="Target volume in m^3")
-    parser.add_argument("--radius", type=float, default=.15, help="Fitting radius in metres")
-    parser.add_argument("--sampling", choices=("cartesian", "polar_quadrature"), default="polar_quadrature")
-    parser.add_argument("--alpha-weighting", choices=("histogram", "smooth"), default="smooth")
-    parser.add_argument("--alpha-basis", choices=("zernike", "flux_legendre"), default="flux_legendre")
-    parser.add_argument("--device", type=int, default=0, help="CUDA device index")
-    parser.add_argument("--output", type=Path, help="Save EvaluationResult as JSON")
-    args = parser.parse_args()
-    config = EvaluationConfig(target_volume=args.volume, psi_a=args.radius,
-        fast=True, flux_method="stokes", psi_fit="two_stage", psi_refit_sampling=args.sampling,
-        alpha_radial_weighting=args.alpha_weighting, alpha_radial_basis=args.alpha_basis)
-    with Evaluator(args.library, config=config, device_id=args.device) as evaluator:
-        result = evaluator.evaluate(CoilSet.read_json(args.coils))
-    print("Status:", result.status)
-    if result.valid:
-        print("Volume QS RMS:", result.metrics.qs_volume)
-        print("Outer-bin QS RMS:", result.metrics.qs_outer)
-        print("Boundary iota:", result.metrics.iota_boundary)
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        result.write_json(args.output)
+    started = perf_counter()
+    coils = CoilSet.read_json(COILS)
+    configs = [EvaluationConfig(target_volume=v, psi_a=RADIUS, helicity=(1, 0)) for v in VOLUMES]
+    print(f"Evaluating volumes {VOLUMES} m^3...", flush=True)
+    with Evaluator(config=configs[0]) as evaluator:
+        results = evaluator.evaluate_many([coils] * len(VOLUMES), configs=configs)
+    elapsed = perf_counter() - started
+    for volume, result in zip(VOLUMES, results):
+        if result.valid:
+            print(f"V={volume:.3f} m^3: QS={result.metrics.qs_volume:.8g}, "
+                  f"iota={result.metrics.iota_boundary:.8f}")
+        else:
+            print(f"V={volume:.3f} m^3: {result.status}")
+    print(f"Including setup: {elapsed / len(VOLUMES):.3f} s/sample; total {elapsed:.3f} s")
 
 
 if __name__ == "__main__":

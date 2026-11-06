@@ -1,6 +1,6 @@
 # 安装
 
-版本 0.11.0 尚未发布。以下命令安装随附的预编译 wheel。
+版本 0.11.1 尚未发布。以下命令安装随附的预编译 wheel。
 配套源码压缩包包含示例和开发文件。
 
 [English](installation.md)
@@ -13,7 +13,7 @@ wheel（`.whl`）是已构建的 Python 安装包，sdist（`.tar.gz`）是源�
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 `gpu` 依赖组安装固定版本、配套验证过的 CUDA 12.8 运行库。
@@ -40,8 +40,8 @@ python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
-python examples/cpu.py --threads 8
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python examples/cpu.py
 ```
 
 `cpu` 依赖组提供 SciPy、threadpoolctl 和 PyTorch；先安装 CPU 版 PyTorch 可选定其 CPU 发行包。
@@ -85,7 +85,7 @@ python -m pip check
 ```sh
 python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 python examples/autograd.py
-python examples/autograd.py --batch
+python examples/batch.py
 ```
 
 示例包含在源码压缩包和仓库中。`coil_eval.torch` 是可选接口，普通 `coil_eval` 导入使用 NumPy。
@@ -97,7 +97,7 @@ CPU 安装从 CPU 索引选择兼容版本，无需固定为这里较早的 GPU 
 磁面工作流可通过安装包的 `simsopt` 可选依赖组安装：
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 该依赖组安装 Simsopt 与 SciPy。
@@ -134,7 +134,7 @@ python -m pip install ".[gpu]"
 python -m pip install . --config-settings=wheel.cmake=false
 cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=120
 cmake --build build/native --parallel
-python examples/evaluate.py --library build/native/libcoil_eval_native.so
+
 ```
 
 `Evaluator(library=..., config=...)` 和 `TensorEvaluator(library=..., config=...)`
@@ -150,3 +150,5 @@ python examples/evaluate.py --library build/native/libcoil_eval_native.so
   `nvcc --version` 显示单独安装的编译器版本。
 
 表中的 sm_XX 是 GPU 架构目标，PTX 是供驱动编译的中间指令。OpenMP 提供 CPU 并行运行支持。f_B/f_T 是准对称性（磁场强度只依赖一个螺旋角）误差指标，分别使用傅里叶分量和磁场导数三重积。
+
+Example2 的标准 BFGS 使用 SciPy：`python -m pip install scipy`。示例参数直接在脚本顶部修改。

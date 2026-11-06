@@ -9,7 +9,7 @@ CoilEval 根据仿星器线圈的形状、电流、场周期数和目标体积�
 
 局部梯度描述当前参数附近的小幅变化，计算时保持已选中的磁轴和采样分支不变。旋转变换 ι 是磁力线每绕环向一圈平均绕极向的圈数。
 
-**版本 0.11.0，预发布候选。** 默认先拟合磁面标签函数，再在选出的闭合区域内重新拟合。
+**版本 0.11.1，预发布候选。** 默认先拟合磁面标签函数，再在选出的闭合区域内重新拟合。
 这两次拟合决定后续磁面和指标；可选的第三次拟合由 `psi_target_refit=True` 开启，默认关闭。
 
 <a id="installation"></a>
@@ -21,7 +21,7 @@ CoilEval 根据仿星器线圈的形状、电流、场周期数和目标体积�
 GPU：安装随附 wheel 和 CUDA 12.8 运行库。Example2 还需要 CUDA 版 PyTorch：
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 ```
 
@@ -30,58 +30,52 @@ CPU：在同一个 Python 环境中依次执行。第一条明确选择 CPU 版 
 
 ```sh
 python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 GPU 需兼容的 NVIDIA 驱动；纯 CPU 求值不需要 CUDA。环境、可选依赖与源码构建见[安装指南](docs/installation.zh-CN.md)。
 
 <a id="example1"></a>
-## Example1：计算随附线圈的指标
+## Example1：读取线圈并求值
 
-下面使用 `examples/preview/example1.json`，目标体积为 0.3 m³。`psi_a` 是磁轴周围的拟合半径，
-单位米。`helicity=(1,0)` 选择准轴对称目标，即期望磁场强度在磁面坐标中与环向角无关。
-
-```python
-import math
-from coil_eval import CoilSet, EvaluationConfig, Evaluator
-
-coils = CoilSet.read_json("examples/preview/example1.json")
-config = EvaluationConfig(target_volume=0.3, psi_a=math.sqrt(0.06), helicity=(1, 0))
-with Evaluator(config=config, device="cpu", threads=8) as evaluator:
-    result = evaluator.evaluate(coils)
-    if result.valid:
-        print("体积准对称性残差：", result.metrics.qs_volume)
-        print("边界旋转变换：", result.metrics.iota_boundary)
-    else:
-        print("求值失败：", result.status)
-```
-
-使用 GPU 时把评估器改为 `Evaluator(config=config, device="cuda")`。
-`valid` 表示数值流程得到可用结果，不能单独证明全局磁面存在或精度足够。
-
-<a id="example2"></a>
-## Example2：扰动 32 个起点，选择一个继续优化
-
-**运行入口是 `examples/preview/perturb_optimize.py`，需要 NVIDIA GPU 和上面的 GPU/PyTorch 环境。**
-在解压后的源码根目录依次运行：
+在源码包根目录运行：
 
 ```sh
-python examples/preview/perturb_optimize.py screen --output runs/example2-screen
-python examples/preview/perturb_optimize.py optimize --screens runs/example2-screen/screen.json --output runs/example2-optimize
+python examples/example1.py
 ```
 
-第一步对 Example1 的每个系数施加 `c·exp(ln(1.01)·z)` 扰动，z 独立服从均值 0、标准差 1 的高斯分布；
-生成 32 个候选，保持筛选时电流不变。第二步从有效候选中选择**完整目标函数最小**者，
-用 BFGS（利用梯度逐步更新搜索方向的拟牛顿优化方法）优化系数和电流。
-目标同时考虑准对称性、旋转变换、线圈间距、曲率、长度、体积及磁面质量。
+[example1.py](examples/example1.py) 直接展示 `CoilSet` 读取线圈、`EvaluationConfig` 设置目标、
+`Evaluator` 计算指标。默认使用 CPU、8 线程、目标体积 0.3 m³；在文件顶部修改 `COILS`、
+`TARGET_VOLUME`、`FITTING_RADIUS`、`DEVICE` 等即可尝试其他输入和设置。
+拟合半径以米为单位；`helicity=(1,0)` 选择准轴对称，即磁场强度在磁面坐标中与环向角无关。
 
-`screen.json` 保存全部候选状态；优化目录的 `history.json` 保存迭代，`selected.npz` 保存目标最好的线圈参数，
-`result.json` 保存结果与停止原因。输出目录必须尚不存在。固定随机种子、目标数值、多 GPU 用法和
-降低噪声的方法见[Example2 完整运行说明](examples/preview/README.zh-CN.md)。
+运行会打印状态、体积和外层准对称性残差、边界旋转变换、法向漂移、线圈长度/间距/曲率、电流以及耗时，
+并保存 `runs/example1/result.json`。`valid` 表示计算得到了可用结果，精度仍应结合诊断判断。
 
-已测这组 1% 扰动有 25/32 个有效候选，优化接受 116 次更新，体积准对称性残差从 0.01786 降到 0.003897。
-优化因连续试探未被接受而停止，未判定收敛。上述两条命令完成 CoilEval 优化；
-发行验证还使用 Simsopt（独立磁面优化库）求解参考磁面，再使用 DESC（独立平衡求解库）计算平衡；结果见[验证报告](docs/preview_validation.zh-CN.md)。
+<a id="example2"></a>
+## Example2：一次运行筛选 32 个起点并优化
+
+默认使用 GPU，需要 CUDA 版 PyTorch 和 SciPy；安装后只运行一个脚本：
+
+```sh
+python -m pip install scipy
+python examples/example2.py
+```
+
+[example2.py](examples/example2.py) 的 `N_STARTS`、`NOISE`、`MAX_STEPS`、设备和尺度都在文件顶部。
+直接修改 `objective(metrics)` 可以更换目标和权重；没有命令行选项、分片文件或预先固定的输入校验值。
+脚本对 Example1 的系数施加 `c·exp(ln(1.01)·z)` 扰动，z 为独立标准高斯数；
+筛选时电流不变，从 32 个候选中选择有效且目标函数最小的一组，再优化系数和电流。
+
+目标函数结合体积准对称性残差、旋转变换、线圈间距、曲率、长度和法向漂移。
+优化使用 SciPy 的 BFGS（利用梯度更新曲率近似的优化方法），梯度由公开的 `TensorEvaluator` 和 PyTorch 提供。
+**每个筛选候选打印一行，每个优化迭代打印一行**，包含目标值、QS、ι、线圈指标和耗时；
+结尾显示停止原因、最终指标及总耗时，保存 `runs/example2/optimized_coils.json` 和 `history.csv`。
+无效试探点会被标明；停止或达到迭代上限不代表物理认证。
+
+两个脚本都可直接编辑后重跑；如需保留多次输出，请修改顶部的 `OUTPUT`。
+[全部示例与参数说明](examples/README.zh-CN.md)列出批量、梯度、目标磁面和 Simsopt 用法。
+0.11.1 的简明教学目标与旧预发布复现实验不同；旧报告中的优化轨迹单独标为历史验证。
 
 <a id="validation"></a>
 ## 精度与速度
@@ -140,7 +134,7 @@ CPU 三档均使用 Xeon Gold 6530 的逻辑线程，GPU 每项分配八个主�
 
 准对称性误差可能来自有限阶磁面拟合、正则化偏差、角坐标离散以及共振附近的误差放大。
 光滑的庞加莱截面（磁力线穿过固定截面的位置图）也可能对应较大的指标误差。
-两例的独立物理检查仍保留残余力和参考磁面质量限制；详情见[验证报告](docs/preview_validation.zh-CN.md)。
+历史预发布两例的独立物理检查保留残余力和参考磁面质量限制；详情见[验证报告](docs/preview_validation.zh-CN.md)。
 
 - [API、指标与配置](docs/api.zh-CN.md)
 - [PyTorch 梯度和批量求值](docs/torch.zh-CN.md)、[CPU 运行](docs/cpu.zh-CN.md)

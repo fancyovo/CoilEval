@@ -47,7 +47,7 @@ FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
 </details>
 
 
-CoilEval 0.11.0 provides Fourier (`f_B`) and optional triple-product (`f_T`)
+CoilEval 0.11.1 provides Fourier (`f_B`) and optional triple-product (`f_T`)
 quasisymmetry metrics on the target-volume surface. They share a differentiable
 alpha+nu coordinate construction, with a target-surface alpha fit and vacuum
 potential-based nu correction. The coil evaluation interface uses PyTorch on
@@ -111,10 +111,9 @@ Run the example with:
 
 ```sh
 python examples/qs_metrics.py
-python examples/qs_metrics.py --accuracy balanced
-python examples/qs_metrics.py --gradient --metric f_B
-python examples/qs_metrics.py --gradient --metric f_T
 ```
+
+Edit `ACCURACY`, volume and radius at the top of the script. The gradient call below can be edited directly.
 
 ## Differentiate an objective
 

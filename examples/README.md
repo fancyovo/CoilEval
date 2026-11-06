@@ -1,46 +1,60 @@
-# Running the examples
+# Running and editing the examples
 
 [简体中文](README.zh-CN.md)
 
-Run these commands from the extracted source archive, after [installing CoilEval](../docs/installation.md).
-The wheel supplies the library; the source archive also supplies these scripts and input files.
+Install the library using the [installation guide](../docs/installation.md), then run scripts from the extracted source root.
+Each example is self-contained: **edit its settings at the top and run `python examples/name.py`**.
+No command-line options or preceding script are required. The default input is the bundled [example1.json](preview/example1.json).
 
-## Start here
-
-- **Example 1: evaluate fixed coils.** The [README commands](../README.md#example1) load `preview/example1.json` and score a target volume of 0.3 m³ on CPU or GPU.
-- **Example 2: perturb, select and optimize.** The [screening and optimization commands](preview/README.md) generate 32 approximately 1% multiplicative perturbations of example 1 and optimize the best valid candidate. This script requires a GPU and CUDA-enabled PyTorch.
-
-## Other interface examples
-
-Quasisymmetry (QS) means that field strength depends on one helical surface angle.
-`f_B` measures Fourier content outside that symmetry, `f_C` is a differential residual, and `f_T` a field-derivative triple-product residual; each has ideal value zero.
-The default first fits a surface label in an initial region, then refits it inside a selected closed region. These examples use that procedure.
-
-| Script | Purpose and command |
+| Script | Main objects and purpose |
 | --- | --- |
-| [evaluate.py](evaluate.py) | Score [coils.json](coils.json): `python examples/evaluate.py` |
-| [cpu.py](cpu.py) | CPU values: `python examples/cpu.py --threads 8` |
-| [custom_loss.py](custom_loss.py) | Custom scalar objective and parameter gradient: `python examples/custom_loss.py` |
-| [autograd.py](autograd.py) | PyTorch derivatives: `python examples/autograd.py`; add `--batch` for independent inputs |
-| [qs_metrics.py](qs_metrics.py) | Target-surface f_B: `python examples/qs_metrics.py`; add `--gradient --metric f_T` for f_T and its gradient |
-| [two_stage.py](two_stage.py) | Explicit two-fit example: `python examples/two_stage.py --output runs/metrics.json` |
+| [example1.py](example1.py) | `CoilSet`, `EvaluationConfig`, `Evaluator`: input, metrics, timing and saved result; CPU default |
+| [example2.py](example2.py) | `TensorEvaluator` + SciPy BFGS: 32 starts then optimization, with live candidate/step output; GPU default |
+| [evaluate.py](evaluate.py) | Minimal GPU value evaluation |
+| [cpu.py](cpu.py) | CPU values; edit `THREADS` at the top |
+| [autograd.py](autograd.py) | `pack_coils`, a Torch objective and automatic gradients |
+| [batch.py](batch.py) | `evaluate_batch`: two independent inputs and gradients, seconds/sample |
+| [custom_loss.py](custom_loss.py) | NumPy objective and local finite differences with `loss_and_grad` |
+| [qs_metrics.py](qs_metrics.py) | `SurfaceQSConfig`, `SurfaceQSEvaluator`: target-surface f_B and f_T |
+| [two_stage.py](two_stage.py) | `evaluate_many`: three target volumes with the default two-fit procedure |
+| [simsopt_async.py](simsopt_async.py) | GPU seed preparation and concurrent CPU surface solves in one run |
 
-GPU scripts automatically load the installed backend; `--library /path/to/libcoil_eval_native.so` selects a custom library.
-See the [CPU guide](../docs/cpu.md) for CPU dependencies and thread limits. PyTorch examples also require PyTorch for the chosen device.
-Use each script’s `--help` for input options. The retained `--two-stage` compatibility flag is redundant in 0.11.0.
-`autograd.py --batch` reports seconds per sample including one full backward pass; the first call includes initialization.
-
-## Independent surface validation
-
-[simsopt_async.py](simsopt_async.py) prepares a surface and angle-coordinate initializer on GPU, then uses the independent Simsopt library to optimize the surface on CPU.
-Preparation needs CUDA PyTorch and Simsopt. CPU solve processes each use one linear-algebra/parallelism thread (BLAS/OpenMP).
+For example:
 
 ```sh
-python examples/simsopt_async.py prepare --directory runs/case1 --volumes 0.01 0.03 0.05
-python examples/simsopt_async.py solve --directory runs/case1 --workers 4
+python examples/example1.py
+python examples/example2.py
 ```
 
-Preparation saves completed tasks and failures. CPU solves can overlap preparation of other geometries; keep `--workers` within the CPU allocation.
-Results include f_C RMS (square root of mean square) over a thin magnetic-flux shell, reported separately from volume averages.
-Preparation optionally accepts `--alpha-fold-policy damp --alpha-min-jacobian 0.05` to reduce an angular correction until the map is monotone; the default rejects folded maps.
-This changes the initializer; each final surface still undergoes independent solver acceptance. See the [Simsopt guide](../docs/simsopt.md).
+These are independent entry points: Example2 reads the original coils and does not consume Example1 output.
+Every script prints results and elapsed time. First calls include initialization; the timing scope is labeled and differs from warmed benchmarks.
+Rerunning updates the same output files; change `OUTPUT` to retain older runs.
+
+## Editing Example2
+
+`N_STARTS=32`, `NOISE=0.01` and `SEED=2026110502` control screening. Perturbations are `c*exp(log1p(NOISE)*z)` with standard-normal z;
+coefficient signs and exact zeros are preserved, and screening currents stay fixed. `MAX_STEPS=100` is the iteration budget.
+Edit targets and weights directly in `objective(metrics)`: defaults are iota=0.47, minimum gap 0.10 m, maximum curvature 6 m⁻¹ and mean length 3.5 m.
+`EvaluationConfig` fixes volume at 0.3 m³. `GEOMETRY_SCALE` and `CURRENT_SCALE` convert optimizer coordinates to metres and amperes.
+Optimization changes coefficients and currents. If no screened candidate is valid, reduce `NOISE` and rerun.
+
+QS is a quasisymmetry residual with ideal value zero; rotational transform iota is the average poloidal turns per toroidal field-line turn.
+Normal drift measures how much field lines leave the fitted surface. Surface f_B uses field-strength Fourier content; f_T uses a field-derivative triple product.
+BFGS updates a curvature approximation from gradients; see the [SciPy interface](https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html).
+`history.csv` stores objective, QS, iota and time for each accepted iterate; `optimized_coils.json` can be read with `CoilSet.read_json`.
+
+## One observed run (2026-11-06)
+
+The settings above produced 25 valid candidates out of 32 on an RTX 5090, followed by 82 accepted optimization steps.
+The objective decreased from −2.763355 to −5.465613; final volume QS was 0.00411832 and iota was 0.469764.
+Total time was 453.85 seconds, including 395.02 seconds of optimization. The progress callback evaluates metrics once more per accepted step; this cost is included.
+SciPy stopped with precision loss and `success=False`. The script prints this reason and saves the result; this run did not satisfy the convergence criterion.
+The older full physical reports use a different objective and trajectory and remain historical validation.
+
+## Dependencies and independent surface solves
+
+CPU examples need CPU Torch. GPU gradient/optimization examples need CUDA Torch; Example2 also needs SciPy.
+`simsopt_async.py` additionally uses Simsopt, an independent magnetic-surface optimization library. `WORKERS` is the CPU process count.
+`AlphaNuInitializer` prepares angular-coordinate seeds on GPU; `StandardSimsoptSolver` then solves on CPU.
+The script prints acceptance, quality, rotational transform and timings, and saves seeds and accepted surfaces; see the [Simsopt guide](../docs/simsopt.md).
+It does not run DESC equilibrium calculations. The earlier preview's full physical reports remain [historical validation](../docs/preview_validation.md).

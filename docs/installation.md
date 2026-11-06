@@ -1,6 +1,6 @@
 # Installation
 
-Version 0.11.0 is unreleased. The commands below install the supplied binary wheel.
+Version 0.11.1 is unreleased. The commands below install the supplied binary wheel.
 The accompanying source archive includes the examples and development files.
 
 [简体中文](installation.zh-CN.md)
@@ -13,7 +13,7 @@ A wheel (`.whl`) is a built Python distribution; an sdist (`.tar.gz`) contains s
 Create or activate a Python 3.10+ environment, then install the supplied wheel:
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 The `gpu` extra installs a matched, version-pinned CUDA 12.8 runtime set.
@@ -44,8 +44,8 @@ CPU requirements automatically.
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
-python examples/cpu.py --threads 8
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python examples/cpu.py
 ```
 
 The `cpu` extra supplies SciPy, threadpoolctl and PyTorch. Installing CPU PyTorch
@@ -95,7 +95,7 @@ PyTorch in the same environment:
 ```sh
 python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
 python examples/autograd.py
-python examples/autograd.py --batch
+python examples/batch.py
 ```
 
 The examples are included in the source archive and checkout. `coil_eval.torch` is optional;
@@ -109,7 +109,7 @@ from the CPU index instead of pinning this older GPU build.
 For the optional surface workflow, install the wheel with its `simsopt` extra:
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 This installs Simsopt and SciPy. The [Simsopt guide](simsopt.md) shows GPU
@@ -148,7 +148,7 @@ For an independently managed native library, retain the separate build:
 python -m pip install . --config-settings=wheel.cmake=false
 cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=120
 cmake --build build/native --parallel
-python examples/evaluate.py --library build/native/libcoil_eval_native.so
+
 ```
 
 `Evaluator(library=..., config=...)` and `TensorEvaluator(library=..., config=...)`
@@ -167,3 +167,5 @@ configured toolkits, including the CUDA 13 build used in earlier releases.
   the separately installed compiler.
 
 In the architecture table, sm_XX identifies a GPU architecture target and PTX is intermediate code compiled by the driver. OpenMP supplies CPU parallel execution. f_B/f_T are quasisymmetry-error metrics (field strength depending on one helical angle), using Fourier content and a field-derivative triple product respectively.
+
+Example2 uses SciPy BFGS: `python -m pip install scipy`. Edit example parameters at the top of each script.

@@ -36,7 +36,7 @@ FP32/float32 与 FP64/float64 分别是 32 位单精度和 64 位双精度浮点
 </details>
 
 
-CoilEval 0.11.0 提供傅里叶指标 `f_B` 和可选三重积指标 `f_T`，作用于目标体积对应的磁面。两者共用可导的 alpha+nu 坐标构造，包括目标磁面的 alpha 拟合与基于真空磁场势的 nu 修正。线圈求值接口使用 GPU 或 CPU 上的 PyTorch；Simsopt 用于单独计算参考磁面。
+CoilEval 0.11.1 提供傅里叶指标 `f_B` 和可选三重积指标 `f_T`，作用于目标体积对应的磁面。两者共用可导的 alpha+nu 坐标构造，包括目标磁面的 alpha 拟合与基于真空磁场势的 nu 修正。线圈求值接口使用 GPU 或 CPU 上的 PyTorch；Simsopt 用于单独计算参考磁面。
 
 ## 计算线圈指标
 
@@ -85,10 +85,9 @@ GPU 对兼容输入采用批量磁轴预处理；相同两阶段几何且配置�
 
 ```sh
 python examples/qs_metrics.py
-python examples/qs_metrics.py --accuracy balanced
-python examples/qs_metrics.py --gradient --metric f_B
-python examples/qs_metrics.py --gradient --metric f_T
 ```
+
+直接修改脚本顶部的 `ACCURACY`、体积和半径。下面展示可直接编辑的梯度调用。
 
 ## 对目标函数求梯度
 

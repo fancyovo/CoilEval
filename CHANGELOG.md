@@ -46,11 +46,18 @@ FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
 
 Entries describe historical versions; defaults in an entry apply to that version.
 
+## 0.11.1 (preview candidate)
+
+- Rewrite tutorials as standalone, editable scripts using public APIs, with metrics and timings.
+- Use an editable objective and SciPy BFGS in Example2; print each candidate and iterate, and save optimized coils/history. Retain the older complete-objective trajectory as historical validation.
+- Separate single-query autograd and batch examples; remove shard orchestration, fixed hashes and dataset-scale dependencies from tutorials.
+- Preserve the evaluator, numerical defaults and existing physical validation.
+
 ## 0.11.0 (preview candidate)
 
 - Make the validated two-fit configuration the public default: two-stage scalar fitting, weighted polar quadrature, smooth flux-Legendre volume-alpha fitting and the shorter tracing with Stokes flux integration for local evaluations. Retain the third fit as an explicit option disabled by default.
 - Preserve explicit configuration of historical numerical paths; saved configurations remain reproducible.
-- Prepare current the second fit accuracy, amortized timing and reproducible evaluation/optimization examples for the first preview delivery.
+- Document two-fit accuracy, amortized timing and reproducible evaluation/optimization examples for the first preview delivery.
 - Exclude local runtime and pytest cache documentation from the source archive.
 
 ## 0.10.0 (unreleased)

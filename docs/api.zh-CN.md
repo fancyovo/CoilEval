@@ -83,7 +83,7 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `alpha_radial_basis` | `'flux_legendre'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor 磁通一致性容差；`None` 关闭检查 |
 
-0.11.0 默认采用已验证的 两次拟合配置。下面的显式配置与
+0.11.1 默认采用已验证的 两次拟合配置。下面的显式配置与
 `EvaluationConfig(target_volume=0.05, psi_a=0.15)` 等价：
 
 ```python
@@ -201,7 +201,7 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 两个原生 QS 字段都除以所选螺旋度的 `max(sqrt(M*M + N*N), 1)`。
 最外径向分组 保留最后一个径向分组内的原生点权重；iota 剖面采样覆盖所选径向范围。
 独立的 `surface_fc`/`analyze_arrays` 参考函数固定使用 QH 螺旋度 `(1,nfp)`，
-在 0.11.0 中没有 helicity 参数。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
+在 0.11.1 中没有 helicity 参数。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
 QA `helicity=(1,0)`。与原生结果比较时，应为对应参考路径选择相同螺旋度。
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` 提供可组合的标量惩罚。

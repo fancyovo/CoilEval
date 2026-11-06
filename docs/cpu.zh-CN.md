@@ -16,7 +16,7 @@ CPU 后端沿用 GPU 后端的线圈离散、磁轴搜索策略、拟合基函�
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 请将 wheel 文件名换成实际收到的文件。CPU 求值加载 `libcoil_eval_cpu.so`，
@@ -103,8 +103,6 @@ CPU 与 GPU 的归约次序可能不同；比较数值误差、梯度方向和�
 启用 OpenMP 的 CPU 构建会并行计算相互独立的磁场点和磁力线。
 在支持的系统上自动使用 AVX2，其他 CPU 使用标量实现。
 
-运行 `python examples/cpu.py --threads 8` 可执行完整的两次拟合求值。0.11.0 保留的
-`--two-stage` 兼容参数无需再添加。结果包含各阶段计时；测量求值加梯度时，另行计时
-`torch.autograd.grad`。
+运行 `python examples/cpu.py`，在脚本顶部修改 `THREADS`、体积和半径。脚本打印主要指标与总耗时；梯度示例见 `examples/autograd.py`，将其 `DEVICE` 改为 `"cpu"`。
 
 CPU 8、16、32 逻辑线程的同型号实测比较见 [README 速度表](../README.zh-CN.md#validation)，单位为秒/样本。

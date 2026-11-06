@@ -1,25 +1,35 @@
-"""Evaluate the same physical model on a computer without an NVIDIA GPU."""
-import argparse
-import json
+"""Read coils, create an evaluator, and print a complete value result on CPU."""
+import math
 from pathlib import Path
+from time import perf_counter
 from coil_eval import CoilSet, EvaluationConfig, Evaluator
 
-parser=argparse.ArgumentParser()
-parser.add_argument('--coils',type=Path,default=Path(__file__).with_name('coils.json'))
-parser.add_argument('--volume',type=float,default=.05)
-parser.add_argument('--radius',type=float,default=.15)
-parser.add_argument('--threads',type=int)
-parser.add_argument('--axis-grid',type=int,help='CPU primary magnetic-axis seed grid; default 48')
-parser.add_argument('--library',type=Path)
-parser.add_argument('--two-stage',action='store_true',default=True,help='S2 is the default; retained compatibility flag')
-parser.add_argument('--helicity',type=int,nargs=2,default=(1,4),metavar=('M','N'),
-                    help='QS helicity: QA 1 0; standard QH 1 nfp (default: 1 4)')
-args=parser.parse_args()
-coils=CoilSet.read_json(args.coils)
-config=EvaluationConfig(target_volume=args.volume,psi_a=args.radius,helicity=tuple(args.helicity),fast=True,
-    psi_fit='two_stage' if args.two_stage else 'single_stage',
-    psi_refit_sampling='polar_quadrature',
-    alpha_radial_basis='flux_legendre' if args.two_stage else 'zernike')
-with Evaluator(args.library,config=config,device='cpu',threads=args.threads,axis_grid=args.axis_grid) as evaluator:
-    result=evaluator.evaluate(coils)
-print(json.dumps(result.to_dict(),indent=2,allow_nan=False))
+COILS = Path(__file__).parent / "preview" / "example1.json"
+VOLUME = 0.3                         # m^3
+RADIUS = math.sqrt(0.06)              # m
+THREADS = 8
+HELICITY = (1, 0)                    # Quasi-axisymmetry
+
+
+def main():
+    started = perf_counter()
+    coils = CoilSet.read_json(COILS)
+    config = EvaluationConfig(target_volume=VOLUME, psi_a=RADIUS, helicity=HELICITY)
+    print("Evaluating on CPU...", flush=True)
+    with Evaluator(config=config, device="cpu", threads=THREADS) as evaluator:
+        result = evaluator.evaluate(coils)
+    print(f"Status: {result.status}")
+    if result.valid:
+        m = result.metrics
+        print(f"Volume QS residual: {m.qs_volume:.8g}; outer region: {m.qs_outer:.8g}")
+        print(f"Boundary iota: {m.iota_boundary:.8f}")
+        print(f"Mean length: {m.coil_length_mean:.5f} m; minimum gap: {m.coil_gap_min:.5f} m")
+        print(f"Maximum curvature: {m.coil_curvature_max:.5f} 1/m")
+        print(f"Normal displacement P95: {m.relative_normal_drift_p95:.6g}")
+    else:
+        print(result.diagnostics.get("failure_reason", "No usable magnetic surface"))
+    print(f"Total elapsed: {perf_counter() - started:.3f} s")
+
+
+if __name__ == "__main__":
+    main()

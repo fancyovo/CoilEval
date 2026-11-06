@@ -1,50 +1,97 @@
-"""Guard the registered perturbation and exact scalar/tensor objective agreement."""
+"""Exercise the editable tutorial workflow with real SciPy and a small fake field."""
+import csv
 import importlib.util
-import math
 from pathlib import Path
 from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
 
 @pytest.fixture
-def example(monkeypatch):
-    pytest.importorskip('torch')
-    path=Path(__file__).resolve().parents[1]/'examples/preview'
-    monkeypatch.syspath_prepend(str(path))
-    spec=importlib.util.spec_from_file_location('preview_example_contract',path/'perturb_optimize.py')
-    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    return module
+def example(monkeypatch, tmp_path):
+    pytest.importorskip("torch")
+    pytest.importorskip("scipy")
+    path = Path(__file__).resolve().parents[1] / "examples/example2.py"
+    spec = importlib.util.spec_from_file_location("user_example2", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    # A different coil count/order exercises public parameter packing and saving.
+    coefficients = np.array([[1., .1, .2], [1.1, -.1, .3]])
+    coils = module.CoilSet(coefficients, coefficients * .2, coefficients * .3,
+                           np.array([100., 120.]), 2)
+    source = tmp_path / "coils.json"
+    coils.write_json(source)
+    for key, value in dict(COILS=source, DEVICE="cpu", N_STARTS=3, MAX_STEPS=2,
+                           OUTPUT=tmp_path / "output").items():
+        monkeypatch.setattr(module, key, value)
+    return module, coils
 
 
-def test_fixed32_noise_and_amplitude_retry_keep_draws_and_currents(example):
-    first,sha=example.candidates(.01);half,sha_half=example.candidates(.005)
-    base,_=example.candidates(0.)
-    assert first.shape==(32,4,28) and sha==sha_half
-    np.testing.assert_array_equal(first[:,:,-1],base[:,:,-1])
-    np.testing.assert_array_equal(np.sign(first[:,:,:27]),np.sign(base[:,:,:27]))
-    z=np.random.default_rng(2026110502).standard_normal((32,4,27))
-    np.testing.assert_allclose(first[:,:,:27],base[:,:,:27]*np.exp(math.log(1.01)*z),rtol=1e-14,atol=0)
-    np.testing.assert_allclose(np.log(first[:,:,:27]/base[:,:,:27])/math.log1p(.01),
-        np.log(half[:,:,:27]/base[:,:,:27])/math.log1p(.005),rtol=1e-10,atol=1e-12)
-    assert example.CONFIG.psi_fit=='two_stage' and not example.CONFIG.psi_target_refit
-
-
-def test_complete_formal_loss_matches_single_reverse_tensor_definition(example):
+def test_screen_failure_then_real_bfgs_progress_and_outputs(example, monkeypatch, capsys):
     import torch
-    values=dict(qs_volume=.017,iota_boundary=.451,coil_gap_min=.093,
-        coil_curvature_max=6.2,coil_length_mean=3.54,surface_volume=.3,
-        relative_normal_drift_p95=.013)
-    m=SimpleNamespace(**{k:torch.tensor(v,dtype=torch.float64,requires_grad=True) for k,v in values.items()})
-    r=torch.tensor(1.021,dtype=torch.float64,requires_grad=True)
-    quality=10000*(.0025*np.logaddexp(0.,(.013-.01)/.0025))**2
-    d=dict(qs_target_global_error_per_helicity=.017,iota_target_surface=.451,
-        coil_min_intercoil_distance=.093,coil_curvature_max=6.2,coil_length_mean=3.54,
-        surface_volume=.3,surface_effective_minor_radius=.1,surface_inverse_aspect_ratio=.1/1.021,
-        target_quality_penalty=quality)
-    scalar=example.formal_objective(dict(status='ok',diagnostics=d))
-    total=example.tensor_objective(m,r)
-    assert float(total.detach())==pytest.approx(scalar['loss'],rel=2e-14,abs=2e-14)
-    grad,=torch.autograd.grad(total,r)
-    assert float(grad)>0
-    assert not example.formal_objective(dict(status='no_surface'))['valid']
+    module, coils = example
+    candidates = []
+
+    class Evaluator:
+        def __init__(self, **kwargs):
+            self.calls = 0
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def evaluate(self, x):
+            self.calls += 1
+            if self.calls <= module.N_STARTS:
+                candidates.append(x.detach().clone())
+            if self.calls == 1:
+                raise module.InvalidEvaluationError("test candidate has no surface")
+            def constant(value):
+                return torch.as_tensor(value, dtype=x.dtype)
+            m = SimpleNamespace(qs_volume=.01 + x[:, :-1].square().mean(),
+                iota_boundary=constant(.47), coil_gap_min=constant(.11),
+                coil_curvature_max=constant(5.), coil_length_mean=constant(3.5),
+                relative_normal_drift_p95=constant(.001))
+            return SimpleNamespace(metrics=m)
+
+    monkeypatch.setattr(module, "TensorEvaluator", Evaluator)
+    module.main()
+    output = capsys.readouterr().out
+    assert sum(line.startswith("screen ") for line in output.splitlines()) == 3
+    assert "unscorable: test candidate" in output
+    assert "from 2/3 valid starts" in output
+    assert "step 001:" in output and "Optimizer success:" in output and "total:" in output
+    rows = list(csv.DictReader((module.OUTPUT / "history.csv").open()))
+    assert rows and all(np.isfinite(float(row["loss"])) for row in rows)
+    saved = module.CoilSet.read_json(module.OUTPUT / "optimized_coils.json")
+    assert saved.n_base_coils == 2 and saved.n_coefficients == 3 and saved.nfp == 2
+    base = module.pack_coils(coils, device="cpu")
+    assert len(candidates) == 3
+    for candidate in candidates:
+        torch.testing.assert_close(candidate[:, -1], base[:, -1], rtol=0, atol=0)
+        torch.testing.assert_close(torch.sign(candidate[:, :-1]), torch.sign(base[:, :-1]))
+    assert not torch.equal(candidates[0][:, :-1], base[:, :-1])
+
+
+def test_all_invalid_candidates_report_failure_without_starting_optimizer(example, monkeypatch, capsys):
+    module, _ = example
+
+    class Evaluator:
+        def __init__(self, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def evaluate(self, x):
+            raise module.InvalidEvaluationError("no surface")
+
+    def unexpected_optimizer(*args, **kwargs):
+        pytest.fail("Cannot optimize without a valid start")
+
+    monkeypatch.setattr(module, "TensorEvaluator", Evaluator)
+    monkeypatch.setattr(module, "minimize", unexpected_optimizer)
+    module.main()
+    output = capsys.readouterr().out
+    assert "No valid start" in output and "Total:" in output
+    assert not (module.OUTPUT / "optimized_coils.json").exists()

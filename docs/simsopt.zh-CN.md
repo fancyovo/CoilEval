@@ -1,6 +1,6 @@
 # Simsopt 接口
 
-版本 0.11.0 尚未发布。以下示例使用随附的预编译 wheel。
+版本 0.11.1 尚未发布。以下示例使用随附的预编译 wheel。
 
 [English](simsopt.md)
 
@@ -46,7 +46,7 @@ CUDA 准备阶段还使用可选的 PyTorch 依赖。相应依赖会在运行具
 使用本地安装包安装磁面相关依赖：
 
 ```sh
-python -m pip install "./coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 `simsopt` 可选依赖组包含 Simsopt 与 SciPy。
@@ -133,7 +133,7 @@ source、alpha 和磁场应对应相同的线圈几何与体积。捕获接口�
 被接受的标准磁面文件也保留该数组。
 
 `geometry_method='cached_basis'` 可选择缓存磁面几何基。
-0.11.0 默认使用 reference 几何方法。
+0.11.1 默认使用 reference 几何方法。
 
 `alpha_fold_policy='damp'` 可在准备初始值时修正发生折叠的 alpha 坐标映射。
 它用同一个系数缩小 lambda 扰动，保留 iota，并重新计算 nu。
@@ -188,7 +188,7 @@ BiotSavart 磁场。`StandardSimsoptSolver(config=SolverConfig(...))` 先进行�
 缺少磁轴采样的早期初始值跳过相对磁轴的覆盖检查，并记录 `source_axis_unavailable`。
 通过接受检查的磁面另以 `strict_pass` 或 `accepted_with_quality_warning` 报告稠密残差质量。
 
-0.11.0 求解器会在八个真实几何环向截面上各取 256 个极向点检查自交。
+0.11.1 求解器会在八个真实几何环向截面上各取 256 个极向点检查自交。
 折线交点仅提供两组候选参数；必须回到原始 Fourier 曲面求根，确认两点的
 Cartesian 坐标在 `1e-9` m 内重合，才使硬检查
 `hard_downstream_checks['no_detected_self_intersection']` 拒绝该曲面。
@@ -204,7 +204,7 @@ Cartesian 坐标在 `1e-9` m 内重合，才使硬检查
 ## 参考 QS 指标
 
 `surface_fc(surface, field, sizes=(64,128))` 与 `analyze_arrays(...)` 实现螺旋度
-`(1,nfp)` 的 QH 参考指标。这两个函数在 0.11.0 中没有 helicity 参数。
+`(1,nfp)` 的 QH 参考指标。这两个函数在 0.11.1 中没有 helicity 参数。
 `nfp=4` 时，对应原生求值的 `helicity=(1,4)`；QA f_C 比较需使用显式支持 helicity
 的参考实现，例如上层验证实验的匹配磁面适配器。独立的 f_B/f_T 参考接口
 `surface_qs_metrics` 支持 QA `(1,0)`，详见[磁面 QS 指南](qs.zh-CN.md#与-simsopt-参考比较)。
@@ -223,20 +223,18 @@ Cartesian 坐标在 `1e-9` m 内重合，才使硬检查
 的平方积分，再开平方。体积需要递增，磁面需要属于同一嵌套分支。
 应包含零体积处的值，或通过 `inner_fc` 显式指定未采样内层的近似值；返回记录会保留该近似。
 
-## 分开运行 GPU 准备与 CPU 进程池
+## 一次运行 GPU 准备与 CPU 进程池
 
-[simsopt_async.py](../examples/simsopt_async.py) 在一个进程中保存初始值，
-再由独立 CPU 进程池求解：
+[simsopt_async.py](../examples/simsopt_async.py) 直接展示初值构造和并行磁面求解：
 
 ```sh
-python examples/simsopt_async.py prepare --directory output/case1
-python examples/simsopt_async.py solve --directory output/case1 --workers 4
+python examples/simsopt_async.py
 ```
 
-准备命令写完任务后退出。CPU 作业可以消费已完成目录，同时其他 GPU 作业继续准备新几何。
-每个 CPU 进程使用一个 BLAS/OpenMP 线程并隐藏 CUDA 设备。
-`--workers` 应与作业分配的 CPU 核数匹配。两阶段都保留各目标的成功或失败状态，
-输入输出路径可通过命令行参数指定。
+顶部 `VOLUMES`、`RADIUS`、`WORKERS`、`OUTPUT` 控制输入、进程数和输出目录。
+脚本在同一次运行中保存 GPU 初值并提交 CPU 工作进程，每个目标打印状态、质量、旋转变换和耗时。
+CPU 进程使用一个 BLAS/OpenMP 线程并隐藏 CUDA；`WORKERS` 应不超过分配的 CPU 数。
+初值及被接受的磁面保存在 `OUTPUT`，库自身的几何和来源检查保持启用。
 
 可选指标与精度档位见[目标磁面的 f_B 和 f_T](qs.zh-CN.md)。
 

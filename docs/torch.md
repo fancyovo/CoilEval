@@ -69,7 +69,7 @@ remain `nfp=4` and helicity `(1,4)`. Set `EvaluationConfig(helicity=(1,0), ...)`
 for QA, or `(1,nfp)` for QH at the selected field period; helicity is never
 inferred from `nfp`. The interface retains 256 coil segments and four
 psi/alpha local fit iterations. Select `fast=True` and
-`flux_method='stokes'`. The second fit is the 0.11.0 default. Explicit legacy the first fit requires histogram weights and
+`flux_method='stokes'`. The second fit is the 0.11.1 default. Explicit legacy single-fit evaluation requires histogram weights and
 the Zernike basis as described in the API guide. Both fitting paths are
 accepted. Psi calculations use float64; field calculations use float32 by
 default, with `field_dtype=torch.float64` available.

@@ -97,7 +97,7 @@ and `write_json(path)` preserve these units and conventions.
 | `alpha_radial_basis` | `'flux_legendre'` | Original radial basis or two-stage `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-Version 0.11.0 defaults to the validated two-fit configuration. The following explicit
+Version 0.11.1 defaults to the validated two-fit configuration. The following explicit
 configuration is equivalent to `EvaluationConfig(target_volume=0.05, psi_a=0.15)`:
 
 ```python
@@ -243,7 +243,7 @@ Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
 selected helicity. The outer bin uses the native point weights in the final
 radial bin; iota profile samples cover the selected radial range.
 The standalone `surface_fc`/`analyze_arrays` reference helpers use QH helicity
-`(1,nfp)` and have no helicity argument in 0.11.0. The separate
+`(1,nfp)` and have no helicity argument in 0.11.1. The separate
 `surface_qs_metrics` helper accepts explicit QA `helicity=(1,0)` for f_B/f_T.
 Use matching native helicity when comparing either reference path.
 

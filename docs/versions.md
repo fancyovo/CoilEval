@@ -35,11 +35,12 @@ The third fit remains optional (`psi_target_refit=False`).
 | 0.9.1 | Angle inverse and first radial-branch repairs; the second fit ridge override | Included; `psi_refit_ridge=` optional |
 | 0.10.0 | Optional third fit over the target interior and its local derivatives | `psi_target_refit=True` |
 | 0.11.0 preview | Validated two-fit defaults, P90 calibration, optimization example selecting from 32 perturbations | Default configuration; example2 |
+| 0.11.1 preview | Editable one-run examples, progress and timings | `examples/example1.py`, `examples/example2.py` |
 
 Versions through 0.10.0 used a single fit by default. Reproduce historical runs with their
 frozen version and full configuration. For an explicit legacy single-fit configuration
-on 0.11.0, follow the [API guide](api.md#configuration). API argument order and
-physical units are unchanged; numerical defaults changed deliberately.
+on 0.11.0 and 0.11.1, follow the [API guide](api.md#configuration). API argument order and
+physical units were retained in 0.11.0, which changed numerical defaults; 0.11.1 retains those defaults.
 The [validation record](preview_validation.md) identifies the scored cohort,
 reference qualifications, errors, timing workload and examples.
 
@@ -54,3 +55,5 @@ cmake --build build/v0.0.0 --parallel
 
 Keep each native build paired with the Python version that built it. Release
 tags identify complete source trees, including their documentation and examples.
+
+Version 0.11.1 revises tutorials with editable settings, one-run workflows, public APIs, progress and timings; the evaluator and two-fit defaults match 0.11.0.

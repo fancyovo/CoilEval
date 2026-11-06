@@ -1,5 +1,7 @@
 # CoilEval 0.11.0 validation and limitations
 
+**Scope:** 0.11.1 retains the validated 0.11.0 evaluator and defaults, so these accuracy and speed results still apply. Example2 below is historical validation of the old complete objective/optimizer. See the [example guide](../examples/README.md) for the new teaching script; the old trajectory is not its output.
+
 [简体中文](preview_validation.zh-CN.md)
 
 CoilEval estimates magnetic surfaces and quasisymmetry from coils. Version 0.11.0 first fits a scalar surface label s in an initial region,

@@ -17,7 +17,7 @@ Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel (a pre
 
 ```sh
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.11.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Replace the wheel filename with the supplied file. CPU evaluation loads
@@ -120,8 +120,8 @@ An OpenMP-enabled CPU build parallelizes independent field points and
 magnetic-field traces. AVX2 is selected automatically on supported systems,
 with a scalar implementation available on other CPUs.
 
-Run `python examples/cpu.py --threads 8` for a complete value example using two fits.
-The retained `--two-stage` flag is redundant in 0.11.0. Stage times are included in the result;
-time `torch.autograd.grad` separately when measuring value-plus-gradient cost.
+Run `python examples/cpu.py` for a complete value example using two fits.
+Edit `THREADS` at the top of that script. For gradients, set `DEVICE = "cpu"`
+in `examples/autograd.py` and run it directly. Both scripts print their elapsed time.
 
 See the [README timing table](../README.md#validation) for measurements with 8, 16 and 32 logical threads on the same CPU model, in seconds per sample.
