@@ -114,11 +114,13 @@ def _refine_surface_alpha_steps(geometry, level, alpha_data, iota, *, nfp,
             surface_alpha_fit_nphi=nphi, surface_alpha_fit_ntheta=ntheta,
             surface_alpha_columns=design.shape[-1], surface_alpha_ridge=ridge,
             surface_alpha_solver=solver_diagnostics,
-            surface_alpha_previous_iota=iota.detach(), surface_alpha_iota=fitted_iota.detach(),
+            surface_alpha_iota=fitted_iota.detach(),
             surface_alpha_transport_residual_rms=residual.square().mean().sqrt(),
             surface_alpha_transport_relative_rms=residual.norm()/beta.norm().clamp_min(1e-30),
             surface_alpha_correction_jacobian_min=correction_jacobian.amin(),
             surface_alpha_base_jacobian_min=original_diagnostics['alpha_jacobian_min'].detach(),
             surface_alpha_stationarity_relative=(scaled.T@residual+ridge*scaled_solution).norm()/rhs_norm,
             surface_alpha_ridge_rhs_relative=(ridge*scaled_solution).norm()/rhs_norm)
+        if iota is not None:
+            diagnostics['surface_alpha_previous_iota'] = iota.detach()
     return correction, fitted_iota, diagnostics

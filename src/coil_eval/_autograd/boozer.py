@@ -264,10 +264,13 @@ def _sample_boozer_surface_steps(geometry, level, physics, config, *,
     if min(tolerance, min_jacobian, resonance_tolerance) <= 0:
         raise ValueError('Boozer root and resonance tolerances must be positive')
     level = level.double()
-    alpha_data = physics.get('alpha_angular_data')
-    if alpha_data is None:
-        alpha_data = alpha_angular_coefficients(physics['alpha_coefficients'], config)
-    iota = physics['iota_coefficients'].double().sum()
+    if alpha_order and alpha_coordinates == 'geometric' and 'iota_coefficients' not in physics:
+        alpha_data = iota = None
+    else:
+        alpha_data = physics.get('alpha_angular_data')
+        if alpha_data is None:
+            alpha_data = alpha_angular_coefficients(physics['alpha_coefficients'], config)
+        iota = physics['iota_coefficients'].double().sum()
     phi = torch.arange(nphi, device=level.device, dtype=torch.float64) * (2 * math.pi / (config.nfp * nphi))
     theta = torch.arange(ntheta, device=level.device, dtype=torch.float64) * (2 * math.pi / ntheta)
     pp, tt = torch.meshgrid(phi, theta, indexing='ij')

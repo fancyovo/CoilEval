@@ -17,7 +17,10 @@
 using namespace coil_eval::pipeline;
 namespace {
 struct PsiFactorCapture {
-    PsiFactorCapture() { sgpu_set_psi_warm_preconditioner_capture(source_capture_only() ? 0 : 1); }
+    PsiFactorCapture() {
+        const bool values = source_capture_only() || g_reverse_capture_flags == SURFACE_GEOMETRY_VALUE;
+        sgpu_set_psi_warm_preconditioner_capture(values ? 0 : 1);
+    }
     ~PsiFactorCapture() { sgpu_set_psi_warm_preconditioner_capture(0); }
 };
 struct AlphaWeightingOverride {
@@ -189,7 +192,8 @@ extern "C" int sgpu_two_stage_resume_v1(
     double* iota_coefficients,int iota_capacity,int* iota_count,
     double* boundary_iota,const char* snapshot_directory
 ) {
-    if (source_capture_only()) g_reverse_snapshot.clear();
+    const bool geometry_only = surface_geometry_only();
+    if (source_capture_only() || geometry_only) g_reverse_snapshot.clear();
     if (!result) return 1;
     initialize_result(result,config ? config->device_id : -1);
     if (iota_count) *iota_count=0;
@@ -201,6 +205,8 @@ extern "C" int sgpu_two_stage_resume_v1(
     if (!validate_config(*config,reason)) return fail_result(result,reason.c_str());
     if (!(config->target_volume>0) || !std::isfinite(config->target_volume))
         return fail_result(result,"two-stage resume requires the requested positive target volume");
+    if (geometry_only && snapshot_directory && *snapshot_directory)
+        return fail_result(result,"target-surface geometry capture cannot write a volume snapshot");
     if (config->device_id!=ctx->config.device_id || config->segments_per_coil!=ctx->config.segments_per_coil ||
         config->psi_a!=ctx->config.psi_a || config->psi_poly_degree!=ctx->config.psi_poly_degree ||
         config->psi_m_tor!=ctx->config.psi_m_tor || coefficient_count!=static_cast<int>(ctx->first.coeffs.size()) ||
@@ -260,12 +266,17 @@ extern "C" int sgpu_two_stage_resume_v1(
         g_active_gradient_group=3;
         g_active_g2_cache=&cache;
         const bool ok=run_downstream_gpu(ctx->field,ctx->current.data(),ctx->coils,ctx->nfp,
-            ctx->axis,psi,screens,*config,*result,config->surface_selection_mode==0);
+            ctx->axis,psi,screens,*config,*result,config->surface_selection_mode==0,geometry_only);
         g_active_g2_cache=nullptr;
         g_active_gradient_group=0;
         cache.axis=ctx->axis;cache.psi=psi;cache.field=ctx->field;
         if (!ok) {if (result->status==SGPU_SCORE_INTERNAL_ERROR) code=1;break;}
         if (!cache.ready) {code=fail_result(result,"native downstream product capture missing");break;}
+        if (geometry_only) {
+            if (!capture_reverse_snapshot(cache,ctx->nfp,*config,*result))
+                code=fail_result(result,"two-stage target-surface geometry capture failed");
+            break;
+        }
         std::copy(cache.alpha.iota_coefficients.begin(),cache.alpha.iota_coefficients.end(),iota_coefficients);
         *iota_count=static_cast<int>(cache.alpha.iota_coefficients.size());
         *boundary_iota=g_boundary_iota;
@@ -280,7 +291,7 @@ extern "C" int sgpu_two_stage_resume_v1(
     g_active_gradient_group=0;
     fill_early_components(*config,coil,ctx->axis,psi,screens,*result);
     started=Clock::now();
-    finalize_score(*config,*result);
+    if (!geometry_only) finalize_score(*config,*result);
     result->timings[SGPU_SCORE_TIME_SCORE]=seconds_since(started);
     result->timings[SGPU_SCORE_TIME_TOTAL]=seconds_since(total);
     return code;
@@ -348,5 +359,27 @@ extern "C" int sgpu_two_stage_set_refit_ridge_v1(void* context,double ridge) {
     auto* ctx=static_cast<TwoStageNativeContextV1*>(context);
     if (!ctx || !std::isfinite(ridge) || ridge<0.) return 1;
     ctx->config.psi_ridge=ridge;
+    return 0;
+}
+
+// Exploration only. Python already owns the exported first fit, while this
+// context owns the field/axis and the basis for subsequent fits and resume.
+extern "C" int sgpu_two_stage_set_fit_basis_experimental_v1(
+    void* context, int degree, int mtor
+) {
+    auto* ctx=static_cast<TwoStageNativeContextV1*>(context);
+    if (!ctx) return 1;
+    auto config=ctx->config;
+    config.psi_poly_degree=degree;
+    config.psi_m_tor=mtor;
+    std::string reason;
+    if (!validate_config(config,reason)) {
+        sgpu_internal_set_error(reason.c_str());
+        return 1;
+    }
+    auto modes=build_psi_modes(degree,mtor);
+    ctx->first.coeffs.resize(modes.a.size());
+    ctx->first.modes=std::move(modes);
+    ctx->config=config;
     return 0;
 }

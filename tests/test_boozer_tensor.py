@@ -302,6 +302,16 @@ def test_target_alpha_source_recovers_values_and_derivatives(coordinates):
     assert len(solver['backward']) == 1 and solver['backward'][0]['gate_passed']
     expected_grad, = torch.autograd.grad(expected.square().mean()+p[2]**2, p)
     torch.testing.assert_close(actual_grad, expected_grad, atol=2e-9, rtol=1e-8)
+    if coordinates == 'geometric':
+        no_volume, no_volume_iota, no_volume_diagnostic = refine_surface_alpha(
+            geometry, p.new_tensor(.16), None, None, field, nfp=4, order=3,
+            nphi=17, ntheta=19, ridge=1e-13, coordinates=coordinates)
+        no_volume_value = fourier_values(no_volume, theta, phi)[0]
+        torch.testing.assert_close(no_volume_value, value, atol=0., rtol=0.)
+        torch.testing.assert_close(no_volume_iota, iota, atol=0., rtol=0.)
+        assert 'surface_alpha_previous_iota' not in no_volume_diagnostic
+        no_volume_grad, = torch.autograd.grad(no_volume_value.square().mean()+no_volume_iota**2, p)
+        torch.testing.assert_close(no_volume_grad, actual_grad, atol=0., rtol=0.)
 
 
 def test_ridge_least_squares_rank_two_reverse_matches_live_scaled_reference_and_fd():

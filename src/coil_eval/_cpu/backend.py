@@ -60,7 +60,7 @@ class CpuBackend:
         with thread_scope(self.threads):
             return self._capture(coils,config,axis_hint=axis_hint)
 
-    def _capture(self,coils,config,*,axis_hint=None):
+    def _capture(self,coils,config,*,axis_hint=None,geometry_only=False):
         start=perf_counter();timing={};diagnostics=dict(device='cpu',cpu_threads=self.threads,
             cpu_openmp=self.library.openmp_enabled,
             cpu_avx2=self.library.avx2_enabled,
@@ -158,6 +158,15 @@ class CpuBackend:
             derivative=polynomial(flux['coefficients']*torch.arange(1,len(flux['coefficients'])+1),fs,constant=True)
             if not bool((derivative*flux['edge_flux'].sign()>0).all()):
                 raise ValueError('calibrated flux derivative is not monotone over the fitted domain')
+            if geometry_only:
+                diagnostics.update(target_level=float(level),surface_volume=float(flux['surface_volume']),
+                    capture_kind='target_surface_geometry',psi_train_rms=factor['train_rms'])
+                timing['total']=perf_counter()-start
+                raw=dict(status='ok',diagnostics=diagnostics,timing=timing)
+                snapshot=dict(config=options,axis_samples=axis,psi_coefficients=coefficients,
+                    psi_scale=factor['scale'],psi_upper=factor['upper'],**target,score_result=raw)
+                if two is not None:snapshot['two_stage']=two
+                return raw,snapshot
             points,selection,sampling_info=stage('volume_points',lambda:formal_volume_points(geometry,level,flux,dcfg,cfg))
             diagnostics.update(sampling_info)
             B,gradient=stage('volume_field',lambda:field(points['xyz'],gradient=True))

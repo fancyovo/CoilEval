@@ -17,7 +17,8 @@ bool run_downstream_gpu(
     std::vector<SurfaceScreen>& screens,
     const SgpuScoreConfig& config,
     SgpuScoreResult& result,
-    bool verify_long_horizon = true
+    bool verify_long_horizon = true,
+    bool surface_geometry_only = false
 );
 
 

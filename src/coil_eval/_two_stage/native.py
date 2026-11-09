@@ -294,7 +294,7 @@ class TwoStageNative:
         prepared['native_source_capture']=source_native
         prepared['shared_snapshot_arrays']=({
             'psi_scale':prepared['s2_scale'],'psi_upper':prepared['s2_upper']}
-            if capture_mode=='reverse' else {})
+            if capture_mode in ('reverse','geometry_reverse') else {})
         prepared['shared_two_stage']=_shared_array_tree(dict(
             stage1_coefficients=prepared['first'],stage1_scale=prepared['s1_scale'],
             stage1_upper=prepared['s1_upper'],boundary=prepared['boundary'],sampling=prepared['sample']))
@@ -339,7 +339,7 @@ class TwoStageNative:
                     shared[name]=snapshot[name]
             snapshot.update(config=_config_dict(cfg),score_result=result)
             snapshot['config'].update(prepared['alpha_options'])
-            if capture_mode=='reverse':
+            if capture_mode in ('reverse','geometry_reverse'):
                 snapshot['psi_scale'],snapshot['psi_upper']=prepared['s2_scale'],prepared['s2_upper']
             snapshot['two_stage']=_shared_array_tree(prepared['shared_two_stage'])
             snapshot['metadata']=dict(capture_version=1,psi_fit_method='two_stage',
@@ -380,12 +380,14 @@ class TwoStageNative:
         from .._backend import _coil_arrays
         if isinstance(capture,(bool,np.bool_)):
             capture_mode='reverse' if capture else None
-        elif capture in ('reverse','sources'):
+        elif capture in ('reverse','sources','geometry','geometry_reverse'):
             capture_mode=capture
         else:
-            raise ValueError("capture must be a boolean, 'reverse' or 'sources'")
+            raise ValueError("capture must be a boolean, 'reverse', 'sources', 'geometry' or 'geometry_reverse'")
         if capture_mode=='sources' and diagnostics:
             raise ValueError('source-only capture does not include reverse diagnostics')
+        if capture_mode in ('geometry','geometry_reverse') and diagnostics:
+            raise ValueError('target-surface capture does not include volume reverse diagnostics')
         configs=list(configs)
         if not configs:
             self.last_many_timing=dict(query_count=0,completed_volumes=0,shared_preparation_s=0.,
@@ -418,8 +420,14 @@ class TwoStageNative:
                 capability.argtypes=[];capability.restype=ct.c_int
                 source_native=int(capability())>=1
             flag=4 if source_native else 3 if diagnostics else 1 if capture_mode is not None else 0
+            if capture_mode in ('geometry','geometry_reverse'):
+                capability=getattr(self.lib,'sgpu_surface_geometry_capture_version',None)
+                if capability is None or int(capability())<1:
+                    raise RuntimeError('native library does not support experimental target-surface capture')
+                flag=5 if capture_mode=='geometry' else 6
+            capture_factors=capture_mode in ('reverse','geometry_reverse')
             self._check(self.lib.sgpu_set_reverse_capture(flag))
-            prepared=self._prepare(coils,configs[0],native_configs[0],arrays,capture_mode=='reverse',timings)
+            prepared=self._prepare(coils,configs[0],native_configs[0],arrays,capture_factors,timings)
             prepared['nfp']=coils.nfp
             if capture_mode is not None and 'partial_result' not in prepared:
                 self._prepare_snapshot_arrays(prepared,capture_mode,source_native)
@@ -431,7 +439,7 @@ class TwoStageNative:
             else:
                 for config,cfg in zip(configs,native_configs):
                     tick=perf_counter();local_timing={}
-                    selected=self._prepare_target(prepared,config,cfg,capture_mode=='reverse',local_timing)
+                    selected=self._prepare_target(prepared,config,cfg,capture_factors,local_timing)
                     if selected is not prepared and capture_mode is not None:
                         self._prepare_snapshot_arrays(selected,capture_mode,source_native)
                     target_times.append(perf_counter()-tick if selected is not prepared else 0.)

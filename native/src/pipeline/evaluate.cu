@@ -27,7 +27,8 @@ bool run_downstream_gpu(
     std::vector<SurfaceScreen>& screens,
     const SgpuScoreConfig& config,
     SgpuScoreResult& result,
-    bool verify_long_horizon
+    bool verify_long_horizon,
+    bool surface_geometry_only
 ) {
     DevicePsiData device_psi;
     if (!upload_psi_data(psi, axis, device_psi)) {
@@ -184,6 +185,16 @@ bool run_downstream_gpu(
     if (!flux_ok) {
         result.status = SGPU_SCORE_FLUX_REJECTED;
         return false;
+    }
+    if (surface_geometry_only) {
+        if (!g_active_g2_cache) {
+            fail_result(&result, "target-surface geometry capture requires an owned cache");
+            return false;
+        }
+        g_active_g2_cache->reverse_flux_coefficients = std::move(flux.coefficients);
+        g_active_g2_cache->ready = true;
+        result.status = SGPU_SCORE_OK;
+        return true;
     }
 
     DeviceVolumePoints points;

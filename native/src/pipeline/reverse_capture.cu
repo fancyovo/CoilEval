@@ -97,13 +97,9 @@ bool capture_source_snapshot(const FixedFrontG2Cache& cache, int nfp,
     return true;
 }
 
-bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
-                              const SgpuScoreConfig& config, const SgpuScoreResult& result) {
-    if (source_capture_only()) return capture_source_snapshot(cache,nfp,config,result);
-    std::vector<ReverseCapturedArray> arrays;
+static void capture_psi_geometry(std::vector<ReverseCapturedArray>& arrays,
+                                 const FixedFrontG2Cache& cache, int nfp) {
     const int na = static_cast<int>(cache.axis.R.size());
-    const int np = static_cast<int>(cache.psi.coeffs.size());
-    const int nc = cache.alpha.column_count;
     reverse_scalar(arrays, "capture_version", 1);
     reverse_scalar(arrays, "nfp", nfp);
     reverse_add(arrays, "axis_R", cache.axis.R);
@@ -123,6 +119,67 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
     reverse_add(arrays, "psi_mode_b", cache.psi.modes.b);
     reverse_add(arrays, "psi_mode_m", cache.psi.modes.m);
     reverse_add(arrays, "psi_mode_kind", cache.psi.modes.kind);
+}
+
+static bool capture_target_adjoint(std::vector<ReverseCapturedArray>& arrays,
+                                   const FixedFrontG2Cache& cache, int nfp,
+                                   const SgpuScoreConfig& config, const SgpuScoreResult& result) {
+    const int np = static_cast<int>(cache.psi.coeffs.size());
+    // Populate through the exact same GPU contraction used by the local
+    // fast oracle. This also preserves its signed quadrature residual.
+    std::vector<AxisData> axes{cache.axis};
+    std::vector<double> predicted_levels(1);
+    if (!predict_target_levels_gpu(axes, cache.psi.modes, cache.psi.coeffs.data(), np,
+                                   nfp, config, result, predicted_levels)) return false;
+    const auto& target = g_target_volume_cache;
+    reverse_scalar(arrays, "target_level", target.level);
+    reverse_scalar(arrays, "target_dVds", target.dVds);
+    reverse_scalar(arrays, "target_volume", target.volume);
+    reverse_scalar(arrays, "target_requested_volume", target.target);
+    reverse_scalar(arrays, "target_adjoint_residual", target.adjoint_residual);
+    reverse_scalar(arrays, "target_center_predicted_level", predicted_levels[0]);
+    reverse_add(arrays, "target_adjoint_weights", target.adjoint_weights);
+    reverse_add(arrays, "target_axis_weights", target.axis_weights);
+    reverse_add(arrays, "target_reference_coefficients", target.coefficients);
+    std::vector<double> axis_R(config.flux_phi_count), axis_Z(axis_R.size()), phi(axis_R.size());
+    for (int i = 0; i < config.flux_phi_count; ++i) {
+        const auto& ray = target.geometry.rays[static_cast<size_t>(i) * config.flux_theta_count];
+        axis_R[i] = ray.R; axis_Z[i] = ray.Z; phi[i] = ray.phi;
+    }
+    reverse_add(arrays, "target_axis_R", axis_R);
+    reverse_add(arrays, "target_axis_Z", axis_Z);
+    reverse_add(arrays, "target_phi", phi);
+    return true;
+}
+
+static bool capture_surface_geometry_snapshot(const FixedFrontG2Cache& cache, int nfp,
+                                              const SgpuScoreConfig& config,
+                                              const SgpuScoreResult& result) {
+    const auto& target = g_target_volume_cache;
+    if (!cache.ready || target.id == 0 || target.id != result.target_volume_cache_id ||
+        target.target != config.target_volume || target.coefficients != cache.psi.coeffs) {
+        sgpu_internal_set_error("target-surface capture differs from the selected volume");
+        return false;
+    }
+    std::vector<ReverseCapturedArray> arrays;
+    capture_psi_geometry(arrays,cache,nfp);
+    if (g_reverse_capture_flags == SURFACE_GEOMETRY_REVERSE) {
+        if (!capture_target_adjoint(arrays,cache,nfp,config,result)) return false;
+    } else {
+        reverse_scalar(arrays,"target_level",target.level);
+    }
+    g_reverse_snapshot.swap(arrays);
+    return true;
+}
+
+bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
+                              const SgpuScoreConfig& config, const SgpuScoreResult& result) {
+    if (source_capture_only()) return capture_source_snapshot(cache,nfp,config,result);
+    if (surface_geometry_only()) return capture_surface_geometry_snapshot(cache,nfp,config,result);
+    std::vector<ReverseCapturedArray> arrays;
+    const int np = static_cast<int>(cache.psi.coeffs.size());
+    const int nc = cache.alpha.column_count;
+    capture_psi_geometry(arrays,cache,nfp);
     std::vector<double> psi_upper(static_cast<size_t>(np) * np), psi_scale(np);
     if (sgpu_copy_psi_warm_preconditioner(psi_upper.data(), psi_scale.data(), np)) return false;
     reverse_add(arrays, "psi_upper", psi_upper, {np, np});
@@ -180,30 +237,8 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
         else if (!reverse_device(arrays, "volume_source_indices", points.source_indices)) return false;
     }
     if (config.target_volume > 0.0) {
-        // Populate through the exact same GPU contraction used by the local
-        // fast oracle. This also preserves its signed quadrature residual.
-        std::vector<AxisData> axes{cache.axis};
-        std::vector<double> predicted_levels(1);
-        if (!predict_target_levels_gpu(axes, cache.psi.modes, cache.psi.coeffs.data(), np,
-                                       nfp, config, result, predicted_levels)) return false;
+        if (!capture_target_adjoint(arrays,cache,nfp,config,result)) return false;
         const auto& target = g_target_volume_cache;
-        reverse_scalar(arrays, "target_level", target.level);
-        reverse_scalar(arrays, "target_dVds", target.dVds);
-        reverse_scalar(arrays, "target_volume", target.volume);
-        reverse_scalar(arrays, "target_requested_volume", target.target);
-        reverse_scalar(arrays, "target_adjoint_residual", target.adjoint_residual);
-        reverse_scalar(arrays, "target_center_predicted_level", predicted_levels[0]);
-        reverse_add(arrays, "target_adjoint_weights", target.adjoint_weights);
-        reverse_add(arrays, "target_axis_weights", target.axis_weights);
-        reverse_add(arrays, "target_reference_coefficients", target.coefficients);
-        std::vector<double> axis_R(config.flux_phi_count), axis_Z(axis_R.size()), phi(axis_R.size());
-        for (int i = 0; i < config.flux_phi_count; ++i) {
-            const auto& ray = target.geometry.rays[static_cast<size_t>(i) * config.flux_theta_count];
-            axis_R[i] = ray.R; axis_Z[i] = ray.Z; phi[i] = ray.phi;
-        }
-        reverse_add(arrays, "target_axis_R", axis_R);
-        reverse_add(arrays, "target_axis_Z", axis_Z);
-        reverse_add(arrays, "target_phi", phi);
         if (g_reverse_capture_flags & 2)
             reverse_add(arrays, "target_radii", target.radii, {config.flux_phi_count, config.flux_theta_count});
     }
@@ -248,8 +283,9 @@ bool capture_reverse_snapshot(const FixedFrontG2Cache& cache, int nfp,
 using namespace coil_eval::pipeline;
 extern "C" {
 int sgpu_set_reverse_capture(int flags) {
-    if (flags != 0 && flags != 1 && flags != 3 && flags != SOURCE_CAPTURE_ONLY) {
-        sgpu_internal_set_error("reverse capture flags must be 0, 1, 3 or 4");
+    if (flags != 0 && flags != 1 && flags != 3 && flags != SOURCE_CAPTURE_ONLY &&
+        flags != SURFACE_GEOMETRY_VALUE && flags != SURFACE_GEOMETRY_REVERSE) {
+        sgpu_internal_set_error("reverse capture flags must be 0, 1, 3, 4, 5 or 6");
         return 1;
     }
     g_reverse_capture_flags = flags;
@@ -258,6 +294,7 @@ int sgpu_set_reverse_capture(int flags) {
 }
 
 int sgpu_source_capture_version() { return 1; }
+int sgpu_surface_geometry_capture_version() { return 1; }
 
 int sgpu_reverse_capture_array_count() {
     return static_cast<int>(g_reverse_snapshot.size());
