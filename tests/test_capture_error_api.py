@@ -59,3 +59,16 @@ def test_native_error_query_identity(tensor_api, factory, monkeypatch, pipeline)
     assert len(began) == 2
     assert sum(name == 'close' for name, _ in library.calls) == 2
     assert library.flags[-1] == 0
+
+
+def test_pipelined_target_failure_names_scalar_fit(tensor_api, monkeypatch):
+    torch, _, evaluator, _ = tensor_api
+    failure = dict(status='no_surface', diagnostics=dict(
+        failure_stage='s_target_surface', error_message='scalar fit 2 is radially nonmonotone'))
+    monkeypatch.setattr(capture_batch, 'capture_two_stage_batch',
+                        lambda *args, **kwargs: ([(failure, None), (failure, None)], {}))
+    tokens = torch.ones((2, 4, 10), dtype=torch.float64)
+    with evaluator(capture_pipeline=True, share_geometry=False) as engine:
+        engine.config = replace(engine.config, psi_fit='two_stage')
+        with pytest.raises(InvalidEvaluationError, match=r'geometry 0: no_surface\. scalar fit 2 is radially nonmonotone'):
+            engine.evaluate_batch(tokens)

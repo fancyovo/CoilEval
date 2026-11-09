@@ -101,14 +101,18 @@ class CpuBackend:
             two=None
             if config.psi_fit=='two_stage':
                 from .._two_stage.model import PsiModel
-                from .._two_stage.boundary import max_closed_boundary
+                from .._two_stage.boundary import MaxClosedBoundaryError, max_closed_boundary
+                from .._two_stage.target_failure import training_domain_error
                 from .._two_stage.sampling import sample_frozen_sections
                 from .._two_stage.quadrature import sample_polar_quadrature
                 model=PsiModel(coefficients,axis,nfp=coils.nfp,a=cfg.psi_a,
                     degree=cfg.psi_poly_degree,mtor=cfg.psi_m_tor)
                 phis=np.arange(cfg.psi_n_phi)*2*np.pi/(coils.nfp*cfg.psi_n_phi)
                 status='no_surface'
-                boundary=stage('refit_boundary',lambda:max_closed_boundary(model,phis,ntheta=256,max_radius=cfg.psi_a))
+                try:
+                    boundary=stage('refit_boundary',lambda:max_closed_boundary(model,phis,ntheta=256,max_radius=cfg.psi_a))
+                except MaxClosedBoundaryError as error:
+                    raise training_domain_error(error, 1) from error
                 sample=stage('refit_points',lambda:sample_polar_quadrature(boundary,
                     target_count=config.psi_refit_points,nfp=coils.nfp) if config.psi_refit_sampling=='polar_quadrature'
                     else sample_frozen_sections(boundary['polygons_rz'],phis,
@@ -144,7 +148,8 @@ class CpuBackend:
                 maximum_radius_scale=cfg.surface_max_radius_scale,root_iterations=cfg.surface_newton_iters,
                 root_tolerance=cfg.surface_newton_tolerance)
             status='no_surface'
-            level,target,target_info=stage('target_volume',lambda:target_surface(geometry,cfg,self.library))
+            level,target,target_info=stage('target_volume',lambda:target_surface(
+                geometry,cfg,self.library,fit_stage=diagnostics['psi_fit_stages']))
             diagnostics.update(target_info)
             dcfg=DownstreamConfig.from_mapping({**options,'stokes_flux':False})
             status='flux_rejected'
@@ -200,6 +205,7 @@ class CpuBackend:
             if two is not None:snapshot['two_stage']=two
             return raw,snapshot
         except (ValueError,RuntimeError) as error:
+            diagnostics.update(getattr(error, 'diagnostics', {}))
             diagnostics['error_message']=str(error);timing['total']=perf_counter()-start
             return dict(status=status,diagnostics=diagnostics,timing=timing),None
         finally:

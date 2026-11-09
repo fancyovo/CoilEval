@@ -242,6 +242,15 @@ QA `helicity=(1,0)`。与原生结果比较时，应为对应参考路径选择�
 角度反解与径向采样保留折叠拒绝，并选择轴连通首支；后支上的小残差不足以接受该根。
 原生 Bernstein 证书会保守拒绝部分不翻号的平坦点，多项式根隔离路径可能解析这些点。
 两条路径在共同可用域上保持首支一致。
+标量几何诊断包含拟合次数 `psi_fit_stage` 和失败阶段 `failure_stage`。
+`s_training_domain` 表示第一次拟合无法为第二次拟合提供闭合区域。
+`s_target_surface` 表示未能选出所需体积的面。`failure_reason` 区分近轴向外下降
+（`s_near_axis_nonmonotone`）、径向折返限制容量（`s_radial_fold_capacity`）、
+达到搜索半径上限（`s_radius_cap_capacity`）和容量足够但体积反解失败
+（`target_volume_inverse_failed_within_capacity`）。若取样检查无法确定具体原因，
+则报告 `s_radial_branch_uncertified`。可计算时，`target_branch_diagnostic`
+记录限制容量的射线及体积。这些检查描述取样射线上的拟合标量。
+
 原生目标体积的正向精度校验也沿用 `flux_rejected` 状态。此时 `failure_reason`
 为 `target_volume_forward_precision_exceeded`，`failure_stage` 为
 `target_volume_forward_validation`；数值状态保持兼容。

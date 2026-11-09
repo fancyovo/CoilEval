@@ -26,6 +26,14 @@ from ._tensor_config import validate_tensor_config, validate_tensor_batch_config
 from ._autograd.axis_batch import prepare_axis_batch
 
 
+def _capture_failure(raw):
+    status = raw['status']
+    diagnostics = raw.get('diagnostics', {})
+    if diagnostics.get('failure_stage') == 's_target_surface' and diagnostics.get('error_message'):
+        return f'{status}. {diagnostics["error_message"]}'
+    return status
+
+
 def pack_coils(coils: CoilSet, *, device='cuda:0', dtype=torch.float64):
     """Pack basic coils as physical [coil, x/y/z coefficients + I].
 
@@ -146,7 +154,7 @@ class TensorEvaluator:
             result,snapshot=TwoStageNative(self.library_path,self.device.index).evaluate(
                 coils,config,capture=True,include_torsion=False)
             if snapshot is None:
-                raise native.GpuError(f'two-stage center is not valid: {result["status"]}')
+                raise native.GpuError(f'two-stage center is not valid: {_capture_failure(result)}')
             return snapshot
         batch = native.BatchCoilFieldGpu(self.library_path, *(a[None] for a in arrays),
                                          nfp=nfp, device_id=self.device.index)
@@ -292,7 +300,7 @@ class TensorEvaluator:
                     raise InvalidEvaluationError(f'batched center capture: {exc}') from exc
                 for i, (raw, snapshot) in enumerate(pairs):
                     if snapshot is None or raw['status'] != 'ok':
-                        raise InvalidEvaluationError(f'geometry {i}: {raw["status"]}')
+                        raise InvalidEvaluationError(f'geometry {i}: {_capture_failure(raw)}')
                     captures[i] = snapshot
                 capture_metadata['pipeline'] = pipeline
             from contextlib import nullcontext
@@ -309,7 +317,7 @@ class TensorEvaluator:
                                 raise InvalidEvaluationError('two-stage capture returned an incomplete query group')
                             for k,(raw,snapshot) in zip(group,results):
                                 if snapshot is None or raw['status']!='ok':
-                                    raise InvalidEvaluationError(f'geometry {k}: {raw["status"]}')
+                                    raise InvalidEvaluationError(f'geometry {k}: {_capture_failure(raw)}')
                                 captures[k]=snapshot
                         else:
                             captures[i]=self._capture(host[i],configs[i])

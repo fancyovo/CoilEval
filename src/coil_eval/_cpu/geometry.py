@@ -7,7 +7,7 @@ from .._autograd.front import monomials, _trig
 from .._autograd.downstream import polynomial
 
 
-def target_surface(geometry, cfg, library):
+def target_surface(geometry, cfg, library, *, fit_stage=1):
     # Match the native sampled guard; a resolved psi Fourier series does not
     # make the nonlinear radial-capacity envelope band limited to that order.
     n=cfg.flux_phi_count; guard=max(2*cfg.psi_n_phi,4*cfg.psi_m_tor+1)
@@ -22,7 +22,15 @@ def target_surface(geometry, cfg, library):
         len(phi),n,len(theta),geometry.degree,geometry.a,cfg.surface_max_radius_scale,
         cfg.target_volume,cfg.target_volume_relative_tolerance,pointer(out),pointer(radii))
     if code:
-        raise ValueError(f'target volume is outside the closed surface capacity ({out[0]:.9g} m^3)')
+        from .._two_stage.boundary import MaxClosedBoundaryError
+        from .._two_stage.model import PsiModel
+        from .._two_stage.target_failure import explain_target_failure
+        model=PsiModel(geometry.coefficients.numpy(),geometry.axis_samples.numpy(),nfp=geometry.nfp,
+                       a=geometry.a,degree=geometry.degree,mtor=geometry.mtor)
+        diagnostics=dict(error_message=f'target volume is outside the closed surface capacity ({out[0]:.9g} m^3)',
+                         target_volume_requested=cfg.target_volume,target_volume_maximum=out[0])
+        explain_target_failure(diagnostics,model,cfg,fit_stage,force_guard=True)
+        raise MaxClosedBoundaryError(diagnostics['error_message'],diagnostics)
     level=out[2];ph=torch.from_numpy(phi[:n])[:,None];th=torch.from_numpy(theta)[None,:]
     r=torch.from_numpy(radii);R=ar[:n,None]+r*th.cos();Z=az[:n,None]+r*th.sin()
     s,gr,gz,_=geometry.psi_eval(R,Z,ph)

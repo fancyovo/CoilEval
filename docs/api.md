@@ -294,6 +294,18 @@ the axis-connected first branch; a small residual at a later root is insufficien
 Native Bernstein certificates can conservatively reject a non-sign-changing
 flat point that the polynomial root-isolation path can resolve. First-branch
 agreement applies on their common usable domain.
+
+Scalar-geometry diagnostics include `psi_fit_stage` and `failure_stage`.
+`s_training_domain` means the first fit could not supply a closed region for
+the second fit. `s_target_surface` means that selection of the requested volume
+failed. The corresponding `failure_reason` distinguishes an outward decrease
+near the axis (`s_near_axis_nonmonotone`), a radial turn that limits the volume
+(`s_radial_fold_capacity`), a search radius limit (`s_radius_cap_capacity`),
+and a volume solve that failed within capacity (`target_volume_inverse_failed_within_capacity`).
+`s_radial_branch_uncertified` means the sampled check did not resolve a cause.
+When available, `target_branch_diagnostic` records the limiting ray and its
+capacity. These tests describe the fitted surface label on the sampled rays.
+
 The legacy `flux_rejected` status is also used by native target-volume forward
 validation. For that condition, `failure_reason` is
 `target_volume_forward_precision_exceeded` and `failure_stage` is

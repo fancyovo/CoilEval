@@ -51,6 +51,8 @@ Entries describe historical versions; defaults in an entry apply to that version
 - Document explicit CPU and CUDA 12.8 PyTorch builds for the installation paths.
 - Report PyTorch CUDA initialization, visible-device selection and tensor shape errors separately.
 - Use one device index for Example2's GPU evaluator and tensors.
+- Distinguish first-fit training-domain errors from target-volume failures, with
+  separate diagnostics for radial folds, radius limits and inverse solve failure.
 
 ## 0.11.1 (preview candidate)
 

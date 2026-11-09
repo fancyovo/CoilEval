@@ -9,8 +9,9 @@ import numpy as np
 from .. import _binding as native
 from .._autograd.capture import _bind as bind_capture, copy_reverse_snapshot, _config_dict
 from .model import PsiModel
-from .boundary import max_closed_boundary
+from .boundary import MaxClosedBoundaryError, max_closed_boundary
 from .sampling import sample_frozen_sections
+from .target_failure import explain_target_failure, training_domain_error
 
 _D=ct.POINTER(ct.c_double)
 _I=ct.POINTER(ct.c_int)
@@ -184,7 +185,10 @@ class TwoStageNative:
                        degree=cfg.psi_poly_degree,mtor=cfg.psi_m_tor)
         phis=np.arange(cfg.psi_n_phi)*2*np.pi/(coils.nfp*cfg.psi_n_phi)
         stage=perf_counter()
-        boundary=max_closed_boundary(model,phis,ntheta=256,max_radius=cfg.psi_a)
+        try:
+            boundary=max_closed_boundary(model,phis,ntheta=256,max_radius=cfg.psi_a)
+        except MaxClosedBoundaryError as error:
+            raise training_domain_error(error, 1) from error
         timings['training_boundary']=perf_counter()-stage
         stage=perf_counter()
         if getattr(config,'psi_refit_sampling','cartesian')=='polar_quadrature':
@@ -321,6 +325,15 @@ class TwoStageNative:
             psi_refit_domain_volume=prepared['boundary']['volume_m3'],
             psi_refit_training_count=prepared['training_count'],psi_refit_branch=deepcopy(prepared['branch']))
         result['diagnostics']['psi_fit_stages']=3 if 'target_refit' in prepared else 2
+        diag = result['diagnostics']
+        if result['status']=='no_surface' and diag.get('target_volume_requested', 0.) > 0.:
+            message = diag.get('native_error_message', diag['error_message'])
+            if message in ('target volume outside certified geometry domain or inverse solve failed',
+                           'no certified star-shaped nested psi branch on geometry grid',
+                           'no nested psi branch on toroidal capacity guard grid'):
+                model=PsiModel(coefficients,prepared['axis'],nfp=prepared['nfp'],a=cfg.psi_a,
+                    degree=cfg.psi_poly_degree,mtor=cfg.psi_m_tor)
+                explain_target_failure(diag, model, cfg, diag['psi_fit_stages'])
         if 'target_refit' in prepared:
             result['diagnostics']['psi_target_refit_domain']=dict(
                 prepared['target_refit']['boundary']['diagnostics'],
