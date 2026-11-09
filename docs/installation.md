@@ -1,19 +1,22 @@
 # Installation
 
-Version 0.11.1 is unreleased. The commands below install the supplied binary wheel.
+Version 0.11.2 is unreleased. The commands below install the supplied binary wheel.
 The accompanying source archive includes the examples and development files.
 
 [简体中文](installation.zh-CN.md)
 
 
-A wheel (`.whl`) is a built Python distribution; an sdist (`.tar.gz`) contains source. Extras are optional dependency groups such as `[cpu]`; selecting that extra does not select a CPU build of PyTorch. CUDA is NVIDIA’s GPU computing platform and nvcc its compiler; prebuilt wheels normally require the corresponding runtime libraries and driver.
+A wheel (`.whl`) is a built Python distribution. An sdist (`.tar.gz`) contains source.
+Extras are optional dependency groups such as `[cpu]`. Select the PyTorch build
+with the commands below. CUDA is NVIDIA’s GPU computing platform. Running a
+prebuilt GPU wheel requires the corresponding runtime libraries and driver.
 
 ## Binary wheel
 
 Create or activate a Python 3.10+ environment, then install the supplied wheel:
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 The `gpu` extra installs a matched, version-pinned CUDA 12.8 runtime set.
@@ -43,8 +46,8 @@ CPU PyTorch distribution; the second installs CoilEval and all remaining
 CPU requirements automatically.
 
 ```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 python examples/cpu.py
 ```
 
@@ -77,7 +80,7 @@ libraries and OpenMP runtime; installing it requires no C++, CMake or nvcc.
 For an existing installation missing CPU dependencies, run:
 
 ```sh
-python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
 python -m pip install "scipy>=1.10" "threadpoolctl>=3"
 python -m pip check
 ```
@@ -89,27 +92,37 @@ for the example. Third-party binary wheels must support that Python version.
 
 ## PyTorch
 
-For the validated GPU setup, use Python 3.10–3.13 and install CUDA 12.8
-PyTorch in the same environment:
+The validated CPU and CUDA 12.8 PyTorch builds are available for Python 3.10–3.13.
+For GPU tensors and gradients, select the CUDA 12.8 build in the same environment.
 
 ```sh
-python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install "torch==2.7.1+cu128" --index-url https://download.pytorch.org/whl/cu128
 python examples/autograd.py
 python examples/batch.py
 ```
 
-The examples are included in the source archive and checkout. `coil_eval.torch` is optional;
-ordinary `coil_eval` imports use NumPy. A newer PyTorch release can also be
-used when its Python/CUDA wheels and runtime dependency versions are compatible
-with the selected environment. CPU installation selects a compatible release
-from the CPU index instead of pinning this older GPU build.
+The suffix in `2.7.1+cpu` or `2.7.1+cu128` selects a specific build. A requirement
+of `torch==2.7.1` also accepts an existing build with either suffix. For other
+Python versions, select a compatible build from the corresponding PyTorch index
+and check its runtime requirements. The examples are in the source archive and
+checkout. Ordinary `coil_eval` imports use NumPy. `coil_eval.torch` is optional.
+
+Check the PyTorch version and CUDA build in the environment used to run the example.
+
+```sh
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
+python -m pip check
+```
+
+For the CPU build, `torch.version.cuda` reports `None`. For the GPU setup,
+expect `12.8` and `True` when a supported GPU is visible and its driver works.
 
 ## Simsopt
 
 For the optional surface workflow, install the wheel with its `simsopt` extra:
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 This installs Simsopt and SciPy. The [Simsopt guide](simsopt.md) shows GPU
@@ -120,7 +133,7 @@ initialization and CPU-only surface solves.
 With a C++17 compiler and CMake 3.22+, build a CPU-only wheel:
 
 ```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
 python -m pip install ".[cpu]" --config-settings=cmake.define.COIL_EVAL_BUILD_CUDA=OFF
 ```
 
@@ -165,6 +178,9 @@ configured toolkits, including the CUDA 13 build used in earlier releases.
 - **Driver or kernel compatibility error:** compare the driver and GPU with the
   table above. `nvidia-smi` reports driver capability; `nvcc --version` reports
   the separately installed compiler.
+- **PyTorch fails to initialize CUDA:** check `torch.version.cuda` in the example's
+  Python environment. If the installed build requires a newer driver, select the
+  CUDA 12.8 build above and check that the existing driver supports CUDA 12.8.
 
 In the architecture table, sm_XX identifies a GPU architecture target and PTX is intermediate code compiled by the driver. OpenMP supplies CPU parallel execution. f_B/f_T are quasisymmetry-error metrics (field strength depending on one helical angle), using Fourier content and a field-derivative triple product respectively.
 

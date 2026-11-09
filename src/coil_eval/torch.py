@@ -5,7 +5,7 @@ import threading
 import time
 import json
 import numpy as np
-from ._dependencies import require_dependencies
+from ._dependencies import require_dependencies, require_torch_cuda
 require_dependencies('torch')
 import torch
 
@@ -33,6 +33,10 @@ def pack_coils(coils: CoilSet, *, device='cuda:0', dtype=torch.float64):
     """
     if not isinstance(coils, CoilSet):
         raise TypeError('coils must be a CoilSet')
+    if device is not None:
+        device = torch.device(device)
+        if device.type == 'cuda':
+            require_torch_cuda(torch, device)
     values = np.concatenate((coils.coeffs_x, coils.coeffs_y, coils.coeffs_z,
                              coils.currents_a[:, None]), axis=1)
     return torch.tensor(values, device=device, dtype=dtype)
@@ -199,13 +203,22 @@ class TensorEvaluator:
         if _flux_choice is not None:
             if _snapshots is None or not _local_value or _flux_choice.get('method') not in {'stokes','area'}:
                 raise ValueError('a frozen flux choice requires captured local endpoints and an integration method')
-        x = parameters if isinstance(parameters, torch.Tensor) else torch.as_tensor(
-            parameters, device=self.device, dtype=torch.float64)
+        if isinstance(parameters, torch.Tensor):
+            x = parameters
+        else:
+            if self.device.type == 'cuda':
+                require_torch_cuda(torch, self.device)
+            x = torch.as_tensor(parameters, device=self.device, dtype=torch.float64)
+        if x.device != self.device:
+            raise ValueError(
+                f'parameters are on {x.device}, but this evaluator uses {self.device}. '
+                'Match pack_coils(device=...) to the evaluator device_id.'
+            )
         wanted_ndim = 3 if batch else 2
         width=x.shape[-1] if x.ndim else 0
-        if (x.device != self.device or x.ndim != wanted_ndim or x.shape[-2] < 1 or
+        if (x.ndim != wanted_ndim or x.shape[-2] < 1 or
                 width<10 or (width-1)%3 or ((width-1)//3)%2!=1 or x.numel() == 0):
-            raise ValueError('parameters require nonempty coils with XYZ odd Fourier widths plus a current on the evaluator GPU')
+            raise ValueError('parameters require nonempty coils with XYZ odd Fourier widths plus a current')
         if x.dtype not in (torch.float32, torch.float64) or not bool(torch.isfinite(x).all()):
             raise ValueError('parameters must be finite float32 or float64 physical values')
         if not _parameter_grad:

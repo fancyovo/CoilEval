@@ -16,8 +16,8 @@ Boozer-coordinate implementation.
 Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel (a prebuilt Python installation package):
 
 ```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Replace the wheel filename with the supplied file. CPU evaluation loads

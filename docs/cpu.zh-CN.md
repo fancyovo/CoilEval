@@ -15,8 +15,8 @@ CPU 后端沿用 GPU 后端的线圈离散、磁轴搜索策略、拟合基函�
 先安装 CPU 版 PyTorch，再安装 CoilEval wheel（免本地编译的 Python 安装包）和 CPU 依赖：
 
 ```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 请将 wheel 文件名换成实际收到的文件。CPU 求值加载 `libcoil_eval_cpu.so`，

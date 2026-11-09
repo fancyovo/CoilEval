@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,6 +26,7 @@ def test_cpu_missing_dependencies_are_reported_together(monkeypatch, missing, fa
     assert '.whl[cpu]' in text and 'same Python environment' in text
     if 'torch' in missing:
         assert 'https://download.pytorch.org/whl/cpu' in text
+        assert 'torch==2.7.1+cpu' in text
     assert error.value.name in missing
 
 
@@ -75,8 +77,32 @@ except ModuleNotFoundError as error:
     assert error.name == 'torch'
     assert '.whl[torch]' in str(error)
     assert 'CUDA 12.8' in str(error)
+    assert 'torch==2.7.1+cu128' in str(error)
 else:
     raise AssertionError('expected missing dependency')
 '''
     env = {**os.environ, 'PYTHONPATH': str(Path(coil_eval.__file__).resolve().parent.parent)}
     subprocess.run([sys.executable, '-c', code], env=env, check=True)
+
+
+def test_torch_cuda_driver_error_preserves_reason_and_build():
+    original = RuntimeError('driver is too old (found version 12080)')
+
+    def init():
+        raise original
+
+    torch = SimpleNamespace(version=SimpleNamespace(cuda='13.0'), __version__='2.11.0+cu130',
+                            cuda=SimpleNamespace(init=init))
+    with pytest.raises(RuntimeError) as error:
+        _dependencies.require_torch_cuda(torch, 'cuda:0')
+    assert error.value.__cause__ is original
+    for detail in ('2.11.0+cu130', '12080', 'torch==2.7.1+cu128'):
+        assert detail in str(error.value)
+
+
+def test_torch_cuda_reports_masked_device_ordinal():
+    torch = SimpleNamespace(version=SimpleNamespace(cuda='12.8'), __version__='2.7.1+cu128',
+                            cuda=SimpleNamespace(init=lambda: None, device_count=lambda: 1))
+    device = SimpleNamespace(index=2)
+    with pytest.raises(ValueError, match='only 1 CUDA device.*CUDA_VISIBLE_DEVICES'):
+        _dependencies.require_torch_cuda(torch, device)

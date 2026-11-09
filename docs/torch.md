@@ -61,6 +61,11 @@ followed by its current. Order 4 gives `(nc,28)`; order 16 gives `(nc,100)`.
 Coordinates use metres and currents use amperes.
 The NumPy `parameter_vector()` retains its coordinate-major flat layout.
 
+To use the third GPU visible to the process, pass `device='cuda:2'` to
+`pack_coils` and `device_id=2` to `TensorEvaluator`. If you launch with
+`CUDA_VISIBLE_DEVICES=2`, that GPU appears inside the process as `cuda:0`.
+Example2 uses its editable `DEVICE_ID` setting for both the evaluator and its tensors.
+
 The Tensor API supports any positive integer `nfp`, any positive basic-coil
 count and explicit helicity `(M,N)` with nonzero `M`. Stellarator symmetry is
 required. Set `TensorEvaluator(nfp=coils.nfp, ...)`: tensor values do not encode

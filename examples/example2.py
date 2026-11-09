@@ -15,6 +15,7 @@ from coil_eval.torch import TensorEvaluator, pack_coils
 # Edit these settings directly. Coordinates are metres; currents are amperes.
 COILS = Path(__file__).parent / "preview" / "example1.json"
 DEVICE = "cuda"                 # Change to "cpu" for a slower CPU run
+DEVICE_ID = 0                    # CUDA ordinal within the GPUs visible to this process
 THREADS = 8
 TARGET_VOLUME = 0.3
 FITTING_RADIUS = math.sqrt(0.06)
@@ -51,13 +52,14 @@ def describe(m):
 def main():
     started = perf_counter()
     coils = CoilSet.read_json(COILS)
-    base = pack_coils(coils, device=DEVICE)
+    tensor_device = f"cuda:{DEVICE_ID}" if DEVICE == "cuda" else DEVICE
+    base = pack_coils(coils, device=tensor_device)
     config = EvaluationConfig(
         target_volume=TARGET_VOLUME, psi_a=FITTING_RADIUS, helicity=HELICITY,
     )
     rng = np.random.default_rng(SEED)
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    with TensorEvaluator(config=config, nfp=coils.nfp, device=DEVICE,
+    with TensorEvaluator(config=config, nfp=coils.nfp, device=DEVICE, device_id=DEVICE_ID,
                          threads=THREADS if DEVICE == "cpu" else None) as evaluator:
         # Screen one candidate at a time so each result is immediately visible.
         print(f"Screening {N_STARTS} starts with {NOISE:.1%} coefficient noise...", flush=True)
@@ -65,7 +67,7 @@ def main():
         for index in range(N_STARTS):
             tick = perf_counter()
             candidate = base.clone()
-            noise = torch.as_tensor(rng.standard_normal(base[:, :-1].shape), device=DEVICE)
+            noise = torch.as_tensor(rng.standard_normal(base[:, :-1].shape), device=tensor_device)
             candidate[:, :-1] *= torch.exp(math.log1p(NOISE) * noise) # Currents unchanged
             try:
                 metrics = evaluator.evaluate(candidate).metrics
@@ -89,7 +91,7 @@ def main():
         scale[:, -1] = CURRENT_SCALE
 
         def value_and_gradient(y):
-            coordinates = torch.tensor(y, device=DEVICE, dtype=torch.float64, requires_grad=True)
+            coordinates = torch.tensor(y, device=tensor_device, dtype=torch.float64, requires_grad=True)
             parameters = start + scale * coordinates.reshape(start.shape)
             try:
                 loss = objective(evaluator.evaluate(parameters).metrics)
@@ -105,7 +107,7 @@ def main():
 
         def show_step(y):
             nonlocal previous_step
-            parameters = start + scale * torch.as_tensor(y, device=DEVICE).reshape(start.shape)
+            parameters = start + scale * torch.as_tensor(y, device=tensor_device).reshape(start.shape)
             m = evaluator.evaluate(parameters).metrics
             loss = float(objective(m).detach())
             now = perf_counter()
@@ -120,7 +122,7 @@ def main():
         solution = minimize(value_and_gradient, np.zeros(start.numel()), jac=True,
                             method="BFGS", callback=show_step,
                             options={"maxiter": MAX_STEPS, "gtol": GRADIENT_TOLERANCE})
-        parameters = start + scale * torch.as_tensor(solution.x, device=DEVICE).reshape(start.shape)
+        parameters = start + scale * torch.as_tensor(solution.x, device=tensor_device).reshape(start.shape)
         final = evaluator.evaluate(parameters).metrics
         values = parameters.detach().cpu().numpy()
         n = coils.n_coefficients

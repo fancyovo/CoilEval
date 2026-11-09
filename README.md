@@ -10,7 +10,7 @@ curve. The target volume selects the enclosed volume of the surface to evaluate.
 
 A local gradient describes small parameter changes while retaining the selected axis and sampling branches. Rotational transform ι is the average poloidal turns per toroidal turn of a field line.
 
-**Version 0.11.1, preview candidate.** By default, a scalar surface-label function
+**Version 0.11.2, development candidate.** By default, a scalar surface-label function
 is fitted first in an initial region and then again in the closed region selected
 from that fit. An optional third fit is enabled by `psi_target_refit=True`; it is
 off by default.
@@ -26,21 +26,22 @@ GPU: install the supplied wheel and CUDA 12.8 runtime dependencies. Example2 als
 needs CUDA-enabled PyTorch:
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
-python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "torch==2.7.1+cu128" --index-url https://download.pytorch.org/whl/cu128
 ```
 
-CPU: run both commands in the same Python environment. The first explicitly selects
-CPU PyTorch; the name `[cpu]` alone does not make pip select that Torch distribution.
-CPU value evaluation also uses Torch linear algebra.
+For CPU use, run both commands in the same Python environment. The first selects
+the CPU build of PyTorch, which CoilEval uses for linear algebra. The second
+installs CoilEval with SciPy and threadpoolctl.
 
 ```sh
-python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
-GPU operation needs a compatible NVIDIA driver; CPU operation does not need CUDA.
-See the [installation guide](docs/installation.md) for environments and source builds.
+The PyTorch commands above use the verified builds for Python 3.10–3.13. GPU
+operation needs a compatible NVIDIA driver. See the [installation guide](docs/installation.md)
+for build selection and environment checks.
 
 <a id="example1"></a>
 ## Example1: read coils and evaluate

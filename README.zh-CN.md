@@ -9,7 +9,7 @@ CoilEval 根据仿星器线圈的形状、电流、场周期数和目标体积�
 
 局部梯度描述当前参数附近的小幅变化，计算时保持已选中的磁轴和采样分支不变。旋转变换 ι 是磁力线每绕环向一圈平均绕极向的圈数。
 
-**版本 0.11.1，预发布候选。** 默认先拟合磁面标签函数，再在选出的闭合区域内重新拟合。
+**版本 0.11.2，开发候选。** 默认先拟合磁面标签函数，再在选出的闭合区域内重新拟合。
 这两次拟合决定后续磁面和指标；可选的第三次拟合由 `psi_target_refit=True` 开启，默认关闭。
 
 <a id="installation"></a>
@@ -21,19 +21,20 @@ CoilEval 根据仿星器线圈的形状、电流、场周期数和目标体积�
 GPU：安装随附 wheel 和 CUDA 12.8 运行库。Example2 还需要 CUDA 版 PyTorch：
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
-python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "torch==2.7.1+cu128" --index-url https://download.pytorch.org/whl/cu128
 ```
 
-CPU：在同一个 Python 环境中依次执行。第一条明确选择 CPU 版 PyTorch；`[cpu]` 这个依赖组名字
-本身不会让 pip 自动选择 CPU 版 Torch。CPU 求值也使用 Torch 的线性代数功能。
+使用 CPU 时，在同一个 Python 环境中依次执行。第一条选择 CPU 版 PyTorch，
+CoilEval 用它做线性代数运算。第二条安装 CoilEval、SciPy 和 threadpoolctl。
 
 ```sh
-python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
-GPU 需兼容的 NVIDIA 驱动；纯 CPU 求值不需要 CUDA。环境、可选依赖与源码构建见[安装指南](docs/installation.zh-CN.md)。
+以上 PyTorch 命令适用于 Python 3.10–3.13。GPU 运行需要兼容的 NVIDIA 驱动。
+构建版本选择和环境检查见[安装指南](docs/installation.zh-CN.md)。
 
 <a id="example1"></a>
 ## Example1：读取线圈并求值

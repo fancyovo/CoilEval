@@ -46,6 +46,12 @@ FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
 
 Entries describe historical versions; defaults in an entry apply to that version.
 
+## 0.11.2 (unreleased)
+
+- Document explicit CPU and CUDA 12.8 PyTorch builds for the installation paths.
+- Report PyTorch CUDA initialization, visible-device selection and tensor shape errors separately.
+- Use one device index for Example2's GPU evaluator and tensors.
+
 ## 0.11.1 (preview candidate)
 
 - Rewrite tutorials as standalone, editable scripts using public APIs, with metrics and timings.

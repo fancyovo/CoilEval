@@ -66,7 +66,10 @@ class CpuTensorEvaluator:
         from ..torch import TensorEvaluation,TensorMetrics
         self._check()
         x=parameters if isinstance(parameters,torch.Tensor) else torch.as_tensor(parameters,dtype=torch.float64)
-        if (x.device.type!='cpu' or x.ndim!=(3 if batch else 2) or x.shape[-2]<1 or
+        if x.device.type != 'cpu':
+            raise ValueError(f'parameters are on {x.device}, but this evaluator uses cpu. '
+                             'Use pack_coils(device="cpu") for CPU evaluation.')
+        if (x.ndim!=(3 if batch else 2) or x.shape[-2]<1 or
             x.shape[-1]<10 or (x.shape[-1]-1)%3 or ((x.shape[-1]-1)//3)%2!=1 or
             x.dtype not in (torch.float32,torch.float64) or not bool(torch.isfinite(x).all())):
             raise ValueError('parameters require finite CPU [coils,3*ncoeff+1] physical values with at least one coil (or a batch)')

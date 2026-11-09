@@ -1,6 +1,6 @@
 # Simsopt integration
 
-Version 0.11.1 is unreleased. The example below uses the supplied binary wheel.
+Version 0.11.2 is unreleased. The example below uses the supplied binary wheel.
 
 [简体中文](simsopt.zh-CN.md)
 
@@ -59,7 +59,7 @@ are imported when their operations run.
 Install the surface dependencies from a local wheel with:
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 The `simsopt` extra includes Simsopt and SciPy. Set up CUDA-enabled PyTorch

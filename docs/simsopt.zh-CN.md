@@ -1,6 +1,6 @@
 # Simsopt 接口
 
-版本 0.11.1 尚未发布。以下示例使用随附的预编译 wheel。
+版本 0.11.2 尚未发布。以下示例使用随附的预编译 wheel。
 
 [English](simsopt.md)
 
@@ -46,7 +46,7 @@ CUDA 准备阶段还使用可选的 PyTorch 依赖。相应依赖会在运行具
 使用本地安装包安装磁面相关依赖：
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 `simsopt` 可选依赖组包含 Simsopt 与 SciPy。

@@ -70,19 +70,19 @@ Use `major.minor.patch` without an `a` suffix:
 - Bug fixes increment the third (patch) component, including small patches and
   obvious corrections, for example `0.7.0` to `0.7.1`.
 
-The source package is `0.11.1`, including the opt-in third scalar fit, local
+The source package is `0.11.2`, including the opt-in third scalar fit, local
 training-domain derivatives and the retained `0.9.1` inversion repairs.
 Its changelog entry remains unreleased until publication.
 Update package metadata and CHANGELOG when delivering implementation changes,
 even before tagging or building release binaries. Documentation-only changes
 and diagnostic reports do not require a package bump. The next fix uses
-`0.11.1`; a new feature uses `0.12.0`. Keep historical version numbers, artifacts
+`0.11.3`. The next minor version is `0.12.0`. Keep historical version numbers, artifacts
 and tags unchanged, including `0.5.0a1` and earlier `a` versions. Release tags use `v` followed by
 the package version; retain earlier tags for reproducible installations.
 
 ## Numerical changes
 
-Keep the validated two-fit configuration as the 0.11.1 default and the third fit optional. Add fitting or sampling
+Keep the validated two-fit configuration as the 0.11.2 default and the third fit optional. Add fitting or sampling
 choices through `EvaluationConfig`, and preserve units and parameter order.
 Test both order-4 and higher-order inputs when changing Fourier handling.
 

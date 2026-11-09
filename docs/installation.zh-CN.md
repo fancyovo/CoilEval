@@ -1,19 +1,21 @@
 # 安装
 
-版本 0.11.1 尚未发布。以下命令安装随附的预编译 wheel。
+版本 0.11.2 尚未发布。以下命令安装随附的预编译 wheel。
 配套源码压缩包包含示例和开发文件。
 
 [English](installation.md)
 
 
-wheel（`.whl`）是已构建的 Python 安装包，sdist（`.tar.gz`）是源码包。extras 是方括号中的可选依赖组，如 `[cpu]`；它不会把 PyTorch 自动切换为 CPU 构建。CUDA 是 NVIDIA 的 GPU 计算平台，nvcc 是它的编译器，运行预编译包通常只需相应运行库和驱动。
+wheel（`.whl`）是已构建的 Python 安装包，sdist（`.tar.gz`）是源码包。
+extras 是方括号中的可选依赖组，如 `[cpu]`。用下方命令选择 PyTorch 的构建版本。
+CUDA 是 NVIDIA 的 GPU 计算平台，运行预编译的 GPU 安装包需要相应运行库和驱动。
 
 ## 预编译安装包
 
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 `gpu` 依赖组安装固定版本、配套验证过的 CUDA 12.8 运行库。
@@ -39,8 +41,8 @@ python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu
 第二条自动安装 CoilEval 及其余 CPU 依赖。
 
 ```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 python examples/cpu.py
 ```
 
@@ -69,7 +71,7 @@ wheel 元数据已声明这些依赖，指定对应依赖组时由 pip 自动安
 已安装的环境如果缺少 CPU 依赖，可以补齐：
 
 ```sh
-python -m pip install "torch>=2.5" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
 python -m pip install "scipy>=1.10" "threadpoolctl>=3"
 python -m pip check
 ```
@@ -80,24 +82,36 @@ python -m pip check
 
 ## PyTorch
 
-已验证的 GPU 配置使用 Python 3.10–3.13，在同一环境中安装 CUDA 12.8 版 PyTorch：
+已验证的 CPU 和 CUDA 12.8 版 PyTorch 均支持 Python 3.10–3.13。
+使用 GPU 张量和梯度时，在同一环境中安装 CUDA 12.8 版 PyTorch。
 
 ```sh
-python -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install "torch==2.7.1+cu128" --index-url https://download.pytorch.org/whl/cu128
 python examples/autograd.py
 python examples/batch.py
 ```
 
-示例包含在源码压缩包和仓库中。`coil_eval.torch` 是可选接口，普通 `coil_eval` 导入使用 NumPy。
-较新版本需同时满足 Python、CUDA 构建和运行库版本的兼容要求。
-CPU 安装从 CPU 索引选择兼容版本，无需固定为这里较早的 GPU 构建版本。
+`2.7.1+cpu` 和 `2.7.1+cu128` 的后缀指定具体构建。只写 `torch==2.7.1` 时，
+环境中已有的这两种构建都能满足版本要求。使用其他 Python 版本时，可从相应的
+PyTorch 索引选择兼容构建并核对运行库要求。示例包含在源码压缩包和仓库中。
+普通 `coil_eval` 导入使用 NumPy，`coil_eval.torch` 是可选接口。
+
+用运行示例的同一个 Python 检查 PyTorch 版本和 CUDA 构建。
+
+```sh
+python -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
+python -m pip check
+```
+
+CPU 构建的 `torch.version.cuda` 是 `None`。CUDA 12.8 构建报告 `12.8`，
+显卡可见且驱动兼容时，`torch.cuda.is_available()` 为 `True`。
 
 ## Simsopt
 
 磁面工作流可通过安装包的 `simsopt` 可选依赖组安装：
 
 ```sh
-python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 该依赖组安装 Simsopt 与 SciPy。
@@ -108,7 +122,7 @@ python -m pip install "./coil_eval-0.11.1-py3-none-manylinux_2_28_x86_64.whl[gpu
 准备 C++17 编译器和 CMake 3.22+，然后运行：
 
 ```sh
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
 python -m pip install ".[cpu]" --config-settings=cmake.define.COIL_EVAL_BUILD_CUDA=OFF
 ```
 
@@ -148,6 +162,9 @@ cmake --build build/native --parallel
 - **缺少 CUDA 运行库依赖：** 重新安装 wheel 的 `gpu` 依赖组，并启用依赖安装。离线安装还需要准备 NVIDIA 依赖包。
 - **驱动或 GPU 内核不兼容：** 对照上表检查驱动和显卡。`nvidia-smi` 显示驱动支持能力，
   `nvcc --version` 显示单独安装的编译器版本。
+- **PyTorch 无法初始化 CUDA。** 用运行示例的 Python 检查 `torch.version.cuda`。
+  如果当前 PyTorch 构建要求更新的驱动，可按上面的命令安装 CUDA 12.8 构建，
+  并确认现有驱动支持 CUDA 12.8。
 
 表中的 sm_XX 是 GPU 架构目标，PTX 是供驱动编译的中间指令。OpenMP 提供 CPU 并行运行支持。f_B/f_T 是准对称性（磁场强度只依赖一个螺旋角）误差指标，分别使用傅里叶分量和磁场导数三重积。
 

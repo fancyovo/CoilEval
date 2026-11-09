@@ -48,6 +48,11 @@ CPU 执行使用 CPU 版 PyTorch 和 `TensorEvaluator(device='cpu', ...)`，详�
 4 阶对应 `(nc,28)`，16 阶对应 `(nc,100)`。坐标使用米，电流使用安培。
 NumPy 的 `parameter_vector()` 仍使用按坐标分组的展平布局。
 
+要用进程可见的第三张 GPU，给 `pack_coils` 传 `device='cuda:2'`，
+给 `TensorEvaluator` 传 `device_id=2`。如果用 `CUDA_VISIBLE_DEVICES=2`
+启动程序，进程内这张卡的编号为 `cuda:0`。Example2 用同一个 `DEVICE_ID`
+参数选择求值器和张量的设备。
+
 Tensor 接口支持任意正整数 `nfp`、任意正整数基本线圈数量，以及 `M` 非零的显式
 螺旋度 `(M,N)`，要求保留 仿星器对称性。
 请设置 `TensorEvaluator(nfp=coils.nfp, ...)`：张量数值不包含场周期信息，
