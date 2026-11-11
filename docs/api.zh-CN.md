@@ -68,22 +68,22 @@ QS 螺旋度需显式选择：QA 使用 `(1,0)`，标准 QH 使用 `(1,nfp)`。
 | `psi_iterations`、`alpha_iterations` | `4`、`4` | 局部迭代拟合设置 |
 | `fast` | `True` | 使用 240 步磁轴积分和 100 步磁面追踪 |
 | `flux_method` | `'stokes'` | `'area'` 或 fast 近邻路径的 `'stokes'` 边界积分 |
-| `psi_fit` | `'two_stage'` | `'single_stage'` 或 `'two_stage'` |
+| `psi_fit` | `'two_stage'` | 两次拟合、近轴椭圆域内拟合一次（`'near_axis_ellipse'`），或历史圆域单次拟合（`'single_stage'`） |
 | `psi_refit_points` | `82368` | 第二次拟合的目标训练行数 |
 | `psi_refit_ridge` | `None` | 可选的第二次拟合列归一化正则系数，须非负；`None` 保留原生设置 |
 | `psi_target_refit` | `False` | `psi_fit='two_stage'` 后增加目标内部第三次拟合的候选选项 |
 | `psi_target_refit_factor` | `1.2` | 第三次拟合请求训练体积与目标体积的比值，须大于 1 |
 | `psi_target_refit_ridge` | `1e-10` | 仅用于第三次拟合的非负列归一化正则系数 |
 | `psi_refit_sampling` | `'polar_quadrature'` | 两阶段拟合的 `'cartesian'` 或 `'polar_quadrature'` 采样 |
-| `psi_nearby_method` | `'local'` | 两阶段局部响应，或 `'formal'` 端点重建 |
-| `psi_fd_batch_size` | `8` | 两阶段局部差分端点的批量大小 |
-| `alpha_radial_weighting` | `'smooth'` | `'histogram'` 或两阶段的 `'smooth'` 径向密度权重 |
+| `psi_nearby_method` | `'local'` | 两次拟合和椭圆域方法的局部响应，或 `'formal'` 端点重建 |
+| `psi_fd_batch_size` | `8` | 局部差分端点的批量大小 |
+| `alpha_radial_weighting` | `'smooth'` | `'histogram'` 或两次拟合和椭圆域方法的 `'smooth'` 径向密度权重 |
 | `alpha_weight_sigma` | `0.05` | 平滑权重在归一化 rho 上的 Gaussian 宽度 |
 | `alpha_count_floor` | `32.0` | 平滑密度分母中的正加性伪计数 |
-| `alpha_radial_basis` | `'flux_legendre'` | 原始径向基，或两阶段路径的 `'flux_legendre'` |
+| `alpha_radial_basis` | `'flux_legendre'` | 原始径向基，或两次拟合和椭圆域方法的 `'flux_legendre'` |
 | `stokes_validation_rtol` | `1e-3` | Tensor 磁通一致性容差；`None` 关闭检查 |
 
-0.11.1 默认采用已验证的 两次拟合配置。下面的显式配置与
+0.12.0 默认采用两次拟合配置。下面的显式配置与
 `EvaluationConfig(target_volume=0.05, psi_a=0.15)` 等价：
 
 ```python
@@ -96,6 +96,17 @@ config = EvaluationConfig(
 
 两阶段求值先在初始区域拟合 psi，再构造与磁轴相连的闭合训练区域，并在该区域重新拟合。
 目标体积磁面与 QS 指标使用第二次拟合结果。
+
+启用 `psi_fit='near_axis_ellipse'` 后，程序根据磁轴附近磁场的变化，预测各环向角处的截面椭圆。
+预测区域的体积是 `target_volume` 的 1.2 倍。一次最小二乘拟合使用该区域整个内部的取样点，
+并沿用物理坐标下的多项式基和归一化。最终磁面按原请求体积求解。训练区域依赖目标体积，
+每个目标体积各自拟合。CPU 和 GPU 都支持该选项，GPU 路径需要 0.12.0 原生库提供的磁轴求解入口。
+
+椭圆预测要求轴附近的磁力线能稳定旋转，且预测区域在物理半径上限内。预测失败时返回
+`ellipse_domain_failed`，具体原因见 `diagnostics['failure_reason']`。如果拟合出的标量向外折返，
+无法在首段单调区域内达到目标体积，`no_surface` 会报告可用体积和拟合阶段。
+`psi_refit_*` 和 `psi_target_refit*` 设置用于两次拟合及可选的第三次拟合。椭圆域方法使用固定取样格点和原生首次拟合正则。
+
 `psi_refit_ridge` 可用于减小很低 QS 误差下的正则化偏差。它只作用于第二次拟合，
 包括对应的局部梯度；首次拟合 及其训练区域保持原设置。GPU 路径需要提供 0.9.1
 设置函数的原生库。减小正则并不保证磁面更准确，应同时检查法向磁场误差、
@@ -120,7 +131,7 @@ config = EvaluationConfig(
 `psi_refit_sampling='polar_quadrature'` 选择默认的加权极坐标求积；Cartesian 采样仍可显式选择。两种采样都保留完整采样结构，因此实际训练行数可能
 与 `psi_refit_points` 不同，可查看 `diagnostics['psi_refit_training_count']`。
 
-`alpha_radial_weighting='smooth'` 是 `psi_fit='two_stage'` 的默认设置，
+`alpha_radial_weighting='smooth'` 是两次拟合和椭圆域方法的默认设置，
 使用正的 sigma 与伪计数参数控制平滑密度权重。histogram 权重仍可显式选择。
 
 `alpha_radial_basis='flux_legendre'` 使用归一化磁通的多项式拟合角度修正。
@@ -201,7 +212,7 @@ QS 数值采用 RMS 定义。汇总时应先对其平方按相应权重求平均
 两个原生 QS 字段都除以所选螺旋度的 `max(sqrt(M*M + N*N), 1)`。
 最外径向分组 保留最后一个径向分组内的原生点权重；iota 剖面采样覆盖所选径向范围。
 独立的 `surface_fc`/`analyze_arrays` 参考函数固定使用 QH 螺旋度 `(1,nfp)`，
-在 0.11.1 中没有 helicity 参数。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
+这些参考函数的螺旋度由接口固定。另一个 `surface_qs_metrics` 函数为 f_B/f_T 接受显式
 QA `helicity=(1,0)`。与原生结果比较时，应为对应参考路径选择相同螺旋度。
 
 `quality_penalty(error, threshold=0.01, temperature=0.0025, weight=10000)` 提供可组合的标量惩罚。

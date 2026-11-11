@@ -47,7 +47,7 @@ FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
 </details>
 
 
-CoilEval 0.11.1 provides Fourier (`f_B`) and optional triple-product (`f_T`)
+CoilEval provides Fourier (`f_B`) and optional triple-product (`f_T`)
 quasisymmetry metrics on the target-volume surface. They share a differentiable
 alpha+nu coordinate construction, with a target-surface alpha fit and vacuum
 potential-based nu correction. The coil evaluation interface uses PyTorch on

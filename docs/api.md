@@ -82,22 +82,22 @@ and `write_json(path)` preserve these units and conventions.
 | `psi_iterations`, `alpha_iterations` | `4`, `4` | Local iterative fit settings |
 | `fast` | `True` | Use 240 axis steps and 100 surface tracing steps |
 | `flux_method` | `'stokes'` | `'area'` or fast local `'stokes'` boundary integration |
-| `psi_fit` | `'two_stage'` | `'single_stage'` or `'two_stage'` |
+| `psi_fit` | `'two_stage'` | Two fits, one fit in a near-axis ellipse (`'near_axis_ellipse'`), or the original circular-domain fit (`'single_stage'`) |
 | `psi_refit_points` | `82368` | Target training-row count for the second fit |
 | `psi_refit_ridge` | `None` | Optional nonnegative column-scaled ridge for the second fit only; `None` retains the native setting |
 | `psi_target_refit` | `False` | Optional third fit over the target interior after `psi_fit='two_stage'` |
 | `psi_target_refit_factor` | `1.2` | Requested training volume for the third fit divided by target volume; must exceed one |
 | `psi_target_refit_ridge` | `1e-10` | Nonnegative column-scaled ridge for the third fit only |
 | `psi_refit_sampling` | `'polar_quadrature'` | Two-stage `'cartesian'` or `'polar_quadrature'` sampling |
-| `psi_nearby_method` | `'local'` | Two-stage local response or `'formal'` endpoint reconstruction |
-| `psi_fd_batch_size` | `8` | Two-stage local finite-difference endpoint batch size |
-| `alpha_radial_weighting` | `'smooth'` | `'histogram'` or two-stage `'smooth'` radial density weighting |
+| `psi_nearby_method` | `'local'` | Local response or `'formal'` endpoint reconstruction for the two-fit and ellipse methods |
+| `psi_fd_batch_size` | `8` | Local finite-difference endpoint batch size |
+| `alpha_radial_weighting` | `'smooth'` | `'histogram'` or `'smooth'` radial density weighting for the two-fit and ellipse methods |
 | `alpha_weight_sigma` | `0.05` | Gaussian width in normalized rho for smooth weighting |
 | `alpha_count_floor` | `32.0` | Positive additive pseudocount for smooth density denominators |
-| `alpha_radial_basis` | `'flux_legendre'` | Original radial basis or two-stage `'flux_legendre'` |
+| `alpha_radial_basis` | `'flux_legendre'` | Original radial basis or `'flux_legendre'` for the two-fit and ellipse methods |
 | `stokes_validation_rtol` | `1e-3` | Tensor flux consistency tolerance; `None` disables the check |
 
-Version 0.11.1 defaults to the validated two-fit configuration. The following explicit
+Version 0.12.0 defaults to the two-fit configuration. The following explicit
 configuration is equivalent to `EvaluationConfig(target_volume=0.05, psi_a=0.15)`:
 
 ```python
@@ -111,6 +111,25 @@ config = EvaluationConfig(
 Two-stage evaluation first fits psi in the initial domain, constructs an
 axis-connected closed training domain, and fits psi again in that domain.
 The target-volume surface and QS metrics use the second fit.
+
+With `psi_fit='near_axis_ellipse'`, the field variation near the magnetic axis
+predicts a cross-section ellipse at each toroidal angle. The prediction sets
+the training region to 1.2 times `target_volume`. A single least-squares fit
+uses points throughout that interior, with the same physical-coordinate
+polynomial basis and normalization as the two-fit method. The target surface
+still uses the requested volume. The training region depends on the target
+volume, so each volume gets its own fit. The native GPU library needs the
+axis-only entry added in 0.12.0. CPU and GPU both support this configuration.
+
+The ellipse construction requires a stable near-axis rotation and a training
+region within the physical radius limit. An unavailable ellipse returns
+`ellipse_domain_failed`, with `diagnostics['failure_reason']` identifying the
+cause. If the fitted scalar turns back outward before enclosing the requested
+volume, `no_surface` includes the available volume and fit stage. The
+`psi_refit_*` and `psi_target_refit*` controls apply to the two-fit procedure
+and its optional third fit. The ellipse method keeps its fixed training lattice
+and the native first-fit regularization.
+
 `psi_refit_ridge` can reduce regularization bias when resolving very small QS
 errors. It applies to the second fit only, including local gradients; the first fit and its domain stay
 fixed. The GPU option requires a native library exposing the 0.9.1 setter.
@@ -147,15 +166,15 @@ quadrature. Cartesian sampling remains explicitly available.
 Both samplers retain complete sampling structures, so the actual row count can
 differ from `psi_refit_points`; inspect `diagnostics['psi_refit_training_count']`.
 
-`alpha_radial_weighting='smooth'` is the default for
-`psi_fit='two_stage'`. Its positive sigma and pseudocount settings control the
+`alpha_radial_weighting='smooth'` is the default for the two-fit and ellipse
+methods. Its positive sigma and pseudocount settings control the
 smooth density weights. Histogram weighting remains explicitly available.
 
 `alpha_radial_basis='flux_legendre'` fits the angular correction with
-polynomials of normalized flux. Select it with `psi_fit='two_stage'`; the
-choice applies to scalar evaluation, local gradients and captured alpha data.
+polynomials of normalized flux. Both the two-fit and ellipse methods support it
+in scalar evaluation, local gradients and captured alpha data.
 The default is `'flux_legendre'`; the original `'zernike'` basis remains available.
-For legacy the first fit select `psi_fit='single_stage'`, `alpha_radial_weighting='histogram'`
+To reproduce the original circular-domain fit, select `psi_fit='single_stage'`, `alpha_radial_weighting='histogram'`
 and `alpha_radial_basis='zernike'` together. To restore pre-0.11 standard tracing
 also select `fast=False`, `flux_method='area'` and `psi_refit_sampling='cartesian'`.
 
@@ -243,7 +262,7 @@ Both native QS fields include division by `max(sqrt(M*M + N*N), 1)` for the
 selected helicity. The outer bin uses the native point weights in the final
 radial bin; iota profile samples cover the selected radial range.
 The standalone `surface_fc`/`analyze_arrays` reference helpers use QH helicity
-`(1,nfp)` and have no helicity argument in 0.11.1. The separate
+`(1,nfp)` with the helicity fixed by the reference function. The separate
 `surface_qs_metrics` helper accepts explicit QA `helicity=(1,0)` for f_B/f_T.
 Use matching native helicity when comparing either reference path.
 

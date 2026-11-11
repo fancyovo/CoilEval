@@ -1,6 +1,9 @@
 # CoilEval 0.11.0 validation and limitations
 
-**Scope:** 0.11.1 retains the validated 0.11.0 evaluator and defaults, so these accuracy and speed results still apply. Example2 below is historical validation of the old complete objective/optimizer. See the [example guide](../examples/README.md) for the new teaching script; the old trajectory is not its output.
+**Scope.** This page records the 0.11.0 two-fit calibration and the original
+optimization study. The [0.12.0 README](../README.md#validation) reports the
+current timing comparison. The [example guide](../examples/README.md) gives
+the runnable teaching scripts and their 0.12.0 results.
 
 [简体中文](preview_validation.zh-CN.md)
 

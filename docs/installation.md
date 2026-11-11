@@ -1,6 +1,8 @@
 # Installation
 
-Version 0.11.2 is unreleased. The commands below install the supplied binary wheel.
+Version 0.12.0 is a development version. The wheel commands use a wheel built
+from the matching source. See [CPU source build](#cpu-source-build) or
+[GPU source build](#gpu-source-build).
 The accompanying source archive includes the examples and development files.
 
 [简体中文](installation.zh-CN.md)
@@ -13,10 +15,10 @@ prebuilt GPU wheel requires the corresponding runtime libraries and driver.
 
 ## Binary wheel
 
-Create or activate a Python 3.10+ environment, then install the supplied wheel:
+Create or activate a Python 3.10+ environment, then install the wheel:
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 The `gpu` extra installs a matched, version-pinned CUDA 12.8 runtime set.
@@ -47,7 +49,7 @@ CPU requirements automatically.
 
 ```sh
 python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 python examples/cpu.py
 ```
 
@@ -122,7 +124,7 @@ expect `12.8` and `True` when a supported GPU is visible and its driver works.
 For the optional surface workflow, install the wheel with its `simsopt` extra:
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 This installs Simsopt and SciPy. The [Simsopt guide](simsopt.md) shows GPU

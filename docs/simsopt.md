@@ -1,6 +1,7 @@
 # Simsopt integration
 
-Version 0.11.2 is unreleased. The example below uses the supplied binary wheel.
+The example uses a wheel built from CoilEval 0.12.0. See the [installation guide](installation.md)
+for building and installing the wheel.
 
 [简体中文](simsopt.zh-CN.md)
 
@@ -59,7 +60,7 @@ are imported when their operations run.
 Install the surface dependencies from a local wheel with:
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 The `simsopt` extra includes Simsopt and SciPy. Set up CUDA-enabled PyTorch
@@ -84,9 +85,11 @@ for capture in captures:
 
 `capture_sources(coils, configs, library=None, device_id=0, include_torsion=True)` accepts one
 `EvaluationConfig` or a sequence and always returns a list in input order.
-Configurations select `psi_fit='two_stage'` and differ only in `target_volume`.
-One geometry shares its magnetic axis, first fit, training domain and second
-fit across those volumes. Each volume receives its own downstream evaluation.
+Configurations select `psi_fit='two_stage'` or `psi_fit='near_axis_ellipse'` and
+differ only in `target_volume`. The two-fit method shares its magnetic axis,
+initial fit, training domain and second fit across volumes. Ellipse sampling
+uses the requested volume to size the training region, so each volume gets its
+own fit. Every volume receives its own downstream evaluation.
 When `psi_target_refit=True`, each volume also receives its own third fit and
 the returned `SourcePsi` contains the scalar from the third fit. The original volume-alpha
 preparation remains part of the capture.
@@ -160,7 +163,7 @@ Initializer-generated seeds also retain `source_axis_samples` with columns
 when reading earlier seed files; accepted standard-surface files retain it.
 
 `geometry_method='cached_basis'` optionally caches the surface geometry basis.
-The reference geometry method is the default in 0.11.1.
+The reference geometry method is the default.
 
 `alpha_fold_policy='damp'` can regularize a folded alpha coordinate map during
 initialization. It scales the lambda perturbation by one factor, preserves iota,
@@ -223,7 +226,7 @@ Legacy seeds without axis samples skip the axis-relative covering check and
 record `source_axis_unavailable`. Dense residual quality is reported separately
 as `strict_pass` or `accepted_with_quality_warning` for accepted surfaces.
 
-The 0.11.1 solver also checks eight true geometric-toroidal sections with
+The solver also checks eight true geometric-toroidal sections with
 256 poloidal samples for self-intersection. Polygon crossings nominate pairs
 of parameters; a root on the original Fourier surface must confirm their
 Cartesian coincidence within `1e-9` m before
@@ -243,10 +246,9 @@ their original meaning and are not retroactively rewritten.
 ## Reference QS quantities
 
 `surface_fc(surface, field, sizes=(64,128))` and `analyze_arrays(...)` implement
-the QH reference for helicity `(1,nfp)`. Both functions have no helicity
-argument in 0.11.1. For `nfp=4`, compare them with native results configured
-with `helicity=(1,4)`; a QA f_C comparison requires an explicit-helicity
-reference such as the parent validation campaign's matched-surface adapter.
+the QH reference for the fixed helicity `(1,nfp)`. For `nfp=4`, compare them with
+native results configured with `helicity=(1,4)`. A QA f_C comparison requires a
+reference routine that accepts `helicity=(1,0)` on the same surface.
 The separate f_B/f_T reference `surface_qs_metrics` accepts QA `(1,0)`;
 see the [surface QS guide](qs.md#compare-with-simsopt).
 `surface_fc` evaluates an accepted standard surface on the requested grids

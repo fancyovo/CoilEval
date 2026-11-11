@@ -7,7 +7,8 @@
 默认先拟合磁面标签 s，再在选出的闭合区域内重拟合；接口沿用 `psi` 名称。α（alpha）拟合构造沿磁力线的角坐标，Boozer 坐标进一步使磁力线表示为直线并满足磁场协变角分量的约束。“捕获”是保存一次完整求值的中间状态；“中心”是原参数，“端点”是有限差分的小扰动参数。QR 是求解最小二乘的正交/三角矩阵分解。BLAS 是线性代数库，OpenMP 是 CPU 并行框架，AVX2 是 CPU 向量指令集。
 
 CPU 后端沿用 GPU 后端的线圈离散、磁轴搜索策略、拟合基函数和积分采样规模，
-支持单次或两次磁面标签拟合、线圈几何指标、有限差分与 PyTorch 局部反传梯度。
+支持默认两次拟合、根据近轴磁场预测取样区域的 `psi_fit='near_axis_ellipse'` 和历史圆域单次拟合，
+并提供线圈几何指标、有限差分与 PyTorch 局部反传梯度。
 可选的目标磁面 `f_B` 和 `f_T` 复用 Boozer 坐标实现。
 
 ## 安装
@@ -16,7 +17,7 @@ CPU 后端沿用 GPU 后端的线圈离散、磁轴搜索策略、拟合基函�
 
 ```sh
 python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 请将 wheel 文件名换成实际收到的文件。CPU 求值加载 `libcoil_eval_cpu.so`，

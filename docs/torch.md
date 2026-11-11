@@ -74,10 +74,13 @@ remain `nfp=4` and helicity `(1,4)`. Set `EvaluationConfig(helicity=(1,0), ...)`
 for QA, or `(1,nfp)` for QH at the selected field period; helicity is never
 inferred from `nfp`. The interface retains 256 coil segments and four
 psi/alpha local fit iterations. Select `fast=True` and
-`flux_method='stokes'`. The second fit is the 0.11.1 default. Explicit legacy single-fit evaluation requires histogram weights and
-the Zernike basis as described in the API guide. Both fitting paths are
-accepted. Psi calculations use float64; field calculations use float32 by
-default, with `field_dtype=torch.float64` available.
+`flux_method='stokes'`. The default uses two fits. Set
+`EvaluationConfig(..., psi_fit='near_axis_ellipse')` for one fit with a training
+region estimated from the magnetic field near the axis. The original circular-domain
+single fit uses histogram weights and the Zernike basis as described in the API guide.
+Local scalar calculations use float64. Field calculations use float32 by default,
+with `field_dtype=torch.float64` available. The ellipse shape uses double-precision
+near-axis field derivatives on either backend.
 
 ## Evaluation and batches
 
@@ -96,9 +99,12 @@ physical parameters whose configurations differ only in target volume. Each
 query retains its own downstream calculation and parameter gradient. Set either
 option to `False` to select its independent preparation path. Libraries without
 the batch-axis API use independent axis preparation.
-With `psi_target_refit=True`, sharing stops after the second fit. Each target has its own the third fit
-training domain, coefficients and QR factors. Its local gradient includes the
+With `psi_target_refit=True`, sharing stops after the second fit. Each target's
+third fit has its own training domain, coefficients and QR factors. Its local gradient includes the
 moving training boundary and weights on the captured capacity-clipping branch.
+Ellipse sampling depends on the target volume, so each query has its own fit.
+On GPU the evaluator prepares the individual ellipse fits in sequence, then
+uses the batched operators for the downstream calculations.
 CPU batches prepare queries independently; `threads` controls each query's CPU
 budget and `axis_grid` optionally selects its primary magnetic-axis seed grid.
 CPU query diagnostics and timings are available under `diagnostics['queries']`
@@ -251,6 +257,13 @@ value_and_gradient_s = time.perf_counter() - started
 Measure imports, compilation and warmup separately. CPU operations complete
 synchronously and retain host wall timings.
 
+For an ellipse fit, a change in the coils moves the magnetic axis, changes the
+near-axis field and its spatial derivatives, and changes the ellipse and training
+points. The reverse pass includes these responses. Four local least-squares
+updates use the captured fit and its triangular factor to differentiate the
+fit coefficients. The target-volume solve and metric derivatives use the
+shared downstream calculation.
+
 The reverse path differentiates the continuous response at a captured center,
 including magnetic-axis movement, psi fitting, surface selection and integration
 points. The two-stage response also includes movement of its training domain,
@@ -280,3 +293,33 @@ provides centered finite differences for scalar callbacks; see [the API](api.md)
 See [target-surface f_B and f_T](qs.md) for optional metrics and accuracy presets.
 
 A CUDA stream is an ordered device execution queue; an event is a timing marker in that queue. An active branch is the currently selected nearest point, maximum point or limiting ray, held fixed for the local derivative.
+
+<a id="gradient-validation"></a>
+## Gradient validation
+
+CoilEval 0.12.0 tested 49 fixed coil and target-volume combinations. The two-fit
+method returned finite gradients in 44 cases and the ellipse fit in 41. The table
+uses the 36 pairs with gradients from both. The vector uses coordinates scaled
+by 0.01 m per Fourier coefficient and 10,000 A per current coordinate. A norm
+ratio divides the ellipse gradient's Euclidean length by the two-fit gradient's
+length. Cosine measures alignment, with 1 for the same direction and −1 for
+opposite directions.
+
+| Quantity | Norm ratio, 10th / 50th / 90th percentiles | Cosine, 10th / 50th percentiles |
+| --- | ---: | ---: |
+| Example2 objective | 0.256 / 1.002 / 1.148 | 0.155 / 0.997 |
+| Log volume QS residual | 0.986 / 1.004 / 1.730 | 0.402 / 0.996 |
+| Boundary iota | 0.889 / 1.005 / 1.181 | 0.877 / 0.999 |
+| Log surface f_B | 0.772 / 1.001 / 1.592 | 0.443 / 0.995 |
+| Log surface f_T | 0.937 / 1.001 / 1.183 | 0.831 / 0.997 |
+| Relative normal drift P95 | 0.025 / 0.291 / 2.908 | −0.452 / 0.828 |
+
+Three paired objective cosines were negative. The fits can produce different
+surfaces and drift penalties, with correspondingly different derivatives.
+For nine successful ellipse cases, six centered perturbation directions at a
+scaled step of 0.003 checked the derivatives against independent evaluations.
+The largest relative Euclidean error across the six projected objective slopes
+was 1.03%. The largest error for log volume QS, log surface f_B and log surface
+f_T was below 0.32%. Very small normal drifts were sensitive to rebuilding the
+axis and fit. In three such cases, keeping the original saved evaluation state
+and varying the live parameters gave drift slope agreement within 0.18%.

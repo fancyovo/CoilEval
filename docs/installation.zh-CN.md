@@ -1,6 +1,6 @@
 # 安装
 
-版本 0.11.2 尚未发布。以下命令安装随附的预编译 wheel。
+0.12.0 是开发版。安装命令中的 wheel 应由同版本源码构建，步骤见[构建 CPU 版本](#从源码构建-cpu-版本)或[构建 GPU 版本](#从源码构建-gpu-版本)。
 配套源码压缩包包含示例和开发文件。
 
 [English](installation.md)
@@ -15,7 +15,7 @@ CUDA 是 NVIDIA 的 GPU 计算平台，运行预编译的 GPU 安装包需要相
 创建或激活 Python 3.10+ 环境，然后安装：
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 ```
 
 `gpu` 依赖组安装固定版本、配套验证过的 CUDA 12.8 运行库。
@@ -42,7 +42,7 @@ python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu
 
 ```sh
 python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 python examples/cpu.py
 ```
 
@@ -111,7 +111,7 @@ CPU 构建的 `torch.version.cuda` 是 `None`。CUDA 12.8 构建报告 `12.8`，
 磁面工作流可通过安装包的 `simsopt` 可选依赖组安装：
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[gpu,simsopt]"
 ```
 
 该依赖组安装 Simsopt 与 SciPy。

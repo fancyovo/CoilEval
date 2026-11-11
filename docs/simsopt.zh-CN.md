@@ -1,6 +1,6 @@
 # Simsopt 接口
 
-版本 0.11.2 尚未发布。以下示例使用随附的预编译 wheel。
+以下示例使用由 CoilEval 0.12.0 构建的 wheel。构建和安装方法见[安装指南](installation.zh-CN.md)。
 
 [English](simsopt.md)
 
@@ -46,7 +46,7 @@ CUDA 准备阶段还使用可选的 PyTorch 依赖。相应依赖会在运行具
 使用本地安装包安装磁面相关依赖：
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[simsopt]"
 ```
 
 `simsopt` 可选依赖组包含 Simsopt 与 SciPy。
@@ -70,9 +70,9 @@ for capture in captures:
 ```
 
 `capture_sources(coils, configs, library=None, device_id=0, include_torsion=True)` 接收单份或一组
-`EvaluationConfig`，始终按输入顺序返回列表。配置选择 `psi_fit='two_stage'`，
-各份配置只允许目标体积不同。同一几何的多个体积共享磁轴、第一次拟合、训练区域与
-第二次拟合，各目标体积分别完成下游求值。
+`EvaluationConfig`，始终按输入顺序返回列表。配置选择 `psi_fit='two_stage'` 或
+`psi_fit='near_axis_ellipse'`，各份配置只允许目标体积不同。两次拟合方法在多个体积之间共享磁轴、
+第一次拟合、训练区域与第二次拟合。椭圆取样区域依赖请求体积，各体积单独拟合。下游求值按体积分别完成。
 启用 `psi_target_refit=True` 时，各体积还分别完成第三次拟合，返回的 `SourcePsi`
 包含第三次拟合标量；捕获流程继续计算原来的体 alpha。
 只准备源数据而不需要可选扭率诊断时，可设置 `include_torsion=False`。
@@ -133,7 +133,7 @@ source、alpha 和磁场应对应相同的线圈几何与体积。捕获接口�
 被接受的标准磁面文件也保留该数组。
 
 `geometry_method='cached_basis'` 可选择缓存磁面几何基。
-0.11.1 默认使用 reference 几何方法。
+默认使用 `reference` 几何方法。
 
 `alpha_fold_policy='damp'` 可在准备初始值时修正发生折叠的 alpha 坐标映射。
 它用同一个系数缩小 lambda 扰动，保留 iota，并重新计算 nu。
@@ -188,7 +188,7 @@ BiotSavart 磁场。`StandardSimsoptSolver(config=SolverConfig(...))` 先进行�
 缺少磁轴采样的早期初始值跳过相对磁轴的覆盖检查，并记录 `source_axis_unavailable`。
 通过接受检查的磁面另以 `strict_pass` 或 `accepted_with_quality_warning` 报告稠密残差质量。
 
-0.11.1 求解器会在八个真实几何环向截面上各取 256 个极向点检查自交。
+求解器会在八个真实几何环向截面上各取 256 个极向点检查自交。
 折线交点仅提供两组候选参数；必须回到原始 Fourier 曲面求根，确认两点的
 Cartesian 坐标在 `1e-9` m 内重合，才使硬检查
 `hard_downstream_checks['no_detected_self_intersection']` 拒绝该曲面。
@@ -204,9 +204,8 @@ Cartesian 坐标在 `1e-9` m 内重合，才使硬检查
 ## 参考 QS 指标
 
 `surface_fc(surface, field, sizes=(64,128))` 与 `analyze_arrays(...)` 实现螺旋度
-`(1,nfp)` 的 QH 参考指标。这两个函数在 0.11.1 中没有 helicity 参数。
-`nfp=4` 时，对应原生求值的 `helicity=(1,4)`；QA f_C 比较需使用显式支持 helicity
-的参考实现，例如上层验证实验的匹配磁面适配器。独立的 f_B/f_T 参考接口
+固定为 `(1,nfp)` 的 QH 参考指标。`nfp=4` 时，对应原生求值的 `helicity=(1,4)`。
+比较 QA f_C 时，需要在同一磁面上使用支持 `helicity=(1,0)` 的参考实现。独立的 f_B/f_T 参考接口
 `surface_qs_metrics` 支持 QA `(1,0)`，详见[磁面 QS 指南](qs.zh-CN.md#与-simsopt-参考比较)。
 `surface_fc` 在指定网格上计算被接受的标准磁面，使用该螺旋度下与原生求值器一致的
 归一化微分残差。返回内容包括：

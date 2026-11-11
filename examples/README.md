@@ -30,6 +30,11 @@ These are independent entry points: Example2 reads the original coils and does n
 Every script prints results and elapsed time. First calls include initialization; the timing scope is labeled and differs from warmed benchmarks.
 Rerunning updates the same output files; change `OUTPUT` to retain older runs.
 
+To try the single ellipse fit in either script, set `PSI_FIT="near_axis_ellipse"`
+and `TARGET_VOLUME=0.15`. This region is predicted from the magnetic field near
+the axis. The fitted scalar for these coils turns back before 0.3 m³ with this
+option. See the [API guide](../docs/api.md) for the available fit methods.
+
 ## Editing Example2
 
 `N_STARTS=32`, `NOISE=0.01` and `SEED=2026110502` control screening. Perturbations are `c*exp(log1p(NOISE)*z)` with standard-normal z;
@@ -43,13 +48,21 @@ Normal drift measures how much field lines leave the fitted surface. Surface f_B
 BFGS updates a curvature approximation from gradients; see the [SciPy interface](https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html).
 `history.csv` stores objective, QS, iota and time for each accepted iterate; `optimized_coils.json` can be read with `CoilSet.read_json`.
 
-## One observed run (2026-11-06)
+## Example2 runs with CoilEval 0.12.0
 
-The settings above produced 25 valid candidates out of 32 on an RTX 5090, followed by 82 accepted optimization steps.
-The objective decreased from −2.763355 to −5.465613; final volume QS was 0.00411832 and iota was 0.469764.
-Total time was 453.85 seconds, including 395.02 seconds of optimization. The progress callback evaluates metrics once more per accepted step; this cost is included.
-SciPy stopped with precision loss and `success=False`. The script prints this reason and saves the result; this run did not satisfy the convergence criterion.
-The older full physical reports use a different objective and trajectory and remain historical validation.
+Both runs on RTX 5090 completed screening and saved `optimized_coils.json`
+and `history.csv`. SciPy's `success` flag reports whether its convergence
+criteria were met. The default run stopped with precision loss, and the ellipse
+run reached its 100-iteration limit.
+
+| Fit | Target volume | BFGS iterations | Initial → final objective | Final volume QS | Final iota | Total time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Two fits | 0.30 m³ | 92 | −2.763355 → −5.471306 | 0.00409435 | 0.469690 | 449.83 s |
+| One ellipse fit | 0.15 m³ | 100 | 1.112674 → −6.261718 | 0.00184542 | 0.469527 | 915.24 s |
+
+Total time includes screening, line-search trials and progress reporting.
+The two configurations solve different target volumes. See the [warmed speed
+comparison](../README.md#validation) for matched evaluator timings.
 
 ## Dependencies and independent surface solves
 

@@ -46,6 +46,15 @@ FP32/float32 and FP64/float64 denote 32-bit single and 64-bit double precision.
 
 Entries describe historical versions; defaults in an entry apply to that version.
 
+## 0.12.0 (development)
+
+- Add `psi_fit='near_axis_ellipse'` for one surface-label fit in a predicted
+  near-axis ellipse domain. The option supports CPU and GPU values, batches,
+  surface metrics and local parameter gradients.
+- Include changes in the magnetic axis, ellipse shape, training points and
+  scalar fit in the local derivative. Reuse the target-volume and metric derivatives.
+- Retain the two-fit default and the separately selectable third fit.
+
 ## 0.11.2 (unreleased)
 
 - Document explicit CPU and CUDA 12.8 PyTorch builds for the installation paths.

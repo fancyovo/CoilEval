@@ -57,3 +57,7 @@ Keep each native build paired with the Python version that built it. Release
 tags identify complete source trees, including their documentation and examples.
 
 Version 0.11.1 revises tutorials with editable settings, one-run workflows, public APIs, progress and timings; the evaluator and two-fit defaults match 0.11.0.
+
+Version 0.12.0 adds one fit in a region predicted from the near-axis magnetic
+field. Select it with `psi_fit='near_axis_ellipse'`. The CPU and GPU interfaces
+provide values and local gradients for the new fit. The default uses two fits.

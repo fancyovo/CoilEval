@@ -8,25 +8,31 @@ geometry metrics on CPU or NVIDIA GPU. It also provides local parameter gradient
 Coil shapes are Fourier coefficients: sine and cosine terms describing each closed
 curve. The target volume selects the enclosed volume of the surface to evaluate.
 
-A local gradient describes small parameter changes while retaining the selected axis and sampling branches. Rotational transform ι is the average poloidal turns per toroidal turn of a field line.
+A local gradient describes how the result changes for small parameter changes
+along the selected solution branch. The magnetic axis can move along that branch.
+Rotational transform ι is the average poloidal turns per toroidal turn of a field line.
 
-**Version 0.11.2, development candidate.** By default, a scalar surface-label function
-is fitted first in an initial region and then again in the closed region selected
-from that fit. An optional third fit is enabled by `psi_target_refit=True`; it is
-off by default.
+**Version 0.12.0.** The evaluator estimates magnetic surfaces as level sets of a
+scalar function `s`. By default it fits `s` first in a circular sampling region
+and then in a region bounded by a level set from the first fit.
+Set `psi_fit="near_axis_ellipse"` to fit once in a region predicted
+from the field close to the magnetic axis. This option supports values and local
+gradients on CPU and GPU. `psi_target_refit=True` selects the optional third fit
+after the two-fit procedure. See [configuration and limitations](docs/api.md).
 
 <a id="installation"></a>
 ## Install
 
 Linux x86-64, glibc 2.28+ and Python 3.10+ are supported. A wheel (`.whl`) is a
-precompiled Python installation package. The separate source archive contains
-`examples/`. **Extract that archive and run examples from its root directory.**
+precompiled Python installation package. See the [source build instructions](docs/installation.md)
+to build a wheel from this checkout. Run the examples from the root of the
+checkout or extracted source archive.
 
 GPU: install the supplied wheel and CUDA 12.8 runtime dependencies. Example2 also
 needs CUDA-enabled PyTorch:
 
 ```sh
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[gpu]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[gpu]"
 python -m pip install "torch==2.7.1+cu128" --index-url https://download.pytorch.org/whl/cu128
 ```
 
@@ -36,7 +42,7 @@ installs CoilEval with SciPy and threadpoolctl.
 
 ```sh
 python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "./coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "./coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 The PyTorch commands above use the verified builds for Python 3.10–3.13. GPU
@@ -77,7 +83,7 @@ python examples/example2.py
 
 [example2.py](examples/example2.py) keeps `N_STARTS`, `NOISE`, `MAX_STEPS`, device
 and parameter scales at the top. Edit `objective(metrics)` to try other goals or
-weights. There are no command-line options, shard files or fixed input hashes.
+weights.
 Each Example1 coefficient is perturbed as `c*exp(log(1.01)*z)` with independent
 standard-normal z; screening currents stay fixed. The valid candidate with the
 lowest objective starts optimization of coefficients and currents.
@@ -88,13 +94,15 @@ provided through the public `TensorEvaluator` and PyTorch interfaces.
 **Each screened candidate and each optimizer iteration prints a line** containing
 the objective, QS, iota, coil metrics and elapsed time. Final output includes the
 stopping reason, final metrics and total time, plus
-`runs/example2/optimized_coils.json` and `history.csv`. Invalid trials are identified;
-an optimizer stop or iteration limit is separate from physical certification.
+`runs/example2/optimized_coils.json` and `history.csv`. The stopping reason is
+the status returned by SciPy. The output also identifies invalid trial points.
 
-Edit and rerun either script; change `OUTPUT` to retain multiple runs.
+Edit and rerun either script. Change `OUTPUT` to retain multiple runs.
+To run either script with a single ellipse fit, set `PSI_FIT="near_axis_ellipse"`
+and `TARGET_VOLUME=0.15`. The bundled coils reach 0.3 m³ with two fits. Their
+one-fit scalar turns back before that volume, so the ellipse example uses 0.15 m³.
 See [all examples](examples/README.md) for batches, gradients, surface metrics and
-Simsopt. The simpler 0.11.1 teaching objective differs from the old preview
-reproduction experiment; its older trajectory is labeled historical validation.
+Simsopt.
 
 <a id="validation"></a>
 ## Accuracy and speed
@@ -112,8 +120,8 @@ residual involving field derivatives. All have ideal value zero; comparisons
 require matching averaging regions and normalization.
 
 
-The fixed cohort contains **4096** tasks: 1024 inputs from the QUASR coil-configuration database at four noise scales.
-The default two-fit procedure produces **2127** complete scores, **1944** matches to saved Simsopt
+The fixed two-fit calibration contains **4096** tasks drawn from 1024 inputs in the QUASR coil-configuration database at four noise scales.
+CoilEval 0.11.0 produced **2127** complete scores, **1944** matches to saved Simsopt
 references from an independent surface-optimization library, and **817** pairs meeting the original reference-quality rules.
 All large errors remain. The 1981 completed references are reused unchanged;
 tasks without references contribute to success counts only.
@@ -129,30 +137,30 @@ The three QS panels use factors 1.986, 1.368 and 1.157 for the 1944 paired sampl
 | All paired | 1944 | 93.86% | 34.67% | 15.20% | 0.01270 |
 | Reference-qualified | 817 | 87.04% | 30.17% | 12.17% | 0.01015 |
 
-Every entry below is **seconds per sample**: the median of three complete calls after initialization and an additional warmup, divided by batch size. Gradient mode includes one complete objective
-reverse. Batch amortization measures throughput; scalar rows give single-query latency.
+The 0.12.0 gradient check used 49 coil and volume combinations, including cases
+where only one method can find the requested surface. Both methods returned a
+gradient on 36. The median ellipse-to-two-fit objective gradient norm ratio was
+1.002 and the median cosine was 0.997. The [gradient validation](docs/torch.md#gradient-validation)
+reports the individual metrics, the lower tail and checks against perturbed evaluations.
 
-| Interface / metric | Mode | CPU 8 threads | CPU 16 threads | CPU 32 threads | RTX 5090 | A100 |
+Each cell gives **two fits → one ellipse fit** in seconds per sample. Each timing uses the median of three complete calls after one cold call and one additional warmup. Batch entries divide whole-batch wall time by batch size. Value + gradient includes the complete evaluation, objective calculation and one backward pass. The surface rows use the high-accuracy f_T calculation.
+
+| Interface and metric | Work | CPU 8 threads | CPU 16 threads | CPU 32 threads | RTX 5090 | A100 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| single query / volume f_C | value | 22.922 | 18.195 | 15.938 | 1.775 | 1.911 |
-| single query / volume f_C | value + gradient | 40.000 | 28.481 | 21.838 | 2.168 | 2.397 |
-| batch 1 / volume f_C | value | 22.843 | 20.695 | 15.847 | 1.785 | 1.915 |
-| batch 1 / volume f_C | value + gradient | 42.364 | 29.731 | 22.055 | 2.159 | 2.410 |
-| batch 2 / volume f_C | value | 31.186 | 29.588 | 20.676 | 1.502 | 1.606 |
-| batch 2 / volume f_C | value + gradient | 50.412 | 38.103 | 26.830 | 1.572 | 1.823 |
-| batch 4 / volume f_C | value | 30.449 | 25.305 | 19.715 | 1.347 | 1.453 |
-| batch 4 / volume f_C | value + gradient | 47.093 | 33.554 | 25.651 | 1.418 | 1.633 |
-| batch 8 / volume f_C | value | 30.669 | 24.617 | 19.702 | 1.296 | 1.396 |
-| batch 8 / volume f_C | value + gradient | 47.288 | 49.192 | 34.473 | 1.375 | 1.547 |
-| single query / surface f_T | value | 36.701 | 28.010 | 26.115 | 2.024 | 2.057 |
-| single query / surface f_T | value + gradient | 56.714 | 40.632 | 34.375 | 2.585 | 2.584 |
+| Single query / volume f_C | Value | 22.353 → 19.199 | 24.148 → 19.617 | 18.027 → 16.990 | 1.769 → 1.521 | 1.921 → 1.595 |
+| Single query / volume f_C | Value + gradient | 39.172 → 34.515 | 31.516 → 26.080 | 23.293 → 21.726 | 2.212 → 1.925 | 2.586 → 2.197 |
+| Batch 1 / volume f_C | Value | 25.339 → 20.703 | 48.013 → 31.804 | 15.847 → 15.355 | 1.775 → 1.524 | 1.922 → 1.599 |
+| Batch 1 / volume f_C | Value + gradient | 41.875 → 36.780 | 55.598 → 41.358 | 22.055 → 21.204 | 2.211 → 1.919 | 2.405 → 2.060 |
+| Batch 2 / volume f_C | Value | 32.756 → 29.227 | 56.263 → 44.451 | 23.778 → 20.620 | 1.471 → 1.302 | 1.664 → 1.348 |
+| Batch 2 / volume f_C | Value + gradient | 47.013 → 43.238 | 36.030 → 33.577 | 26.830 → 29.572 | 1.595 → 1.655 | 1.821 → 1.712 |
+| Batch 4 / volume f_C | Value | 33.415 → 30.437 | 25.906 → 21.746 | 19.715 → 18.361 | 1.350 → 1.190 | 1.472 → 1.207 |
+| Batch 4 / volume f_C | Value + gradient | 49.788 → 46.488 | 66.042 → 51.706 | 25.651 → 26.425 | 1.436 → 1.504 | 1.639 → 1.561 |
+| Batch 8 / volume f_C | Value | 31.428 → 27.965 | 32.487 → 22.986 | 23.650 → 20.764 | 1.292 → 1.115 | 1.419 → 1.139 |
+| Batch 8 / volume f_C | Value + gradient | 48.061 → 41.240 | 32.256 → 28.933 | 34.473 → 29.357 | 1.475 → 1.699 | 1.692 → 1.607 |
+| Single query / surface f_T | Value | 35.818 → 32.389 | 27.493 → 24.841 | 26.115 → 21.671 | 2.052 → 1.766 | 2.092 → 1.754 |
+| Single query / surface f_T | Value + gradient | 56.809 → 51.793 | 74.775 → 53.558 | 34.375 → 30.751 | 2.594 → 2.332 | 2.612 → 2.243 |
 
-CPU8 and GPU measurements date from 2026-11-05; CPU16/32 were measured on 2026-11-06 with matching inputs, numerical configuration and libraries. All CPU columns use logical threads on Xeon Gold 6530; GPU tests retain eight host threads. Four coil sets with Fourier expansions through order 16 form eight fixed queries.
-Tests use scheduler-assigned CPUs without exclusive whole-node allocation. Additional threads do not guarantee a speedup for every workload; all measured results are retained. Volume f_C and optional surface f_T are separate
-workloads. Cold calls, whole-batch latency, hardware and hashes remain in the
-[raw timing evidence](docs/assets/preview_s2_20261105/timings.json). See the [validation record](docs/preview_validation.md)
-for cohort definitions, failures, reference qualifications and numerical limitations.
-
+Both methods use the same four coil sets and eight fixed coil/volume combinations. GPU timings wait for device completion and use eight host threads. Timings use scheduler allocations on shared nodes. The [timing records](docs/assets/ellipse_012/timings.json) include every warm repeat, cold and warmup times, and hardware details. Eight 32-thread two-fit entries reuse 2026-11-06 measurements with matching inputs, configuration, CPU model, native library and warmup procedure. See the [validation record](docs/preview_validation.md) for the historical two-fit calibration, reference qualifications and numerical limits.
 
 ## Scope and further documentation
 

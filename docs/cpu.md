@@ -7,7 +7,10 @@ This page covers CPU installation, thread limits and derivatives. **QS** means q
 The default fits a scalar surface label s, then fits it again inside a selected closed region; API names retain `psi`. Alpha (α) fitting constructs field-line angles; Boozer coordinates additionally impose the covariant-field angle conditions. A capture saves an evaluation’s intermediate state; the center is the original parameter vector and endpoints are finite-difference perturbations. QR is an orthogonal/triangular factorization for least squares. BLAS supplies linear algebra, OpenMP CPU parallelism, and AVX2 CPU vector instructions.
 
 The CPU backend evaluates the same coil discretization, magnetic-axis search,
-fitting bases and quadrature sizes as the GPU backend. It supports single-fit and two-fit surface-label methods, coil geometry metrics, finite differences and PyTorch local
+fitting bases and quadrature sizes as the GPU backend. It supports the default
+two-fit procedure, `psi_fit='near_axis_ellipse'` for one fit in an estimated
+ellipse domain predicted from the field near the magnetic axis, and the original
+circular-domain fit. It provides coil geometry metrics, finite differences and PyTorch local
 reverse gradients. Optional target-surface `f_B` and `f_T` use the shared
 Boozer-coordinate implementation.
 
@@ -17,7 +20,7 @@ Install CPU PyTorch first, then the CPU dependencies and a CoilEval wheel (a pre
 
 ```sh
 python -m pip install "torch==2.7.1+cpu" --index-url https://download.pytorch.org/whl/cpu
-python -m pip install "coil_eval-0.11.2-py3-none-manylinux_2_28_x86_64.whl[cpu]"
+python -m pip install "coil_eval-0.12.0-py3-none-manylinux_2_28_x86_64.whl[cpu]"
 ```
 
 Replace the wheel filename with the supplied file. CPU evaluation loads

@@ -1,6 +1,6 @@
 # CoilEval 0.11.0 验证结果与使用边界
 
-**适用范围：** 0.11.1 沿用这里验证的 0.11.0 评分器和默认设置；误差与速度数据继续适用。本文 Example2 记录旧完整目标/优化策略的历史验证。新的简明教学脚本见[示例说明](../examples/README.zh-CN.md)，不应把旧轨迹当成它的运行结果。
+**适用范围。** 本页记录 0.11.0 的两次拟合标定和当时的优化实验。[0.12.0 README](../README.zh-CN.md#validation) 汇报当前测速对照。[示例说明](../examples/README.zh-CN.md) 提供教学脚本和 0.12.0 的实跑结果。
 
 [English](preview_validation.md)
 
