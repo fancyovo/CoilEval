@@ -26,9 +26,10 @@ def capture_sources(coils, configs, *, library=None, device_id=0, include_torsio
     """Capture one coil geometry at one or more target volumes.
 
     A single EvaluationConfig or an iterable is accepted; the result is always
-    a list in input order. Configurations use ``psi_fit='two_stage'`` and may
-    differ only in target_volume. One axis/S1/domain/S2 fit is shared. Source
-    arrays are owned host data and remain valid after this function returns.
+    a list in input order. Configurations use ``two_stage`` or
+    ``near_axis_ellipse`` and may differ only in target volume. The two-fit
+    method shares one fit across volumes. Ellipse sampling fits each volume
+    independently. Source arrays remain valid after this function returns.
     ``include_torsion=False`` omits the optional torsion diagnostic.
     """
     if not isinstance(coils, CoilSet):
@@ -37,8 +38,8 @@ def capture_sources(coils, configs, *, library=None, device_id=0, include_torsio
     for config in configs:
         if not isinstance(config, EvaluationConfig):
             raise TypeError("configs must contain EvaluationConfig objects")
-        if config.psi_fit != "two_stage":
-            raise ValueError("capture_sources requires psi_fit='two_stage'")
+        if config.psi_fit == "single_stage":
+            raise ValueError("capture_sources requires two_stage or near_axis_ellipse")
     if not configs:
         return []
     reference = configs[0].to_dict()

@@ -29,7 +29,7 @@ from ._autograd.axis_batch import prepare_axis_batch
 def _capture_failure(raw):
     status = raw['status']
     diagnostics = raw.get('diagnostics', {})
-    if diagnostics.get('failure_stage') == 's_target_surface' and diagnostics.get('error_message'):
+    if diagnostics.get('failure_stage') in {'s_target_surface', 'ellipse_domain'} and diagnostics.get('error_message'):
         return f'{status}. {diagnostics["error_message"]}'
     return status
 
@@ -148,13 +148,14 @@ class TensorEvaluator:
     def _capture(self, physical, config, *, nfp=None):
         nfp = self.nfp if nfp is None else nfp
         arrays = split_tokens(physical)
-        if config.psi_fit == 'two_stage':
+        if config.psi_fit != 'single_stage':
             from ._two_stage.native import TwoStageNative
             coils=CoilSet(*arrays,nfp=nfp)
             result,snapshot=TwoStageNative(self.library_path,self.device.index).evaluate(
                 coils,config,capture=True,include_torsion=False)
             if snapshot is None:
-                raise native.GpuError(f'two-stage center is not valid: {_capture_failure(result)}')
+                method='two-stage' if config.psi_fit=='two_stage' else 'near-axis ellipse'
+                raise native.GpuError(f'{method} center is not valid: {_capture_failure(result)}')
             return snapshot
         batch = native.BatchCoilFieldGpu(self.library_path, *(a[None] for a in arrays),
                                          nfp=nfp, device_id=self.device.index)
@@ -178,6 +179,8 @@ class TensorEvaluator:
             for k in names}}
         if 'two_stage' in snapshot:
             center['two_stage']=snapshot['two_stage']
+        if 'ellipse_sampling' in snapshot:
+            center['ellipse_sampling']=snapshot['ellipse_sampling']
         return center
 
     def evaluate(self, parameters):
@@ -344,18 +347,23 @@ class TensorEvaluator:
             self.library_path, self.nfp) if overlap else nullcontext(None))
         with engineering_context as engineering_work:
             centers=stage('center_upload',lambda:[self._center(s) for s in snapshots])
+            method=configs[0].psi_fit
             def make_field():
                 if batch:
                     p,w=coil_segments_batch(x.double(),nfp=self.nfp,count=256)
-                    return BatchSegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
-                p,w=coil_segments(x.double(),nfp=self.nfp,count=256)
-                return SegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
-            field=stage('coil_segments',make_field)
+                    cls=BatchSegmentField
+                else:
+                    p,w=coil_segments(x.double(),nfp=self.nfp,count=256)
+                    cls=SegmentField
+                ellipse_field=cls(p,w,self.field_library) if method=='near_axis_ellipse' else None
+                return cls(p.to(self.dtype),w.to(self.dtype),self.field_library),ellipse_field
+            field,ellipse_field=stage('coil_segments',make_field)
             def make_front():
-                methods={c.psi_fit for c in configs}
-                if len(methods)!=1:
-                    raise ValueError('group batches by psi_fit method')
-                if configs[0].psi_fit!='two_stage':
+                if method=='near_axis_ellipse':
+                    from ._autograd.ellipse_front import build_ellipse_front
+                    return build_ellipse_front(field,ellipse_field,centers,batch=batch,
+                        local_value=_local_value,value_only=not _parameter_grad)
+                if method=='single_stage':
                     return (build_batch_front(field,centers,dtype=torch.float64,nfp=self.nfp) if batch else
                             build_front(field,field.trace,centers[0],dtype=torch.float64))
                 if not batch:

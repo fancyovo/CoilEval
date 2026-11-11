@@ -12,6 +12,7 @@ THREADS = 8                     # Used only on CPU
 TARGET_VOLUME = 0.3              # m^3
 FITTING_RADIUS = math.sqrt(0.06) # m, around the magnetic axis
 HELICITY = (1, 0)               # Quasi-axisymmetry
+PSI_FIT = "two_stage"           # Try "near_axis_ellipse" for one fit
 OUTPUT = Path("runs/example1/result.json")
 
 
@@ -19,7 +20,7 @@ def main():
     started = perf_counter()
     coils = CoilSet.read_json(COILS)
     config = EvaluationConfig(
-        target_volume=TARGET_VOLUME, psi_a=FITTING_RADIUS, helicity=HELICITY,
+        target_volume=TARGET_VOLUME, psi_a=FITTING_RADIUS, helicity=HELICITY, psi_fit=PSI_FIT,
     )
     print(f"Evaluating {coils.n_base_coils} basic coils on {DEVICE}...", flush=True)
     with Evaluator(config=config, device=DEVICE,

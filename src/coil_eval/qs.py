@@ -141,7 +141,7 @@ class SurfaceQSEvaluator:
         """Capture owned source records; each group differs only in volume."""
         from .evaluator import EvaluationError, InvalidEvaluationError
         engine=self._evaluator
-        if configs[0].psi_fit=='two_stage':
+        if configs[0].psi_fit!='single_stage':
             from .simsopt.capture import capture_sources
             records=capture_sources(coils,configs,library=engine.library_path,
                 device_id=engine.device.index,include_torsion=False)

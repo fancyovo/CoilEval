@@ -54,6 +54,7 @@ class CpuTensorEvaluator:
                'target_adjoint_residual','target_dVds')
         center={'config':snapshot['config'],**{k:torch.as_tensor(snapshot[k],dtype=torch.float64).detach() for k in names}}
         if 'two_stage' in snapshot:center['two_stage']=snapshot['two_stage']
+        if 'ellipse_sampling' in snapshot:center['ellipse_sampling']=snapshot['ellipse_sampling']
         return center
 
     def evaluate(self,parameters):
@@ -115,9 +116,16 @@ class CpuTensorEvaluator:
             raise ValueError('CPU snapshot field periods do not match evaluator nfp')
         p,w=coil_segments(x.double(),nfp=self.nfp,count=config.segments_per_coil)
         field=CpuSegmentField(p.to(self.dtype),w.to(self.dtype),self.field_library)
-        front=stage('axis_psi_surface',lambda:build_two_stage_front(field,field.trace,center,dtype=torch.float64,
-            local_value=_local_value,value_only=not x.requires_grad) if config.psi_fit=='two_stage'
-            else build_front(field,field.trace,center,dtype=torch.float64))
+        def make_front():
+            if config.psi_fit=='near_axis_ellipse':
+                from .._autograd.ellipse_front import build_ellipse_front
+                return build_ellipse_front(field,CpuSegmentField(p,w,self.field_library),[center],
+                    local_value=_local_value,value_only=not x.requires_grad)
+            if config.psi_fit=='two_stage':
+                return build_two_stage_front(field,field.trace,center,dtype=torch.float64,
+                    local_value=_local_value,value_only=not x.requires_grad)
+            return build_front(field,field.trace,center,dtype=torch.float64)
+        front=stage('axis_psi_surface',make_front)
         cache={name:torch.as_tensor(snapshot[key],dtype=self.dtype) for name,key in
             (('upper','alpha_upper'),('scale','alpha_scale'),('scaled_solution','alpha_center_scaled_solution'))}
         cache.update(reference_flux_coefficients=torch.as_tensor(snapshot['flux_coefficients'],dtype=torch.float64),

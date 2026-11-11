@@ -15,6 +15,7 @@ def nearby(backend,coils,candidates,center_raw,config):
         raise RuntimeError(f'two-stage center capture is not valid: {raw["status"]}')
     capture_seconds=perf_counter()-started
     results=[];chunk_timings=[]
+    ellipse=config.psi_fit=='near_axis_ellipse'
     mapping={'qs_volume':'qs_target_global_error_per_helicity',
         'qs_outer':'qs_target_edge_error_per_helicity','iota_boundary':'iota_target_surface',
         'iota_min':'iota_min','iota_max':'iota_max',
@@ -42,9 +43,13 @@ def nearby(backend,coils,candidates,center_raw,config):
                 volume_error=abs(diagnostics['surface_volume']/config.target_volume-1)
                 valid=all(np.isfinite(values[name][index]) for name in mapping) and volume_error<=.01
                 diagnostics.update(target_volume_relative_error=volume_error,
-                    two_stage_neighborhood='fixed active capacity/lattice membership; live S1, axis, domain and spacing',
-                    error_message='' if valid else 'local two-stage metric or target-volume check failed')
-                results.append({'status':'ok' if valid else 'local_two_stage_rejected',
+                    error_message='' if valid else 'local metric or target-volume check failed')
+                if ellipse:
+                    diagnostics['ellipse_neighborhood']='fixed disk nodes; moving axis and ellipse'
+                else:
+                    diagnostics['two_stage_neighborhood']='fixed active capacity/lattice membership; live S1, axis, domain and spacing'
+                status='local_ellipse_rejected' if ellipse else 'local_two_stage_rejected'
+                results.append({'status':'ok' if valid else status,
                     'components':dict(raw.get('components',{})),'diagnostics':diagnostics,'timing':{}})
             del response,parameters
     center_arrays=_coil_arrays(coils)
@@ -54,7 +59,8 @@ def nearby(backend,coils,candidates,center_raw,config):
     record={'scope':'shared_batch','query_count':len(candidates),'total_s':perf_counter()-started,
             'stages_s':{'center_capture':capture_seconds,'center_flux_selection':selection_seconds},
             'center_flux_choice':choice,'center_flux_selection_timings':choice_timings,'chunks':chunk_timings,
-            'method':'two_stage_fixed_discrete_branch','batch_size':config.psi_fd_batch_size}
+            'method':'moving_near_axis_ellipse' if ellipse else 'two_stage_fixed_discrete_branch',
+            'batch_size':config.psi_fd_batch_size}
     for result in results:
         result['local_timing']=record
     return results

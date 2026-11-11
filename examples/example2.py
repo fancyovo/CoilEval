@@ -20,6 +20,7 @@ THREADS = 8
 TARGET_VOLUME = 0.3
 FITTING_RADIUS = math.sqrt(0.06)
 HELICITY = (1, 0)               # Quasi-axisymmetry
+PSI_FIT = "two_stage"           # Try "near_axis_ellipse" for one fit
 N_STARTS = 32
 NOISE = 0.01                    # c -> c * exp(log(1 + NOISE) * normal(0, 1))
 SEED = 2026110502
@@ -55,7 +56,7 @@ def main():
     tensor_device = f"cuda:{DEVICE_ID}" if DEVICE == "cuda" else DEVICE
     base = pack_coils(coils, device=tensor_device)
     config = EvaluationConfig(
-        target_volume=TARGET_VOLUME, psi_a=FITTING_RADIUS, helicity=HELICITY,
+        target_volume=TARGET_VOLUME, psi_a=FITTING_RADIUS, helicity=HELICITY, psi_fit=PSI_FIT,
     )
     rng = np.random.default_rng(SEED)
     OUTPUT.mkdir(parents=True, exist_ok=True)

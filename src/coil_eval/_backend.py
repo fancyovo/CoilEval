@@ -97,7 +97,7 @@ class NativeBackend:
         self._active_batch: BatchCoilFieldGpu | None = None
 
     def evaluate(self, coils: Any, config: Any) -> dict[str, Any]:
-        if config.psi_fit == "two_stage":
+        if config.psi_fit != "single_stage":
             from ._two_stage.native import TwoStageNative
             return TwoStageNative(self.library,self.device_id).evaluate(coils,config)[0]
         arrays = _coil_arrays(coils)
@@ -210,7 +210,7 @@ class NativeBackend:
             ):
                 raise ValueError("nearby candidates must match center shape and nfp")
             candidate_arrays.append(arrays)
-        if config.psi_fit == "two_stage":
+        if config.psi_fit != "single_stage":
             from ._two_stage.native import TwoStageNative
             fallback = None
             if config.psi_nearby_method == "local":

@@ -96,7 +96,18 @@ class CpuBackend:
             if axis is None:
                 timing['total']=perf_counter()-start
                 return dict(status=axis_info.get('status','no_axis'),diagnostics=diagnostics,timing=timing),None
-            rz,phi=stage('psi_grid',lambda:psi_grid(axis,cfg,coils.nfp))
+            ellipse_sampling=None
+            if config.psi_fit=='near_axis_ellipse':
+                from functools import partial
+                from .._two_stage.ellipse import sample_ellipse
+                status='ellipse_domain_failed'
+                rz,phi,ellipse_sampling,ellipse_info=stage('ellipse_sampling',lambda:sample_ellipse(
+                    axis,partial(field.evaluate,mixed=False),cfg,coils.nfp))
+                diagnostics.update(psi_fit_method=config.psi_fit,psi_refit_domain_volume=ellipse_info['training_volume_requested'],
+                                   psi_refit_training_count=len(phi),psi_refit_branch=ellipse_info)
+                status='internal_error'
+            else:
+                rz,phi=stage('psi_grid',lambda:psi_grid(axis,cfg,coils.nfp))
             coefficients,factor=stage('psi_fit',lambda:fit_psi(field,axis,rz,phi,cfg,coils.nfp))
             two=None
             if config.psi_fit=='two_stage':
@@ -171,6 +182,7 @@ class CpuBackend:
                 snapshot=dict(config=options,axis_samples=axis,psi_coefficients=coefficients,
                     psi_scale=factor['scale'],psi_upper=factor['upper'],**target,score_result=raw)
                 if two is not None:snapshot['two_stage']=two
+                if ellipse_sampling is not None:snapshot['ellipse_sampling']=ellipse_sampling
                 return raw,snapshot
             points,selection,sampling_info=stage('volume_points',lambda:formal_volume_points(geometry,level,flux,dcfg,cfg))
             diagnostics.update(sampling_info)
@@ -203,6 +215,7 @@ class CpuBackend:
                 iota_coefficients=alpha['iota_coefficients'].numpy(),
                 flux_coefficients=flux['coefficients'].numpy(),score_result=raw)
             if two is not None:snapshot['two_stage']=two
+            if ellipse_sampling is not None:snapshot['ellipse_sampling']=ellipse_sampling
             return raw,snapshot
         except (ValueError,RuntimeError) as error:
             diagnostics.update(getattr(error, 'diagnostics', {}))

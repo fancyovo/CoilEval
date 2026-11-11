@@ -53,20 +53,20 @@ class EvaluationConfig:
             if not math.isfinite(tolerance) or tolerance <= 0:
                 raise ValueError("stokes_validation_rtol must be finite and positive, or None")
             object.__setattr__(self, "stokes_validation_rtol", tolerance)
-        if self.psi_fit not in {"single_stage", "two_stage"}:
-            raise ValueError("psi_fit must be single_stage or two_stage")
+        if self.psi_fit not in {"single_stage", "two_stage", "near_axis_ellipse"}:
+            raise ValueError("psi_fit must be single_stage, two_stage or near_axis_ellipse")
         if self.psi_nearby_method not in {"local", "formal"}:
             raise ValueError("psi_nearby_method must be local or formal")
         if self.psi_refit_sampling not in {"cartesian", "polar_quadrature"}:
             raise ValueError("psi_refit_sampling must be cartesian or polar_quadrature")
         if self.alpha_radial_weighting not in {"histogram", "smooth"}:
             raise ValueError("alpha_radial_weighting must be histogram or smooth")
-        if self.alpha_radial_weighting == "smooth" and self.psi_fit != "two_stage":
-            raise ValueError("smooth alpha radial weighting requires psi_fit='two_stage'")
+        if self.alpha_radial_weighting == "smooth" and self.psi_fit == "single_stage":
+            raise ValueError("smooth alpha radial weighting requires two_stage or near_axis_ellipse")
         if self.alpha_radial_basis not in {"zernike", "flux_legendre"}:
             raise ValueError("alpha_radial_basis must be zernike or flux_legendre")
-        if self.alpha_radial_basis == "flux_legendre" and self.psi_fit != "two_stage":
-            raise ValueError("flux_legendre alpha radial basis requires psi_fit='two_stage'")
+        if self.alpha_radial_basis == "flux_legendre" and self.psi_fit == "single_stage":
+            raise ValueError("flux_legendre alpha radial basis requires two_stage or near_axis_ellipse")
         for name in ("alpha_weight_sigma", "alpha_count_floor"):
             value=float(getattr(self,name))
             if not math.isfinite(value) or value<=0:

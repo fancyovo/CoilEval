@@ -120,6 +120,8 @@ class TwoStageNative:
 
     def _prepare(self,coils,config,cfg,arrays,capture,timings):
         """Create one field/S1/domain/S2 model, independently of target volume."""
+        if getattr(config,'psi_fit','two_stage')=='near_axis_ellipse':
+            return self._prepare_ellipse(coils,config,cfg,arrays,capture,timings)
         initial=self._begin_prepare(coils,config,cfg,arrays,capture,timings)
         if 'partial_result' in initial:
             return initial
@@ -127,6 +129,50 @@ class TwoStageNative:
         prepared=self._finish_prepare(cfg,initial,domain,capture,timings)
         prepared['axis']=initial['axis']
         return prepared
+
+    def _prepare_ellipse(self,coils,config,cfg,arrays,capture,timings):
+        from .ellipse import EllipseDomainError, sample_ellipse
+
+        evaluate_field=self.lib.sgpu_eval_B_grad
+        evaluate_field.argtypes=[ct.c_void_p,_D,_D,_D,ct.c_int]
+        evaluate_field.restype=ct.c_int
+        initial=self._begin_prepare(coils,config,cfg,arrays,False,timings,axis_only=True)
+        if 'partial_result' in initial:
+            return initial
+
+        def field(xyz, *, gradient):
+            magnetic=np.empty_like(xyz)
+            derivative=np.empty((len(xyz),3,3),dtype=np.float64)
+            self._check(evaluate_field(initial['field'],pointer(xyz),
+                pointer(magnetic),pointer(derivative),len(xyz)))
+            return magnetic,derivative
+
+        stage=perf_counter()
+        try:
+            rz,phi,sampling,diagnostics=sample_ellipse(initial['axis'],field,cfg,coils.nfp)
+        except EllipseDomainError as exc:
+            timings['ellipse_sampling']=perf_counter()-stage
+            return dict(partial_result=dict(status='ellipse_domain_failed',components={},
+                diagnostics=dict(exc.diagnostics,error_message=str(exc),psi_fit_method=config.psi_fit,
+                                 psi_fit_stages=0),timing=dict(timings)))
+        timings['ellipse_sampling']=perf_counter()-stage
+        count=((cfg.psi_poly_degree+1)*(cfg.psi_poly_degree+2)//2-3)*(2*cfg.psi_m_tor+1)-1
+        coefficients=np.empty(count,dtype=np.float64)
+        rms=ct.c_double()
+        stats=np.zeros(16,dtype=np.float64)
+        rows=[np.ascontiguousarray(rz[:,i]) for i in range(2)]+[phi]
+        stage=perf_counter()
+        self._check(self.lib.sgpu_two_stage_fit_v1(self._context,*[pointer(a) for a in rows],
+            len(phi),pointer(coefficients),ct.byref(rms),pointer(stats),len(stats)))
+        timings['ellipse_fit']=perf_counter()-stage
+        scale,upper=self._factor(count) if capture else (None,None)
+        for factor in (scale,upper):
+            if factor is not None:
+                factor.setflags(write=False)
+        return dict(initial,coefficients=coefficients,train_rms=rms.value,psi_fit_method=config.psi_fit,
+            s2_scale=scale,s2_upper=upper,training_count=len(phi),sample={'kind':'elliptic_lattice'},
+            ellipse_sampling=sampling,boundary={'volume_m3':diagnostics['training_volume_requested']},
+            branch=diagnostics)
 
     def _begin_prepare(self,coils,config,cfg,arrays,capture,timings,*,axis_only=False):
         """Own native axis data and optionally the first cylindrical fit."""
@@ -311,14 +357,11 @@ class TwoStageNative:
     @staticmethod
     def _prepare_snapshot_arrays(prepared,capture_mode,source_native):
         prepared['native_source_capture']=source_native
-        if prepared.get('psi_fit_method')=='near_axis_ellipse':
-            if capture_mode!='sources':
-                raise ValueError('one-fit ellipse preparation supports source capture')
-            prepared['shared_snapshot_arrays']={}
-            return
         prepared['shared_snapshot_arrays']=({
             'psi_scale':prepared['s2_scale'],'psi_upper':prepared['s2_upper']}
             if capture_mode in ('reverse','geometry_reverse') else {})
+        if prepared.get('psi_fit_method')=='near_axis_ellipse':
+            return
         prepared['shared_two_stage']=_shared_array_tree(dict(
             stage1_coefficients=prepared['first'],stage1_scale=prepared['s1_scale'],
             stage1_upper=prepared['s1_upper'],boundary=prepared['boundary'],sampling=prepared['sample']))
@@ -375,15 +418,18 @@ class TwoStageNative:
             snapshot['config'].update(prepared['alpha_options'])
             if capture_mode in ('reverse','geometry_reverse'):
                 snapshot['psi_scale'],snapshot['psi_upper']=prepared['s2_scale'],prepared['s2_upper']
+                if method=='near_axis_ellipse':
+                    snapshot['ellipse_sampling']=prepared['ellipse_sampling']
             if method=='two_stage':
                 snapshot['two_stage']=_shared_array_tree(prepared['shared_two_stage'])
+            choices=('fixed disk lattice with moving ellipse and axis' if method=='near_axis_ellipse' else
+                     'fixed active limiting ray and quadrature nodes' if prepared['sample'].get('kind')=='polar_quadrature'
+                     else 'fixed active limiting ray and lattice membership')
             snapshot['metadata']=dict(capture_version=1,psi_fit_method=method,
                 capture_kind=capture_mode,
                 source_capture_backend=('native' if prepared['native_source_capture'] else 'legacy_host_filter')
                     if capture_mode=='sources' else None,
-                discrete_choices=('fixed active limiting ray and quadrature nodes for local derivatives'
-                    if prepared['sample'].get('kind')=='polar_quadrature' else
-                    'fixed active limiting ray and lattice membership for local derivatives'))
+                discrete_choices=choices+' for local derivatives')
             if 'alpha_center_scaled_solution' in snapshot:
                 nmode=len(snapshot['alpha_mode_l'])
                 snapshot['alpha_coefficients']=(snapshot['alpha_center_scaled_solution']/snapshot['alpha_scale'])[:nmode]
@@ -436,6 +482,9 @@ class TwoStageNative:
                            if key!='target_volume' and reference.get(key)!=current.get(key)}
                 if different:
                     raise ValueError('two-stage evaluate_many permits only target_volume differences: '+', '.join(sorted(different)))
+            if configs[0].psi_fit=='near_axis_ellipse':
+                return [self.evaluate(coils,config,capture=capture,diagnostics=diagnostics,
+                    axis_hint=axis_hint,include_torsion=include_torsion) for config in configs]
         self.close()
         self.last_many_timing=None
         started=perf_counter()
