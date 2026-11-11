@@ -106,6 +106,7 @@ def test_dense_alpha_qr_recovers_manufactured_coefficients():
 
 @pytest.mark.parametrize('cached_geometry',[False,True])
 def test_surface_projection_cache_reuses_basis_without_sharing_fitted_state(monkeypatch,cached_geometry):
+    pytest.importorskip('scipy')
     from coil_eval.simsopt import geometry
     design=np.random.default_rng(7).normal(size=(24,4))
     base=np.ones((4,2,3))*.03
@@ -127,6 +128,8 @@ def test_surface_projection_cache_reuses_basis_without_sharing_fitted_state(monk
 
 @pytest.mark.parametrize('device',['cpu','cpu:0'])
 def test_geometry_basis_cache_matches_affine_surface_tangents_and_bounds_storage(monkeypatch,device):
+    if device != 'cpu':
+        pytest.importorskip('torch')
     from coil_eval.simsopt import geometry
     created=[]
     class FakeSurface:
@@ -226,6 +229,7 @@ def test_physical_volume_preserves_clockwise_initializer_orientation():
 
 
 def test_resident_toroidal_inverse_matches_manufactured_map_and_reference():
+    pytest.importorskip('torch')
     from coil_eval.simsopt.fourier import ToroidalCorrection,invert_toroidal_map
     correction=ToroidalCorrection(np.array([[1,-1],[2,1],[0,1]]),
         np.array([.002,.001,-.003]),np.array([.001,-.002,.001]),1.27,4,{})

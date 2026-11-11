@@ -9,11 +9,12 @@ from coil_eval import CoilSet
 from coil_eval.evaluator import InvalidEvaluationError
 from coil_eval._two_stage import capture_batch
 from coil_eval._two_stage.native import TwoStageNative
-from coil_eval._autograd.engineering import split_tokens
 
 
 @pytest.mark.parametrize('pipeline', [False, True])
 def test_native_error_query_identity(tensor_api, factory, monkeypatch, pipeline):
+    from coil_eval._autograd.engineering import split_tokens
+
     torch, api, evaluator, _ = tensor_api
     _, library, _ = factory()
     original_begin = library.sgpu_two_stage_begin_v1
