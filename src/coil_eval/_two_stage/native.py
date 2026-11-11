@@ -58,6 +58,10 @@ class TwoStageNative:
             ct.POINTER(native._SgpuScoreConfig),ct.POINTER(native._SgpuScoreResult),
             ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_void_p),_D,ct.c_int,_I,_D,ct.c_int,_I]
         self.lib.sgpu_two_stage_begin_v1.restype=ct.c_int
+        self._begin_axis=getattr(self.lib,'sgpu_two_stage_begin_axis_v1',None)
+        if self._begin_axis is not None:
+            self._begin_axis.argtypes=self.lib.sgpu_two_stage_begin_v1.argtypes[:-3]
+            self._begin_axis.restype=ct.c_int
         self.lib.sgpu_two_stage_fit_v1.argtypes=[ct.c_void_p,_D,_D,_D,ct.c_int,_D,_D,_D,ct.c_int]
         self.lib.sgpu_two_stage_fit_v1.restype=ct.c_int
         alpha_weighting=getattr(self.lib,'sgpu_two_stage_set_alpha_radial_weighting_v1',None)
@@ -124,11 +128,13 @@ class TwoStageNative:
         prepared['axis']=initial['axis']
         return prepared
 
-    def _begin_prepare(self,coils,config,cfg,arrays,capture,timings):
-        """Run native S1 on the caller thread and own all exported host data."""
+    def _begin_prepare(self,coils,config,cfg,arrays,capture,timings,*,axis_only=False):
+        """Own native axis data and optionally the first cylindrical fit."""
+        if axis_only and (self._begin_axis is None or capture):
+            raise ValueError('axis-only preparation requires native support and no first-fit factor capture')
         modes=((cfg.psi_poly_degree+1)*(cfg.psi_poly_degree+2)//2-3)*(2*cfg.psi_m_tor+1)-1
         axes=np.empty(4*cfg.axis_sample_count,dtype=np.float64)
-        first=np.empty(modes,dtype=np.float64)
+        first=None if axis_only else np.empty(modes,dtype=np.float64)
         count,npsi=ct.c_int(),ct.c_int()
         context,field=ct.c_void_p(),ct.c_void_p()
         raw=native._SgpuScoreResult()
@@ -137,15 +143,20 @@ class TwoStageNative:
         begin_cfg=native._SgpuScoreConfig.from_buffer_copy(bytes(cfg))
         begin_cfg.target_volume=0.
         stage=perf_counter()
-        code=self.lib.sgpu_two_stage_begin_v1(*[pointer(a) for a in arrays],
+        args=(*[pointer(a) for a in arrays],
             *arrays[0].shape,int(coils.nfp),ct.byref(begin_cfg),ct.byref(raw),ct.byref(context),
-            ct.byref(field),pointer(axes),cfg.axis_sample_count,ct.byref(count),
-            pointer(first),modes,ct.byref(npsi))
+            ct.byref(field),pointer(axes),cfg.axis_sample_count,ct.byref(count))
+        if axis_only:
+            code=self._begin_axis(*args)
+        else:
+            code=self.lib.sgpu_two_stage_begin_v1(*args,pointer(first),modes,ct.byref(npsi))
         # Own a returned context before checking the return code, so even a
         # partially allocated failing C call is released by the outer finally.
         self._context=context
         self._check_result(code,raw)
         timings['stage1']=perf_counter()-stage
+        for name in ('field_create_s','axis_search_s','axis_trace_s','psi_points_s','psi_fit_s'):
+            timings['begin_'+name]=float(raw.timings[native.SGPU_SCORE_TIMING_NAMES.index(name)])
         if raw.status!=0 or not context.value:
             return dict(partial_result=native._score_result_dict(raw))
         alpha_options=dict(alpha_radial_weighting=getattr(config,'alpha_radial_weighting','histogram'),
@@ -172,10 +183,14 @@ class TwoStageNative:
             self._check(setter(context,refit_ridge))
             alpha_options['psi_refit_ridge']=float(refit_ridge)
         axis=axes[:4*count.value].reshape(4,count.value).T.copy()
-        first=first[:npsi.value].copy()
+        if first is not None:
+            first=first[:npsi.value].copy()
         s1_scale,s1_upper=self._factor(len(first)) if capture else (None,None)
-        return dict(axis=axis,first=first,alpha_options=alpha_options,
-                    s1_scale=s1_scale,s1_upper=s1_upper)
+        initial=dict(axis=axis,first=first,alpha_options=alpha_options,
+                     s1_scale=s1_scale,s1_upper=s1_upper)
+        if axis_only:
+            initial['field']=field
+        return initial
 
     @staticmethod
     def _prepare_domain(coils,config,cfg,initial,timings):
@@ -296,6 +311,11 @@ class TwoStageNative:
     @staticmethod
     def _prepare_snapshot_arrays(prepared,capture_mode,source_native):
         prepared['native_source_capture']=source_native
+        if prepared.get('psi_fit_method')=='near_axis_ellipse':
+            if capture_mode!='sources':
+                raise ValueError('one-fit ellipse preparation supports source capture')
+            prepared['shared_snapshot_arrays']={}
+            return
         prepared['shared_snapshot_arrays']=({
             'psi_scale':prepared['s2_scale'],'psi_upper':prepared['s2_upper']}
             if capture_mode in ('reverse','geometry_reverse') else {})
@@ -320,11 +340,12 @@ class TwoStageNative:
         result=native._score_result_dict(raw)
         if include_torsion:
             result=native._with_torsion(self.lib,result,*arrays[:3])
-        result['diagnostics'].update(iota_target_surface=edge_iota.value,psi_fit_method='two_stage',
+        method=prepared.get('psi_fit_method','two_stage')
+        result['diagnostics'].update(iota_target_surface=edge_iota.value,psi_fit_method=method,
             **prepared['alpha_options'],
             psi_refit_domain_volume=prepared['boundary']['volume_m3'],
             psi_refit_training_count=prepared['training_count'],psi_refit_branch=deepcopy(prepared['branch']))
-        result['diagnostics']['psi_fit_stages']=3 if 'target_refit' in prepared else 2
+        result['diagnostics']['psi_fit_stages']=1 if method=='near_axis_ellipse' else (3 if 'target_refit' in prepared else 2)
         diag = result['diagnostics']
         if result['status']=='no_surface' and diag.get('target_volume_requested', 0.) > 0.:
             message = diag.get('native_error_message', diag['error_message'])
@@ -354,8 +375,9 @@ class TwoStageNative:
             snapshot['config'].update(prepared['alpha_options'])
             if capture_mode in ('reverse','geometry_reverse'):
                 snapshot['psi_scale'],snapshot['psi_upper']=prepared['s2_scale'],prepared['s2_upper']
-            snapshot['two_stage']=_shared_array_tree(prepared['shared_two_stage'])
-            snapshot['metadata']=dict(capture_version=1,psi_fit_method='two_stage',
+            if method=='two_stage':
+                snapshot['two_stage']=_shared_array_tree(prepared['shared_two_stage'])
+            snapshot['metadata']=dict(capture_version=1,psi_fit_method=method,
                 capture_kind=capture_mode,
                 source_capture_backend=('native' if prepared['native_source_capture'] else 'legacy_host_filter')
                     if capture_mode=='sources' else None,

@@ -55,7 +55,7 @@ namespace {
 struct TwoStageNativeContextV1 {
     void* field = nullptr;
     AxisData axis;
-    PsiData first;
+    PsiModes psi_modes;
     SgpuScoreConfig config{};
     AlphaRadialWeightingOptions alpha_weighting;
     int alpha_radial_basis = 0;
@@ -102,14 +102,12 @@ bool two_stage_snapshot(const char* directory, const FixedFrontG2Cache& cache) {
         device("flux_derivative",cache.points.flux_derivative.data(),n) &&
         write("iota_coefficients",cache.alpha.iota_coefficients.data(),cache.alpha.iota_coefficients.size());
 }
-} // namespace
-
-extern "C" int sgpu_two_stage_begin_v1(
+int two_stage_begin(
     const double* x,const double* y,const double* z,const double* currents,
     int coils,int coefficients,int nfp,const SgpuScoreConfig* config,
     SgpuScoreResult* result,void** context,void** field_handle,
     double* axis_arrays,int axis_capacity,int* axis_count,
-    double* psi_coefficients,int psi_capacity,int* psi_count
+    double* psi_coefficients,int psi_capacity,int* psi_count,bool fit_cylinder
 ) {
     auto coarse_cache = g_axis_coarse_slot.take();
     if (!result) return 1;
@@ -119,7 +117,7 @@ extern "C" int sgpu_two_stage_begin_v1(
     if (axis_count) *axis_count=0;
     if (psi_count) *psi_count=0;
     if (!x || !y || !z || !currents || !config || !context || !field_handle ||
-        !axis_arrays || !axis_count || !psi_coefficients || !psi_count ||
+        !axis_arrays || !axis_count || (fit_cylinder && (!psi_coefficients || !psi_count)) ||
         coils<=0 || coefficients<3 || coefficients%2==0 || nfp<=0) {
         return fail_result(result,"invalid two-stage stage1 inputs");
     }
@@ -164,26 +162,56 @@ extern "C" int sgpu_two_stage_begin_v1(
     }
     const int n=static_cast<int>(ctx->axis.R.size());
     if (axis_capacity<n) {delete ctx;return fail_result(result,"two-stage axis output capacity too small");}
-    PsiFactorCapture factor_capture;
-    if (!fit_psi_native(ctx->field,ctx->axis,nfp,first_config,ctx->first,
-        result->timings[SGPU_SCORE_TIME_PSI_POINTS],result->timings[SGPU_SCORE_TIME_PSI_FIT])) {
-        delete ctx;return fail_from_backend(result,"two-stage cylindrical psi fit");
+    if (fit_cylinder) {
+        PsiData first;
+        PsiFactorCapture factor_capture;
+        if (!fit_psi_native(ctx->field,ctx->axis,nfp,first_config,first,
+            result->timings[SGPU_SCORE_TIME_PSI_POINTS],result->timings[SGPU_SCORE_TIME_PSI_FIT])) {
+            delete ctx;return fail_from_backend(result,"two-stage cylindrical psi fit");
+        }
+        const int p=static_cast<int>(first.coeffs.size());
+        if (psi_capacity<p) {delete ctx;return fail_result(result,"two-stage psi output capacity too small");}
+        std::copy(first.coeffs.begin(),first.coeffs.end(),psi_coefficients);
+        *psi_count=p;
+        ctx->psi_modes=std::move(first.modes);
+        result->psi_train_rms=first.train_rms;
+        result->stage_completed=SCORE_STAGE_PSI;
+    } else {
+        ctx->psi_modes=build_psi_modes(first_config.psi_poly_degree,first_config.psi_m_tor);
     }
-    const int p=static_cast<int>(ctx->first.coeffs.size());
-    if (psi_capacity<p) {delete ctx;return fail_result(result,"two-stage psi output capacity too small");}
     for (int j=0;j<n;++j) {
         axis_arrays[j]=ctx->axis.R[j]; axis_arrays[n+j]=ctx->axis.Z[j];
         axis_arrays[2*n+j]=ctx->axis.R_phi[j]; axis_arrays[3*n+j]=ctx->axis.Z_phi[j];
     }
-    std::copy(ctx->first.coeffs.begin(),ctx->first.coeffs.end(),psi_coefficients);
-    *axis_count=n; *psi_count=p;
-    result->psi_train_rms=ctx->first.train_rms;
-    result->stage_completed=SCORE_STAGE_PSI;
-    result->status=SGPU_SCORE_OK; // PARTIAL fit success, explicitly not a complete score.
+    *axis_count=n;
+    result->status=SGPU_SCORE_OK; // Prepared field and axis, optionally with a cylindrical fit.
     result->timings[SGPU_SCORE_TIME_TOTAL]=seconds_since(total);
     *context=ctx; *field_handle=ctx->field;
     sgpu_internal_set_error("");
     return 0;
+}
+} // namespace
+
+extern "C" int sgpu_two_stage_begin_v1(
+    const double* x,const double* y,const double* z,const double* currents,
+    int coils,int coefficients,int nfp,const SgpuScoreConfig* config,
+    SgpuScoreResult* result,void** context,void** field_handle,
+    double* axis_arrays,int axis_capacity,int* axis_count,
+    double* psi_coefficients,int psi_capacity,int* psi_count
+) {
+    return two_stage_begin(x,y,z,currents,coils,coefficients,nfp,config,result,context,field_handle,
+        axis_arrays,axis_capacity,axis_count,psi_coefficients,psi_capacity,psi_count,true);
+}
+
+// Own the same field and axis for a caller-supplied training domain.
+extern "C" int sgpu_two_stage_begin_axis_v1(
+    const double* x,const double* y,const double* z,const double* currents,
+    int coils,int coefficients,int nfp,const SgpuScoreConfig* config,
+    SgpuScoreResult* result,void** context,void** field_handle,
+    double* axis_arrays,int axis_capacity,int* axis_count
+) {
+    return two_stage_begin(x,y,z,currents,coils,coefficients,nfp,config,result,context,field_handle,
+        axis_arrays,axis_capacity,axis_count,nullptr,0,nullptr,false);
 }
 
 extern "C" int sgpu_two_stage_resume_v1(
@@ -209,7 +237,7 @@ extern "C" int sgpu_two_stage_resume_v1(
         return fail_result(result,"target-surface geometry capture cannot write a volume snapshot");
     if (config->device_id!=ctx->config.device_id || config->segments_per_coil!=ctx->config.segments_per_coil ||
         config->psi_a!=ctx->config.psi_a || config->psi_poly_degree!=ctx->config.psi_poly_degree ||
-        config->psi_m_tor!=ctx->config.psi_m_tor || coefficient_count!=static_cast<int>(ctx->first.coeffs.size()) ||
+        config->psi_m_tor!=ctx->config.psi_m_tor || coefficient_count!=static_cast<int>(ctx->psi_modes.a.size()) ||
         iota_capacity<config->iota_degree+1 || !std::isfinite(train_rms))
         return fail_result(result,"resume basis/physical-field configuration differs from stage1 or output capacity invalid");
     for (int j=0;j<coefficient_count;++j) if (!std::isfinite(coefficients[j]))
@@ -308,7 +336,7 @@ extern "C" int sgpu_two_stage_fit_v1(
 ) {
     auto* ctx=static_cast<TwoStageNativeContextV1*>(context);
     if (!ctx || !R || !Z || !phi || count<1 || !coefficients || !train_rms) return 1;
-    const auto& cfg=ctx->config;const auto& axis=ctx->axis;const auto& modes=ctx->first.modes;
+    const auto& cfg=ctx->config;const auto& axis=ctx->axis;const auto& modes=ctx->psi_modes;
     PsiFactorCapture factor_capture;
     return sgpu_fit_psi_fullgpu(ctx->field,R,Z,phi,count,
         axis.R.data(),axis.Z.data(),axis.R_phi.data(),axis.Z_phi.data(),static_cast<int>(axis.R.size()),
@@ -324,7 +352,7 @@ extern "C" int sgpu_two_stage_fit_weighted_v1(
 ) {
     auto* ctx=static_cast<TwoStageNativeContextV1*>(context);
     if (!ctx || !R || !Z || !phi || !row_weights || count<1 || !coefficients || !train_rms) return 1;
-    const auto& cfg=ctx->config;const auto& axis=ctx->axis;const auto& modes=ctx->first.modes;
+    const auto& cfg=ctx->config;const auto& axis=ctx->axis;const auto& modes=ctx->psi_modes;
     PsiFactorCapture factor_capture;
     return sgpu_fit_psi_fullgpu_weighted(ctx->field,R,Z,phi,count,row_weights,
         axis.R.data(),axis.Z.data(),axis.R_phi.data(),axis.Z_phi.data(),static_cast<int>(axis.R.size()),
@@ -377,9 +405,7 @@ extern "C" int sgpu_two_stage_set_fit_basis_experimental_v1(
         sgpu_internal_set_error(reason.c_str());
         return 1;
     }
-    auto modes=build_psi_modes(degree,mtor);
-    ctx->first.coeffs.resize(modes.a.size());
-    ctx->first.modes=std::move(modes);
+    ctx->psi_modes=build_psi_modes(degree,mtor);
     ctx->config=config;
     return 0;
 }
