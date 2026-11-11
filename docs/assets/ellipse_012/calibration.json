@@ -1,0 +1,30 @@
+{
+  "protocol": "coileval-012-readme-calibration-20261111-v1",
+  "version": "0.12.0",
+  "psi_fit": "near_axis_ellipse",
+  "source_commit": "db246075a3b510e5c4666c492fe1846efd89ead8",
+  "total": 4096,
+  "scored": 2288,
+  "status_counts": {
+    "completed": 2288,
+    "ellipse_domain_failed": 140,
+    "no_axis": 310,
+    "no_surface": 1312,
+    "surface_metrics_failed": 46
+  },
+  "reference_completed": 1981,
+  "paired": 1755,
+  "p90": {
+    "f_B": 1.1937119082253946,
+    "f_C": 1.0797239461807382,
+    "f_T": 1.027698063456013,
+    "iota": 0.003265996064147081
+  },
+  "checked_frozen_files_per_pass": 38637,
+  "freeze_sha256": "daff50895c551b855adbd92aa9b8e75399f2bc1dd8288c74a432d4d96eee3248",
+  "config_sha256": "5e52b29a87e81d936ea8a18d515d8f0d3698bf952e0a860d3d41a0a3b199d7a7",
+  "native_sha256": "34985cca84fcd5395c967571884572e82c761baccd427fc03a800d2576269e5b",
+  "field_sha256": "49cf554ff9ae0660288be95f5d7a8d40b611c3399be67dc1ccb86317207dcb65",
+  "pairs_sha256": "7eb3884609fb463ca7c748fa247163a3aa49c7098a754b31adf9a363e1b942b5",
+  "scatter_sha256": "490e7f7d03ae0f95cbe593823bd0e1c66a2e7e26f7c3d220cc3f945fcf6b4ec2"
+}

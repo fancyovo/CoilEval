@@ -120,55 +120,46 @@ residual involving field derivatives. All have ideal value zero; comparisons
 require matching averaging regions and normalization.
 
 
-The fixed two-fit calibration contains **4096** tasks drawn from 1024 inputs in the QUASR coil-configuration database at four noise scales.
-CoilEval 0.11.0 produced **2127** complete scores, **1944** matches to saved Simsopt
-references from an independent surface-optimization library, and **817** pairs meeting the original reference-quality rules.
-All large errors remain. The 1981 completed references are reused unchanged;
-tasks without references contribute to success counts only.
+<!-- calibration-and-timings:start -->
+The calibration and timings use CoilEval 0.12.0 with `psi_fit="near_axis_ellipse"`.
+The calibration evaluates **4096** tasks from 1024 QUASR coil configurations at four perturbation scales.
+CoilEval returned all four surface metrics for **2288** tasks, including **1755** pairs with saved Simsopt reference surfaces.
 
-![Four CoilEval–Simsopt comparisons, each n=1944, with empirical P90 error bands](docs/assets/preview_s2_20261105/calibration_p90.png)
+![Four CoilEval 0.12.0–Simsopt scatter plots for 1755 paired samples with P90 error bands](docs/assets/ellipse_012/calibration_p90.png)
 
-QS bands use `exp(±P90(abs(ln(prediction/reference))))`; iota bands use
-`±P90(abs(prediction-reference))`. They describe empirical error coverage.
-The three QS panels use factors 1.986, 1.368 and 1.157 for the 1944 paired samples. The table separately reports P90 relative error.
+For QS, each band uses the 90th percentile of the larger value divided by the smaller value in each pair.
+The ι band uses the 90th percentile of the absolute difference.
+[Paired values](docs/assets/ellipse_012/calibration_pairs.csv) · [Calibration record](docs/assets/ellipse_012/calibration.json)
 
-| Population | Pairs | f_B P90 relative error | f_C P90 relative error | f_T P90 relative error | ι P90 absolute error |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| All paired | 1944 | 93.86% | 34.67% | 15.20% | 0.01270 |
-| Reference-qualified | 817 | 87.04% | 30.17% | 12.17% | 0.01015 |
-
-The 0.12.0 gradient check used 49 coil and volume combinations, including cases
-where only one method can find the requested surface. Both methods returned a
-gradient on 36. The median ellipse-to-two-fit objective gradient norm ratio was
-1.002 and the median cosine was 0.997. The [gradient validation](docs/torch.md#gradient-validation)
-reports the individual metrics, the lower tail and checks against perturbed evaluations.
-
-Each cell gives **two fits → one ellipse fit** in seconds per sample. Each timing uses the median of three complete calls after one cold call and one additional warmup. Batch entries divide whole-batch wall time by batch size. Value + gradient includes the complete evaluation, objective calculation and one backward pass. The surface rows use the high-accuracy f_T calculation.
+Timings are in **seconds per sample**. The table uses the median of three measured calls after one cold call and one additional warmup.
+Batch wall time is divided by batch size. Value + gradient includes evaluation, the objective and one backward pass.
+Surface rows use the high-accuracy f_T calculation.
 
 | Interface and metric | Work | CPU 8 threads | CPU 16 threads | CPU 32 threads | RTX 5090 | A100 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| Single query / volume f_C | Value | 22.353 → 19.199 | 24.148 → 19.617 | 18.027 → 16.990 | 1.769 → 1.521 | 1.921 → 1.595 |
-| Single query / volume f_C | Value + gradient | 39.172 → 34.515 | 31.516 → 26.080 | 23.293 → 21.726 | 2.212 → 1.925 | 2.586 → 2.197 |
-| Batch 1 / volume f_C | Value | 25.339 → 20.703 | 48.013 → 31.804 | 15.847 → 15.355 | 1.775 → 1.524 | 1.922 → 1.599 |
-| Batch 1 / volume f_C | Value + gradient | 41.875 → 36.780 | 55.598 → 41.358 | 22.055 → 21.204 | 2.211 → 1.919 | 2.405 → 2.060 |
-| Batch 2 / volume f_C | Value | 32.756 → 29.227 | 56.263 → 44.451 | 23.778 → 20.620 | 1.471 → 1.302 | 1.664 → 1.348 |
-| Batch 2 / volume f_C | Value + gradient | 47.013 → 43.238 | 36.030 → 33.577 | 26.830 → 29.572 | 1.595 → 1.655 | 1.821 → 1.712 |
-| Batch 4 / volume f_C | Value | 33.415 → 30.437 | 25.906 → 21.746 | 19.715 → 18.361 | 1.350 → 1.190 | 1.472 → 1.207 |
-| Batch 4 / volume f_C | Value + gradient | 49.788 → 46.488 | 66.042 → 51.706 | 25.651 → 26.425 | 1.436 → 1.504 | 1.639 → 1.561 |
-| Batch 8 / volume f_C | Value | 31.428 → 27.965 | 32.487 → 22.986 | 23.650 → 20.764 | 1.292 → 1.115 | 1.419 → 1.139 |
-| Batch 8 / volume f_C | Value + gradient | 48.061 → 41.240 | 32.256 → 28.933 | 34.473 → 29.357 | 1.475 → 1.699 | 1.692 → 1.607 |
-| Single query / surface f_T | Value | 35.818 → 32.389 | 27.493 → 24.841 | 26.115 → 21.671 | 2.052 → 1.766 | 2.092 → 1.754 |
-| Single query / surface f_T | Value + gradient | 56.809 → 51.793 | 74.775 → 53.558 | 34.375 → 30.751 | 2.594 → 2.332 | 2.612 → 2.243 |
+| Single query / volume f_C | Value | 19.199 | 19.617 | 16.990 | 1.521 | 1.595 |
+| Single query / volume f_C | Value + gradient | 34.515 | 26.080 | 21.726 | 1.925 | 2.197 |
+| Batch 1 / volume f_C | Value | 20.703 | 31.804 | 15.355 | 1.524 | 1.599 |
+| Batch 1 / volume f_C | Value + gradient | 36.780 | 41.358 | 21.204 | 1.919 | 2.060 |
+| Batch 2 / volume f_C | Value | 29.227 | 44.451 | 20.620 | 1.302 | 1.348 |
+| Batch 2 / volume f_C | Value + gradient | 43.238 | 33.577 | 29.572 | 1.655 | 1.712 |
+| Batch 4 / volume f_C | Value | 30.437 | 21.746 | 18.361 | 1.190 | 1.207 |
+| Batch 4 / volume f_C | Value + gradient | 46.488 | 51.706 | 26.425 | 1.504 | 1.561 |
+| Batch 8 / volume f_C | Value | 27.965 | 22.986 | 20.764 | 1.115 | 1.139 |
+| Batch 8 / volume f_C | Value + gradient | 41.240 | 28.933 | 29.357 | 1.699 | 1.607 |
+| Single query / surface f_T | Value | 32.389 | 24.841 | 21.671 | 1.766 | 1.754 |
+| Single query / surface f_T | Value + gradient | 51.793 | 53.558 | 30.751 | 2.332 | 2.243 |
 
-Both methods use the same four coil sets and eight fixed coil/volume combinations. GPU timings wait for device completion and use eight host threads. Timings use scheduler allocations on shared nodes. The [timing records](docs/assets/ellipse_012/timings.json) include every warm repeat, cold and warmup times, and hardware details. Eight 32-thread two-fit entries reuse 2026-11-06 measurements with matching inputs, configuration, CPU model, native library and warmup procedure. See the [validation record](docs/preview_validation.md) for the historical two-fit calibration, reference qualifications and numerical limits.
+Timings use eight fixed queries from four coil sets. GPU timings wait for device completion and use eight host threads.
+See the [timing records](docs/assets/ellipse_012/timings.json) for hardware and individual calls.
+<!-- calibration-and-timings:end -->
 
 ## Scope and further documentation
 
 Errors can come from finite-order surface fits, regularization bias, angular
 discretization and amplification near resonances. Even smooth Poincare sections
 (field-line intersections with fixed cross-sections) can accompany large metric
-errors. The historical preview examples retain force-residual and reference-surface quality limits;
-see the [validation report](docs/preview_validation.md).
+errors.
 
 - [API, metrics and configuration](docs/api.md)
 - [PyTorch gradients and batches](docs/torch.md), [CPU operation](docs/cpu.md)
